@@ -1,0 +1,56 @@
+---
+# SERI k3s Cluster - Global Variables
+
+# k3s version
+k3s_version: v1.28.5+k3s1
+
+# System Configuration
+systemd_dir: /etc/systemd/system
+
+# Network Configuration
+cluster_cidr: "10.42.0.0/16"      # Pod CIDR
+service_cidr: "10.43.0.0/16"      # Service CIDR
+cluster_dns: "10.43.0.10"
+
+# API Server Endpoint - Master01 im Kubernetes VLAN
+apiserver_endpoint: "192.168.20.31"
+
+# Time Configuration
+timezone: "Europe/Berlin"
+
+# TLS SANs - All access points for API Server
+tls_sans:
+  - "{{ apiserver_endpoint }}"           # 192.168.20.31 (K8s VLAN)
+  - "192.168.11.31"                      # Master01 Management VLAN
+  - "192.168.20.32"                      # Master02 K8s
+  - "192.168.11.32"                      # Master02 Mgmt
+  - "192.168.20.33"                      # Master03 K8s
+  - "192.168.11.33"                      # Master03 Mgmt
+  - "k3s.reckeweg.io"                    # DNS Name
+  - "k3s-api.reckeweg.io"                # API DNS Name
+  - "localhost"
+  - "127.0.0.1"
+
+# k3s server args base (will be extended in master.yml)
+extra_server_args_base: >-
+  --disable traefik
+  --disable servicelb
+  --disable metrics-server
+  --write-kubeconfig-mode 644
+  --kube-controller-manager-arg bind-address=0.0.0.0
+  --kube-proxy-arg metrics-bind-address=0.0.0.0
+  --kube-scheduler-arg bind-address=0.0.0.0
+  --etcd-expose-metrics true
+  {% for san in tls_sans %}
+  --tls-san={{ san }}
+  {% endfor %}
+
+# k3s agent args base (will be extended in worker.yml)
+extra_agent_args_base: ""
+
+# Longhorn Configuration
+longhorn_data_path: "/mnt/longhorn"
+
+# NFS Backup Configuration (Synology)
+nfs_server: "192.168.11.55"
+nfs_backup_path: "/volume1/longhorn-backup"

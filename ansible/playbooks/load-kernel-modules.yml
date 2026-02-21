@@ -1,0 +1,58 @@
+---
+# ansible/playbooks/load-kernel-modules.yml
+- name: Load kernel modules on all nodes
+  hosts: k3s_cluster
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Install module-init-tools
+      apt:
+        name: kmod
+        state: present
+        update_cache: yes
+      
+    - name: Load br_netfilter module
+      community.general.modprobe:
+        name: br_netfilter
+        state: present
+      ignore_errors: yes
+    
+    - name: Load overlay module
+      community.general.modprobe:
+        name: overlay
+        state: present
+      ignore_errors: yes
+    
+    - name: Create modules-load configuration
+      copy:
+        content: |
+          # Kubernetes required modules
+          overlay
+          br_netfilter
+          # Longhorn required modules
+          iscsi_tcp
+          nfs
+        dest: /etc/modules-load.d/k8s.conf
+        mode: '0644'
+    
+    - name: Reload systemd-modules-load
+      systemd:
+        name: systemd-modules-load
+        state: restarted
+    
+    - name: Verify br_netfilter is loaded
+      shell: lsmod | grep br_netfilter
+      register: module_check
+      changed_when: false
+      failed_when: false
+    
+    - name: Display module status
+      debug:
+        msg: "br_netfilter module: {{ 'loaded' if module_check.rc == 0 else 'NOT LOADED' }}"
+    
+    - name: Manual module load if needed
+      shell: modprobe br_netfilter && modprobe overlay
+      when: module_check.rc != 0
+      ignore_errors: nodes
+

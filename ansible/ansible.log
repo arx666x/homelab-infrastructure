@@ -1,0 +1,1708 @@
+2026-02-21 12:06:20,426 p=10856 u=achim.reckeweg n=ansible ERROR| [ERROR]: The 'community.general.yaml' callback plugin has been removed. The plugin has been superseded by the option `result_format=yaml` in callback plugin ansible.builtin.default from ansible-core 2.13 onwards. This feature was removed from collection 'community.general' version 12.0.0.
+
+2026-02-21 12:09:49,630 p=11196 u=achim.reckeweg n=ansible INFO| PLAY [Load kernel modules on all nodes] ***********************************************************************************************
+2026-02-21 12:09:49,649 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************
+2026-02-21 12:09:50,855 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:09:50,929 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:09:50,944 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:09:51,158 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:09:52,138 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:09:52,153 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:09:53,090 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:09:53,097 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:09:53,103 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Install module-init-tools] ******************************************************************************************************
+2026-02-21 12:09:54,088 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:09:54,091 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:09:54,120 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:09:55,408 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:09:55,514 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:09:55,550 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:09:55,562 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:09:55,568 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:09:55,574 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Load br_netfilter module] *******************************************************************************************************
+2026-02-21 12:09:55,952 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:09:55,953 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:09:55,960 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:09:56,069 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:09:56,071 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:09:56,072 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:09:56,077 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:09:56,102 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:09:56,109 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Load overlay module] ************************************************************************************************************
+2026-02-21 12:09:56,336 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:09:56,346 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:09:56,365 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:09:56,496 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:09:56,511 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:09:56,527 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:09:56,536 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:09:56,549 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:09:56,557 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Create modules-load configuration] **********************************************************************************************
+2026-02-21 12:09:57,461 p=11196 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-02-21 12:09:57,462 p=11196 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-02-21 12:09:57,468 p=11196 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-02-21 12:09:57,574 p=11196 u=achim.reckeweg n=ansible INFO| changed: [worker04]
+2026-02-21 12:09:57,574 p=11196 u=achim.reckeweg n=ansible INFO| changed: [worker01]
+2026-02-21 12:09:57,576 p=11196 u=achim.reckeweg n=ansible INFO| changed: [worker02]
+2026-02-21 12:09:57,577 p=11196 u=achim.reckeweg n=ansible INFO| changed: [worker03]
+2026-02-21 12:09:57,580 p=11196 u=achim.reckeweg n=ansible INFO| changed: [worker05]
+2026-02-21 12:09:57,587 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Reload systemd-modules-load] ****************************************************************************************************
+2026-02-21 12:09:58,308 p=11196 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-02-21 12:09:58,309 p=11196 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-02-21 12:09:58,328 p=11196 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-02-21 12:09:58,479 p=11196 u=achim.reckeweg n=ansible INFO| changed: [worker04]
+2026-02-21 12:09:58,481 p=11196 u=achim.reckeweg n=ansible INFO| changed: [worker02]
+2026-02-21 12:09:58,482 p=11196 u=achim.reckeweg n=ansible INFO| changed: [worker01]
+2026-02-21 12:09:58,489 p=11196 u=achim.reckeweg n=ansible INFO| changed: [worker03]
+2026-02-21 12:09:58,494 p=11196 u=achim.reckeweg n=ansible INFO| changed: [worker05]
+2026-02-21 12:09:58,501 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Verify br_netfilter is loaded] **************************************************************************************************
+2026-02-21 12:09:58,874 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:09:58,876 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:09:58,878 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:09:58,974 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:09:58,985 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:09:58,988 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:09:58,990 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:09:58,996 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:09:59,004 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Display module status] **********************************************************************************************************
+2026-02-21 12:09:59,063 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:09:59,080 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:09:59,097 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:09:59,115 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:09:59,116 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:09:59,117 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:09:59,126 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:09:59,142 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:09:59,149 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Manual module load if needed] ***************************************************************************************************
+2026-02-21 12:09:59,195 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:09:59,210 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:09:59,227 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:09:59,243 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:09:59,260 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:09:59,261 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:09:59,264 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:09:59,278 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:09:59,285 p=11196 u=achim.reckeweg n=ansible INFO| PLAY [Setup VLAN interfaces] **********************************************************************************************************
+2026-02-21 12:09:59,292 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Install vlan package] ***********************************************************************************************************
+2026-02-21 12:09:59,846 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:09:59,866 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:09:59,869 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:10:00,771 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:10:00,806 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:10:00,812 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:10:00,839 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:10:00,853 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:10:00,859 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Load 8021q module] **************************************************************************************************************
+2026-02-21 12:10:01,083 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:10:01,097 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:10:01,107 p=11196 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:10:01,238 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:10:01,251 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:10:01,264 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:10:01,279 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:10:01,322 p=11196 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:10:01,329 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Configure VLAN 20 (Pi)] *********************************************************************************************************
+2026-02-21 12:10:01,361 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:10:01,378 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:10:01,395 p=11196 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:10:02,135 p=11196 u=achim.reckeweg n=ansible ERROR| [ERROR]: Task failed: Module failed: Destination directory /etc/network/interfaces.d does not exist
+Origin: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks/setup-vlan-interfaces.yml:17:7
+
+15         state: present
+16     
+17     - name: Configure VLAN 20 (Pi)
+         ^ column 7
+
+
+2026-02-21 12:10:02,136 p=11196 u=achim.reckeweg n=ansible INFO| fatal: [worker01]: FAILED! => {"changed": false, "checksum": "475c890d4c6840a117f5d44c5160e8a62f1dee92", "msg": "Destination directory /etc/network/interfaces.d does not exist"}
+2026-02-21 12:10:02,142 p=11196 u=achim.reckeweg n=ansible INFO| fatal: [worker02]: FAILED! => {"changed": false, "checksum": "b553fb1637be30900800214832bc3c9523c60b0a", "msg": "Destination directory /etc/network/interfaces.d does not exist"}
+2026-02-21 12:10:02,168 p=11196 u=achim.reckeweg n=ansible INFO| fatal: [worker03]: FAILED! => {"changed": false, "checksum": "ced150e2e9aae241bed04901463f4dc3a7a06756", "msg": "Destination directory /etc/network/interfaces.d does not exist"}
+2026-02-21 12:10:02,168 p=11196 u=achim.reckeweg n=ansible INFO| fatal: [worker04]: FAILED! => {"changed": false, "checksum": "733b3b9625f6b2f505a9cda968f933af484d160f", "msg": "Destination directory /etc/network/interfaces.d does not exist"}
+2026-02-21 12:10:02,180 p=11196 u=achim.reckeweg n=ansible INFO| fatal: [worker05]: FAILED! => {"changed": false, "checksum": "86e92078e90323b043f2560b9234a8739f35e216", "msg": "Destination directory /etc/network/interfaces.d does not exist"}
+2026-02-21 12:10:02,187 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Configure VLAN 20 (GMKtec)] *****************************************************************************************************
+2026-02-21 12:10:02,706 p=11196 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-02-21 12:10:02,716 p=11196 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-02-21 12:10:02,726 p=11196 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-02-21 12:10:02,735 p=11196 u=achim.reckeweg n=ansible INFO| TASK [Restart networking] *************************************************************************************************************
+2026-02-21 12:10:03,174 p=11196 u=achim.reckeweg n=ansible ERROR| [ERROR]: Task failed: Module failed: Unable to start service networking: Job for networking.service failed because the control process exited with error code.
+See "systemctl status networking.service" and "journalctl -xeu networking.service" for details.
+
+Origin: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks/setup-vlan-interfaces.yml:37:7
+
+35       when: "'master' in group_names"
+36     
+37     - name: Restart networking
+         ^ column 7
+
+
+2026-02-21 12:10:03,175 p=11196 u=achim.reckeweg n=ansible INFO| fatal: [master02]: FAILED! => {"changed": false, "msg": "Unable to start service networking: Job for networking.service failed because the control process exited with error code.\nSee \"systemctl status networking.service\" and \"journalctl -xeu networking.service\" for details.\n"}
+2026-02-21 12:10:03,175 p=11196 u=achim.reckeweg n=ansible INFO| fatal: [master01]: FAILED! => {"changed": false, "msg": "Unable to start service networking: Job for networking.service failed because the control process exited with error code.\nSee \"systemctl status networking.service\" and \"journalctl -xeu networking.service\" for details.\n"}
+2026-02-21 12:10:03,201 p=11196 u=achim.reckeweg n=ansible INFO| fatal: [master03]: FAILED! => {"changed": false, "msg": "Unable to start service networking: Job for networking.service failed because the control process exited with error code.\nSee \"systemctl status networking.service\" and \"journalctl -xeu networking.service\" for details.\n"}
+2026-02-21 12:10:03,203 p=11196 u=achim.reckeweg n=ansible INFO| PLAY RECAP ****************************************************************************************************************************
+2026-02-21 12:10:03,204 p=11196 u=achim.reckeweg n=ansible INFO| master01                   : ok=11   changed=3    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   
+2026-02-21 12:10:03,204 p=11196 u=achim.reckeweg n=ansible INFO| master02                   : ok=11   changed=3    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   
+2026-02-21 12:10:03,204 p=11196 u=achim.reckeweg n=ansible INFO| master03                   : ok=11   changed=3    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   
+2026-02-21 12:10:03,204 p=11196 u=achim.reckeweg n=ansible INFO| worker01                   : ok=10   changed=2    unreachable=0    failed=1    skipped=1    rescued=0    ignored=0   
+2026-02-21 12:10:03,204 p=11196 u=achim.reckeweg n=ansible INFO| worker02                   : ok=10   changed=2    unreachable=0    failed=1    skipped=1    rescued=0    ignored=0   
+2026-02-21 12:10:03,204 p=11196 u=achim.reckeweg n=ansible INFO| worker03                   : ok=10   changed=2    unreachable=0    failed=1    skipped=1    rescued=0    ignored=0   
+2026-02-21 12:10:03,204 p=11196 u=achim.reckeweg n=ansible INFO| worker04                   : ok=10   changed=2    unreachable=0    failed=1    skipped=1    rescued=0    ignored=0   
+2026-02-21 12:10:03,204 p=11196 u=achim.reckeweg n=ansible INFO| worker05                   : ok=10   changed=2    unreachable=0    failed=1    skipped=1    rescued=0    ignored=0   
+2026-02-21 12:14:58,730 p=11932 u=achim.reckeweg n=ansible INFO| PLAY [Load kernel modules on all nodes] ***********************************************************************************************
+2026-02-21 12:14:58,740 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************
+2026-02-21 12:14:59,989 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:00,008 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:00,086 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:00,232 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:01,202 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:01,268 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:01,274 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:02,257 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:02,263 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Install module-init-tools] ******************************************************************************************************
+2026-02-21 12:15:03,226 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:03,227 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:03,239 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:04,457 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:04,669 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:04,681 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:04,690 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:04,695 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:04,703 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Load br_netfilter module] *******************************************************************************************************
+2026-02-21 12:15:05,084 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:05,085 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:05,085 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:05,193 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:05,200 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:05,201 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:05,201 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:05,213 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:05,219 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Load overlay module] ************************************************************************************************************
+2026-02-21 12:15:05,439 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:05,448 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:05,513 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:05,597 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:05,602 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:05,625 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:05,637 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:05,638 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:05,647 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Create modules-load configuration] **********************************************************************************************
+2026-02-21 12:15:06,470 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:06,471 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:06,471 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:06,570 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:06,580 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:06,581 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:06,588 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:06,588 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:06,595 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Reload systemd-modules-load] ****************************************************************************************************
+2026-02-21 12:15:07,309 p=11932 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-02-21 12:15:07,312 p=11932 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-02-21 12:15:07,313 p=11932 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-02-21 12:15:07,458 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker05]
+2026-02-21 12:15:07,467 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker01]
+2026-02-21 12:15:07,470 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker03]
+2026-02-21 12:15:07,480 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker04]
+2026-02-21 12:15:07,488 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker02]
+2026-02-21 12:15:07,496 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Verify br_netfilter is loaded] **************************************************************************************************
+2026-02-21 12:15:07,862 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:07,863 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:07,865 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:07,962 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:07,967 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:07,968 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:07,972 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:07,973 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:07,982 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Display module status] **********************************************************************************************************
+2026-02-21 12:15:08,031 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:15:08,048 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:15:08,068 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:15:08,083 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:15:08,102 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:15:08,103 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:15:08,112 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:15:08,128 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:15:08,134 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Manual module load if needed] ***************************************************************************************************
+2026-02-21 12:15:08,167 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:15:08,183 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:15:08,199 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:15:08,216 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:15:08,233 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:15:08,250 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:15:08,254 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:15:08,267 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:15:08,273 p=11932 u=achim.reckeweg n=ansible INFO| PLAY [Prepare all nodes for k3s and Longhorn] *****************************************************************************************
+2026-02-21 12:15:08,281 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Set timezone] *******************************************************************************************************************
+2026-02-21 12:15:08,812 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:08,814 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:08,814 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:08,923 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:08,924 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:08,929 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:08,930 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:08,931 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:08,937 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Set hostname] *******************************************************************************************************************
+2026-02-21 12:15:09,698 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:09,705 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:09,706 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:09,873 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:09,895 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:09,896 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:09,901 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:09,901 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:09,911 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Update /etc/hosts with hostname] ************************************************************************************************
+2026-02-21 12:15:10,290 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:10,292 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:10,292 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:10,396 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:10,400 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:10,405 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:10,405 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:10,425 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:10,432 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Add node to /etc/hosts] *********************************************************************************************************
+2026-02-21 12:15:10,651 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:10,660 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:10,673 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:10,808 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:10,819 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:10,834 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:10,839 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:10,848 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:10,856 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Update apt cache] ***************************************************************************************************************
+2026-02-21 12:15:11,279 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:11,296 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:11,310 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:11,940 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:11,945 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:11,952 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:11,978 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:12,001 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:12,008 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Upgrade all packages] ***********************************************************************************************************
+2026-02-21 12:15:12,764 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:12,778 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:12,802 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:14,820 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:14,887 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:14,897 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:14,911 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:14,913 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:14,920 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Install required packages] ******************************************************************************************************
+2026-02-21 12:15:15,473 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:15,492 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:15,502 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:16,449 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:16,449 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:16,456 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:16,475 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:16,496 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:16,503 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Enable and start iscsid] ********************************************************************************************************
+2026-02-21 12:15:16,828 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:16,841 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:16,850 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:17,041 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:17,054 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:17,068 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:17,077 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:17,097 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:17,104 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Load required kernel modules] ***************************************************************************************************
+2026-02-21 12:15:17,331 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item=overlay)
+2026-02-21 12:15:17,343 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item=overlay)
+2026-02-21 12:15:17,357 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item=overlay)
+2026-02-21 12:15:17,486 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item=overlay)
+2026-02-21 12:15:17,509 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item=overlay)
+2026-02-21 12:15:17,511 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item=br_netfilter)
+2026-02-21 12:15:17,515 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item=overlay)
+2026-02-21 12:15:17,532 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item=br_netfilter)
+2026-02-21 12:15:17,535 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item=overlay)
+2026-02-21 12:15:17,539 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item=overlay)
+2026-02-21 12:15:17,541 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item=br_netfilter)
+2026-02-21 12:15:17,696 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item=iscsi_tcp)
+2026-02-21 12:15:17,721 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item=iscsi_tcp)
+2026-02-21 12:15:17,726 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item=iscsi_tcp)
+2026-02-21 12:15:17,791 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item=br_netfilter)
+2026-02-21 12:15:17,817 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item=br_netfilter)
+2026-02-21 12:15:17,824 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item=br_netfilter)
+2026-02-21 12:15:17,835 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item=br_netfilter)
+2026-02-21 12:15:17,836 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item=br_netfilter)
+2026-02-21 12:15:17,879 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item=nfs)
+2026-02-21 12:15:17,910 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item=nfs)
+2026-02-21 12:15:17,911 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item=nfs)
+2026-02-21 12:15:18,097 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item=iscsi_tcp)
+2026-02-21 12:15:18,118 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item=iscsi_tcp)
+2026-02-21 12:15:18,130 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item=iscsi_tcp)
+2026-02-21 12:15:18,132 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item=iscsi_tcp)
+2026-02-21 12:15:18,139 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item=iscsi_tcp)
+2026-02-21 12:15:18,397 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item=nfs)
+2026-02-21 12:15:18,429 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item=nfs)
+2026-02-21 12:15:18,435 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item=nfs)
+2026-02-21 12:15:18,436 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item=nfs)
+2026-02-21 12:15:18,441 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item=nfs)
+2026-02-21 12:15:18,448 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Ensure kernel modules load on boot] *********************************************************************************************
+2026-02-21 12:15:19,118 p=11932 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-02-21 12:15:19,118 p=11932 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-02-21 12:15:19,118 p=11932 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-02-21 12:15:19,224 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker01]
+2026-02-21 12:15:19,244 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker02]
+2026-02-21 12:15:19,257 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker03]
+2026-02-21 12:15:19,265 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker05]
+2026-02-21 12:15:19,270 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker04]
+2026-02-21 12:15:19,277 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Wait for kernel modules] ********************************************************************************************************
+2026-02-21 12:15:19,303 p=11932 u=achim.reckeweg n=ansible INFO| Pausing for 2 seconds
+2026-02-21 12:15:19,303 p=11932 u=achim.reckeweg n=ansible INFO| (ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
+2026-02-21 12:15:21,310 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:21,315 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Configure sysctl for Kubernetes] ************************************************************************************************
+2026-02-21 12:15:21,719 p=11932 u=achim.reckeweg n=ansible WARNING| [WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+
+2026-02-21 12:15:21,720 p=11932 u=achim.reckeweg n=ansible INFO| [DEPRECATION WARNING]: Importing 'to_native' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+
+2026-02-21 12:15:21,720 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:15:21,722 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:15:21,724 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:15:21,873 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:15:21,875 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:15:21,879 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:15:21,882 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:15:21,883 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:15:21,920 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:15:21,922 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:15:21,924 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:15:22,129 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:15:22,132 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:15:22,203 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:15:22,205 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:15:22,215 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:15:22,219 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:15:22,337 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:15:22,343 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:15:22,525 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:15:22,532 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:15:22,538 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:15:22,546 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:15:22,552 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:15:22,564 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:15:22,849 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:15:22,873 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:15:22,893 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:15:22,898 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:15:23,135 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:15:23,173 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:15:23,202 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:15:23,213 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:15:23,225 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:15:23,230 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:15:23,345 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:15:23,550 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:15:23,554 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:15:23,879 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:15:24,205 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:15:24,214 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Disable swap] *******************************************************************************************************************
+2026-02-21 12:15:24,244 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:15:24,260 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:15:24,275 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:15:24,291 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:15:24,307 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:15:24,323 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:15:24,328 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:15:24,686 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:24,693 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Remove swap from fstab] *********************************************************************************************************
+2026-02-21 12:15:24,905 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:24,916 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:24,931 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:25,059 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:25,082 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:25,098 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:25,111 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:25,112 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:25,119 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Enable cgroup on Raspberry Pi] **************************************************************************************************
+2026-02-21 12:15:25,151 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:15:25,168 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:15:25,184 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:15:25,503 p=11932 u=achim.reckeweg n=ansible WARNING| [WARNING]: Module remote_tmp /root/.ansible/tmp did not exist and was created with a mode of 0700, this may cause issues when running as another user. To avoid this, create the remote_tmp dir with the correct permissions manually
+
+2026-02-21 12:15:25,504 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker01]
+2026-02-21 12:15:25,522 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker02]
+2026-02-21 12:15:25,538 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker03]
+2026-02-21 12:15:25,548 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker04]
+2026-02-21 12:15:25,550 p=11932 u=achim.reckeweg n=ansible INFO| changed: [worker05]
+2026-02-21 12:15:25,557 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Test NFS connectivity to Synology] **********************************************************************************************
+2026-02-21 12:15:25,784 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:25,797 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:25,817 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:25,935 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:25,972 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:25,987 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:26,006 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:26,006 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:26,014 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Display NFS exports] ************************************************************************************************************
+2026-02-21 12:15:26,062 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:15:26,079 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:15:26,097 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:15:26,113 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:15:26,128 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:15:26,131 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:15:26,140 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:15:26,158 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:15:26,164 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Warn if NFS not accessible] *****************************************************************************************************
+2026-02-21 12:15:26,196 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:15:26,212 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:15:26,229 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:15:26,245 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:15:26,261 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:15:26,277 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:15:26,282 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:15:26,296 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:15:26,302 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Display node preparation summary] ***********************************************************************************************
+2026-02-21 12:15:26,346 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": [
+        "Node: gmkt-01x",
+        "Inventory: master01",
+        "K8s IP: 192.168.20.31",
+        "Mgmt IP: 192.168.11.31",
+        "Type: Master"
+    ]
+}
+2026-02-21 12:15:26,364 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": [
+        "Node: gmkt-02x",
+        "Inventory: master02",
+        "K8s IP: 192.168.20.32",
+        "Mgmt IP: 192.168.11.32",
+        "Type: Master"
+    ]
+}
+2026-02-21 12:15:26,383 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": [
+        "Node: gmkt-03x",
+        "Inventory: master03",
+        "K8s IP: 192.168.20.33",
+        "Mgmt IP: 192.168.11.33",
+        "Type: Master"
+    ]
+}
+2026-02-21 12:15:26,400 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": [
+        "Node: k3s-01a",
+        "Inventory: worker01",
+        "K8s IP: 192.168.20.21",
+        "Mgmt IP: 192.168.11.21",
+        "Type: Worker"
+    ]
+}
+2026-02-21 12:15:26,417 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": [
+        "Node: k3s-02a",
+        "Inventory: worker02",
+        "K8s IP: 192.168.20.22",
+        "Mgmt IP: 192.168.11.22",
+        "Type: Worker"
+    ]
+}
+2026-02-21 12:15:26,418 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": [
+        "Node: k3s-03a",
+        "Inventory: worker03",
+        "K8s IP: 192.168.20.23",
+        "Mgmt IP: 192.168.11.23",
+        "Type: Worker"
+    ]
+}
+2026-02-21 12:15:26,428 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": [
+        "Node: k3s-04a",
+        "Inventory: worker04",
+        "K8s IP: 192.168.20.24",
+        "Mgmt IP: 192.168.11.24",
+        "Type: Worker"
+    ]
+}
+2026-02-21 12:15:26,447 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": [
+        "Node: k3s-05a",
+        "Inventory: worker05",
+        "K8s IP: 192.168.20.25",
+        "Mgmt IP: 192.168.11.25",
+        "Type: Worker"
+    ]
+}
+2026-02-21 12:15:26,473 p=11932 u=achim.reckeweg n=ansible INFO| RUNNING HANDLER [reboot required] *****************************************************************************************************
+2026-02-21 12:15:26,519 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": "Reboot required for cgroup changes on Raspberry Pi"
+}
+2026-02-21 12:15:26,536 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": "Reboot required for cgroup changes on Raspberry Pi"
+}
+2026-02-21 12:15:26,536 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": "Reboot required for cgroup changes on Raspberry Pi"
+}
+2026-02-21 12:15:26,542 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": "Reboot required for cgroup changes on Raspberry Pi"
+}
+2026-02-21 12:15:26,556 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": "Reboot required for cgroup changes on Raspberry Pi"
+}
+2026-02-21 12:15:26,561 p=11932 u=achim.reckeweg n=ansible INFO| PLAY [Prepare Longhorn storage] *******************************************************************************************************
+2026-02-21 12:15:26,569 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Create mount point] *************************************************************************************************************
+2026-02-21 12:15:26,782 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:26,792 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:26,801 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:26,982 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:26,983 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:26,994 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:27,006 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:27,006 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:27,013 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Mount Longhorn partition] *******************************************************************************************************
+2026-02-21 12:15:27,468 p=11932 u=achim.reckeweg n=ansible INFO| [DEPRECATION WARNING]: Importing 'to_bytes' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+
+2026-02-21 12:15:27,469 p=11932 u=achim.reckeweg n=ansible INFO| [DEPRECATION WARNING]: Passing `warnings` to `exit_json` or `fail_json` is deprecated. This feature will be removed from ansible-core version 2.23. Use `AnsibleModule.warn` instead.
+
+2026-02-21 12:15:27,470 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:27,471 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:27,473 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:27,591 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:27,595 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:27,597 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:27,598 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:27,602 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:27,608 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Verify mount] *******************************************************************************************************************
+2026-02-21 12:15:27,818 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:27,830 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:27,843 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:27,969 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:27,982 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:28,007 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:28,013 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:28,995 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:29,002 p=11932 u=achim.reckeweg n=ansible INFO| PLAY [Install k3s cluster] ************************************************************************************************************
+2026-02-21 12:15:29,010 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Verify VLAN interface exists (Pi)] **********************************************************************************************
+2026-02-21 12:15:29,041 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:15:29,058 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:15:29,076 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:15:29,402 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:15:29,417 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:15:29,431 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:15:29,449 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:15:29,449 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:15:29,456 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Verify VLAN interface exists (GMKtec)] ******************************************************************************************
+2026-02-21 12:15:29,524 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:15:29,539 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:15:29,554 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:15:29,557 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:15:29,571 p=11932 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:15:29,670 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:15:29,690 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:15:29,698 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:15:29,704 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Display node configuration] *****************************************************************************************************
+2026-02-21 12:15:29,766 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": [
+        "Hostname: gmkt-01x",
+        "Inventory: master01",
+        "Management IP: 192.168.11.31",
+        "Kubernetes IP: 192.168.20.31",
+        "Flannel Interface: enp1s0.20",
+        "Node Type: master"
+    ]
+}
+2026-02-21 12:15:29,820 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": [
+        "Hostname: gmkt-02x",
+        "Inventory: master02",
+        "Management IP: 192.168.11.32",
+        "Kubernetes IP: 192.168.20.32",
+        "Flannel Interface: enp1s0.20",
+        "Node Type: master"
+    ]
+}
+2026-02-21 12:15:29,836 p=11932 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": [
+        "Hostname: gmkt-03x",
+        "Inventory: master03",
+        "Management IP: 192.168.11.33",
+        "Kubernetes IP: 192.168.20.33",
+        "Flannel Interface: enp1s0.20",
+        "Node Type: master"
+    ]
+}
+2026-02-21 12:15:29,853 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": [
+        "Hostname: k3s-01a",
+        "Inventory: worker01",
+        "Management IP: 192.168.11.21",
+        "Kubernetes IP: 192.168.20.21",
+        "Flannel Interface: eth0.20",
+        "Node Type: worker"
+    ]
+}
+2026-02-21 12:15:29,854 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": [
+        "Hostname: k3s-02a",
+        "Inventory: worker02",
+        "Management IP: 192.168.11.22",
+        "Kubernetes IP: 192.168.20.22",
+        "Flannel Interface: eth0.20",
+        "Node Type: worker"
+    ]
+}
+2026-02-21 12:15:29,857 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": [
+        "Hostname: k3s-03a",
+        "Inventory: worker03",
+        "Management IP: 192.168.11.23",
+        "Kubernetes IP: 192.168.20.23",
+        "Flannel Interface: eth0.20",
+        "Node Type: worker"
+    ]
+}
+2026-02-21 12:15:29,869 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": [
+        "Hostname: k3s-04a",
+        "Inventory: worker04",
+        "Management IP: 192.168.11.24",
+        "Kubernetes IP: 192.168.20.24",
+        "Flannel Interface: eth0.20",
+        "Node Type: worker"
+    ]
+}
+2026-02-21 12:15:29,886 p=11932 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": [
+        "Hostname: k3s-05a",
+        "Inventory: worker05",
+        "Management IP: 192.168.11.25",
+        "Kubernetes IP: 192.168.20.25",
+        "Flannel Interface: eth0.20",
+        "Node Type: worker"
+    ]
+}
+2026-02-21 12:15:29,924 p=11932 u=achim.reckeweg n=ansible INFO| TASK [Wait for cluster to be ready] ***************************************************************************************************
+2026-02-21 12:15:30,148 p=11932 u=achim.reckeweg n=ansible ERROR| [ERROR]: Task failed: Module failed: Error executing command: [Errno 2] Datei oder Verzeichnis nicht gefunden: b'kubectl'
+Origin: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks/site.yml:60:7
+
+58
+59   post_tasks:
+60     - name: Wait for cluster to be ready
+         ^ column 7
+
+
+2026-02-21 12:15:30,149 p=11932 u=achim.reckeweg n=ansible INFO| fatal: [master01]: FAILED! => {"attempts": 1, "changed": false, "cmd": "kubectl get nodes", "msg": "Error executing command.", "rc": 2, "stderr": "", "stderr_lines": [], "stdout": "", "stdout_lines": []}
+2026-02-21 12:15:30,150 p=11932 u=achim.reckeweg n=ansible INFO| PLAY RECAP ****************************************************************************************************************************
+2026-02-21 12:15:30,150 p=11932 u=achim.reckeweg n=ansible INFO| master01                   : ok=29   changed=2    unreachable=0    failed=1    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:15:30,150 p=11932 u=achim.reckeweg n=ansible INFO| master02                   : ok=28   changed=2    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:15:30,150 p=11932 u=achim.reckeweg n=ansible INFO| master03                   : ok=28   changed=2    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:15:30,150 p=11932 u=achim.reckeweg n=ansible INFO| worker01                   : ok=30   changed=3    unreachable=0    failed=0    skipped=4    rescued=0    ignored=0   
+2026-02-21 12:15:30,150 p=11932 u=achim.reckeweg n=ansible INFO| worker02                   : ok=30   changed=3    unreachable=0    failed=0    skipped=4    rescued=0    ignored=0   
+2026-02-21 12:15:30,151 p=11932 u=achim.reckeweg n=ansible INFO| worker03                   : ok=30   changed=3    unreachable=0    failed=0    skipped=4    rescued=0    ignored=0   
+2026-02-21 12:15:30,151 p=11932 u=achim.reckeweg n=ansible INFO| worker04                   : ok=30   changed=3    unreachable=0    failed=0    skipped=4    rescued=0    ignored=0   
+2026-02-21 12:15:30,151 p=11932 u=achim.reckeweg n=ansible INFO| worker05                   : ok=31   changed=3    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+2026-02-21 12:17:40,681 p=12862 u=achim.reckeweg n=ansible ERROR| [ERROR]: A playbook must be a list of plays, got a <class 'ansible.module_utils._internal._datatag._AnsibleTaggedDict'> instead: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks/site.yml
+Origin: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks/site.yml:1:1
+
+1 post_tasks:
+  ^ column 1
+
+
+2026-02-21 12:21:18,245 p=14905 u=achim.reckeweg n=ansible ERROR| [ERROR]: conflicting action statements: command, shell
+Origin: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks/site.yml:70:7
+
+68       run_once: true
+69     
+70     - name: Display cluster status
+         ^ column 7
+
+
+2026-02-21 12:23:03,175 p=15113 u=achim.reckeweg n=ansible INFO| PLAY [Load kernel modules on all nodes] ***********************************************************************************************
+2026-02-21 12:23:03,186 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************
+2026-02-21 12:23:04,460 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:04,505 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:04,527 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:04,604 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:04,725 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:04,731 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:05,699 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:05,712 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:05,718 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Install module-init-tools] ******************************************************************************************************
+2026-02-21 12:23:06,692 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:06,707 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:06,710 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:07,937 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:08,130 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:08,145 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:08,149 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:08,157 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:08,163 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Load br_netfilter module] *******************************************************************************************************
+2026-02-21 12:23:08,550 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:08,551 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:08,556 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:08,661 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:08,665 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:08,667 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:08,668 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:08,669 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:08,675 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Load overlay module] ************************************************************************************************************
+2026-02-21 12:23:08,895 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:08,913 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:08,923 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:09,074 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:09,090 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:09,095 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:09,107 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:09,127 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:09,135 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Create modules-load configuration] **********************************************************************************************
+2026-02-21 12:23:10,051 p=15113 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-02-21 12:23:10,062 p=15113 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-02-21 12:23:10,062 p=15113 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-02-21 12:23:10,185 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker05]
+2026-02-21 12:23:10,187 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker01]
+2026-02-21 12:23:10,188 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker03]
+2026-02-21 12:23:10,203 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker02]
+2026-02-21 12:23:10,205 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker04]
+2026-02-21 12:23:10,222 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Reload systemd-modules-load] ****************************************************************************************************
+2026-02-21 12:23:10,960 p=15113 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-02-21 12:23:10,962 p=15113 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-02-21 12:23:10,962 p=15113 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-02-21 12:23:11,122 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker04]
+2026-02-21 12:23:11,125 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker02]
+2026-02-21 12:23:11,128 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker03]
+2026-02-21 12:23:11,133 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker01]
+2026-02-21 12:23:11,138 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker05]
+2026-02-21 12:23:11,145 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Verify br_netfilter is loaded] **************************************************************************************************
+2026-02-21 12:23:11,527 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:11,533 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:11,539 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:11,638 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:11,639 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:11,641 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:11,646 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:11,646 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:11,654 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Display module status] **********************************************************************************************************
+2026-02-21 12:23:11,713 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:23:11,731 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:23:11,746 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:23:11,764 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:23:11,766 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:23:11,767 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:23:11,775 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:23:11,792 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": "br_netfilter module: loaded"
+}
+2026-02-21 12:23:11,798 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Manual module load if needed] ***************************************************************************************************
+2026-02-21 12:23:11,844 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:23:11,861 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:23:11,880 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:23:11,897 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:23:11,915 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:23:11,916 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:23:11,919 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:23:11,934 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:23:11,940 p=15113 u=achim.reckeweg n=ansible INFO| PLAY [Prepare all nodes for k3s and Longhorn] *****************************************************************************************
+2026-02-21 12:23:11,948 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Set timezone] *******************************************************************************************************************
+2026-02-21 12:23:12,441 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:12,455 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:12,476 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:12,560 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:12,568 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:12,576 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:12,580 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:12,586 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:12,593 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Set hostname] *******************************************************************************************************************
+2026-02-21 12:23:13,363 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:13,376 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:13,381 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:13,532 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:13,541 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:13,543 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:13,554 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:13,557 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:13,564 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Update /etc/hosts with hostname] ************************************************************************************************
+2026-02-21 12:23:13,940 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:13,941 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:13,941 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:14,048 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:14,057 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:14,058 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:14,058 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:14,066 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:14,073 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Add node to /etc/hosts] *********************************************************************************************************
+2026-02-21 12:23:14,300 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:14,314 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:14,321 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:14,484 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:14,494 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:14,497 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:14,506 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:14,538 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:14,544 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Update apt cache] ***************************************************************************************************************
+2026-02-21 12:23:14,963 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:14,985 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:14,990 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:15,618 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:15,622 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:15,627 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:15,651 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:15,688 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:15,696 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Upgrade all packages] ***********************************************************************************************************
+2026-02-21 12:23:16,459 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:16,471 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:16,492 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:18,512 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:18,561 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:18,584 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:18,597 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:18,641 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:18,648 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Install required packages] ******************************************************************************************************
+2026-02-21 12:23:19,207 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:19,225 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:19,231 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:20,197 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:20,205 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:20,207 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:20,244 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:20,261 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:20,268 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Enable and start iscsid] ********************************************************************************************************
+2026-02-21 12:23:20,607 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:20,615 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:20,622 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:20,816 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:20,840 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:20,849 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:20,863 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:20,873 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:20,880 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Load required kernel modules] ***************************************************************************************************
+2026-02-21 12:23:21,113 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item=overlay)
+2026-02-21 12:23:21,128 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item=overlay)
+2026-02-21 12:23:21,147 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item=overlay)
+2026-02-21 12:23:21,267 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item=overlay)
+2026-02-21 12:23:21,283 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item=overlay)
+2026-02-21 12:23:21,301 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item=br_netfilter)
+2026-02-21 12:23:21,306 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item=overlay)
+2026-02-21 12:23:21,315 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item=overlay)
+2026-02-21 12:23:21,323 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item=br_netfilter)
+2026-02-21 12:23:21,329 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item=overlay)
+2026-02-21 12:23:21,339 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item=br_netfilter)
+2026-02-21 12:23:21,495 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item=iscsi_tcp)
+2026-02-21 12:23:21,519 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item=iscsi_tcp)
+2026-02-21 12:23:21,528 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item=iscsi_tcp)
+2026-02-21 12:23:21,580 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item=br_netfilter)
+2026-02-21 12:23:21,587 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item=br_netfilter)
+2026-02-21 12:23:21,615 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item=br_netfilter)
+2026-02-21 12:23:21,627 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item=br_netfilter)
+2026-02-21 12:23:21,632 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item=br_netfilter)
+2026-02-21 12:23:21,679 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item=nfs)
+2026-02-21 12:23:21,708 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item=nfs)
+2026-02-21 12:23:21,713 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item=nfs)
+2026-02-21 12:23:21,888 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item=iscsi_tcp)
+2026-02-21 12:23:21,890 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item=iscsi_tcp)
+2026-02-21 12:23:21,916 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item=iscsi_tcp)
+2026-02-21 12:23:21,929 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item=iscsi_tcp)
+2026-02-21 12:23:21,935 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item=iscsi_tcp)
+2026-02-21 12:23:22,195 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item=nfs)
+2026-02-21 12:23:22,196 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item=nfs)
+2026-02-21 12:23:22,221 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item=nfs)
+2026-02-21 12:23:22,233 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item=nfs)
+2026-02-21 12:23:22,241 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item=nfs)
+2026-02-21 12:23:22,249 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Ensure kernel modules load on boot] *********************************************************************************************
+2026-02-21 12:23:22,785 p=15113 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-02-21 12:23:22,811 p=15113 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-02-21 12:23:22,815 p=15113 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-02-21 12:23:23,054 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker01]
+2026-02-21 12:23:23,078 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker02]
+2026-02-21 12:23:23,090 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker03]
+2026-02-21 12:23:23,112 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker05]
+2026-02-21 12:23:23,112 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker04]
+2026-02-21 12:23:23,122 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Wait for kernel modules] ********************************************************************************************************
+2026-02-21 12:23:23,150 p=15113 u=achim.reckeweg n=ansible INFO| Pausing for 2 seconds
+2026-02-21 12:23:23,151 p=15113 u=achim.reckeweg n=ansible INFO| (ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
+2026-02-21 12:23:25,158 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:25,163 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Configure sysctl for Kubernetes] ************************************************************************************************
+2026-02-21 12:23:25,629 p=15113 u=achim.reckeweg n=ansible WARNING| [WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+
+2026-02-21 12:23:25,629 p=15113 u=achim.reckeweg n=ansible INFO| [DEPRECATION WARNING]: Importing 'to_native' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+
+2026-02-21 12:23:25,629 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:23:25,631 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:23:25,777 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:23:25,781 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:23:25,787 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:23:25,789 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:23:25,792 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:23:25,836 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:23:25,837 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:23:26,048 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:23:26,051 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:23:26,141 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:23:26,144 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:23:26,146 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:23:26,147 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:23:26,256 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:23:26,261 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:23:26,474 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:23:26,483 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:23:26,486 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:23:26,488 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:23:26,493 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:23:26,614 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+2026-02-21 12:23:26,823 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:23:26,826 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:23:26,827 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:23:26,829 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:23:26,830 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:23:27,041 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:23:27,135 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+2026-02-21 12:23:27,155 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:23:27,169 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:23:27,174 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:23:27,176 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:23:27,249 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:23:27,459 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:23:27,469 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+2026-02-21 12:23:27,471 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:23:27,800 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item={'key': 'fs.inotify.max_user_watches', 'value': '524288'})
+2026-02-21 12:23:28,130 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => (item={'key': 'fs.inotify.max_user_instances', 'value': '512'})
+2026-02-21 12:23:28,139 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Disable swap] *******************************************************************************************************************
+2026-02-21 12:23:28,175 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:23:28,192 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:23:28,213 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:23:28,232 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:23:28,252 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:23:28,273 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:23:28,279 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:23:28,626 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:28,632 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Remove swap from fstab] *********************************************************************************************************
+2026-02-21 12:23:28,849 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:28,864 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:28,879 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:29,013 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:29,025 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:29,047 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:29,055 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:29,061 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:29,068 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Enable cgroup on Raspberry Pi] **************************************************************************************************
+2026-02-21 12:23:29,101 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:23:29,119 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:23:29,137 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:23:29,458 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker01]
+2026-02-21 12:23:29,471 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker02]
+2026-02-21 12:23:29,491 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker03]
+2026-02-21 12:23:29,508 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker04]
+2026-02-21 12:23:29,511 p=15113 u=achim.reckeweg n=ansible INFO| changed: [worker05]
+2026-02-21 12:23:29,519 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Test NFS connectivity to Synology] **********************************************************************************************
+2026-02-21 12:23:29,745 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:29,763 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:29,766 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:29,899 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:29,909 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:29,925 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:29,946 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:29,947 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:29,955 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Display NFS exports] ************************************************************************************************************
+2026-02-21 12:23:30,022 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:23:30,044 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:23:30,066 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:23:30,087 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:23:30,088 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:23:30,088 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:23:30,101 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:23:30,119 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": "NFS server accessible: ['Export list for 192.168.11.55:', '/volume1/video 192.168.11.0/24']"
+}
+2026-02-21 12:23:30,126 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Warn if NFS not accessible] *****************************************************************************************************
+2026-02-21 12:23:30,173 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:23:30,193 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:23:30,211 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:23:30,229 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:23:30,247 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:23:30,251 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:23:30,251 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:23:30,265 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:23:30,272 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Display node preparation summary] ***********************************************************************************************
+2026-02-21 12:23:30,322 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": [
+        "Node: gmkt-01x",
+        "Inventory: master01",
+        "K8s IP: 192.168.20.31",
+        "Mgmt IP: 192.168.11.31",
+        "Type: Master"
+    ]
+}
+2026-02-21 12:23:30,345 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": [
+        "Node: gmkt-02x",
+        "Inventory: master02",
+        "K8s IP: 192.168.20.32",
+        "Mgmt IP: 192.168.11.32",
+        "Type: Master"
+    ]
+}
+2026-02-21 12:23:30,362 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": [
+        "Node: gmkt-03x",
+        "Inventory: master03",
+        "K8s IP: 192.168.20.33",
+        "Mgmt IP: 192.168.11.33",
+        "Type: Master"
+    ]
+}
+2026-02-21 12:23:30,382 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": [
+        "Node: k3s-01a",
+        "Inventory: worker01",
+        "K8s IP: 192.168.20.21",
+        "Mgmt IP: 192.168.11.21",
+        "Type: Worker"
+    ]
+}
+2026-02-21 12:23:30,400 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": [
+        "Node: k3s-02a",
+        "Inventory: worker02",
+        "K8s IP: 192.168.20.22",
+        "Mgmt IP: 192.168.11.22",
+        "Type: Worker"
+    ]
+}
+2026-02-21 12:23:30,401 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": [
+        "Node: k3s-03a",
+        "Inventory: worker03",
+        "K8s IP: 192.168.20.23",
+        "Mgmt IP: 192.168.11.23",
+        "Type: Worker"
+    ]
+}
+2026-02-21 12:23:30,412 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": [
+        "Node: k3s-04a",
+        "Inventory: worker04",
+        "K8s IP: 192.168.20.24",
+        "Mgmt IP: 192.168.11.24",
+        "Type: Worker"
+    ]
+}
+2026-02-21 12:23:30,430 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": [
+        "Node: k3s-05a",
+        "Inventory: worker05",
+        "K8s IP: 192.168.20.25",
+        "Mgmt IP: 192.168.11.25",
+        "Type: Worker"
+    ]
+}
+2026-02-21 12:23:30,461 p=15113 u=achim.reckeweg n=ansible INFO| RUNNING HANDLER [reboot required] *****************************************************************************************************
+2026-02-21 12:23:30,495 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": "Reboot required for cgroup changes on Raspberry Pi"
+}
+2026-02-21 12:23:30,513 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": "Reboot required for cgroup changes on Raspberry Pi"
+}
+2026-02-21 12:23:30,530 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": "Reboot required for cgroup changes on Raspberry Pi"
+}
+2026-02-21 12:23:30,539 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": "Reboot required for cgroup changes on Raspberry Pi"
+}
+2026-02-21 12:23:30,554 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": "Reboot required for cgroup changes on Raspberry Pi"
+}
+2026-02-21 12:23:30,559 p=15113 u=achim.reckeweg n=ansible INFO| PLAY [Prepare Longhorn storage] *******************************************************************************************************
+2026-02-21 12:23:30,567 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Create mount point] *************************************************************************************************************
+2026-02-21 12:23:30,997 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:30,998 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:31,000 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:31,138 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:31,145 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:31,150 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:31,161 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:31,161 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:31,168 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Mount Longhorn partition] *******************************************************************************************************
+2026-02-21 12:23:31,642 p=15113 u=achim.reckeweg n=ansible INFO| [DEPRECATION WARNING]: Importing 'to_bytes' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+
+2026-02-21 12:23:31,643 p=15113 u=achim.reckeweg n=ansible INFO| [DEPRECATION WARNING]: Passing `warnings` to `exit_json` or `fail_json` is deprecated. This feature will be removed from ansible-core version 2.23. Use `AnsibleModule.warn` instead.
+
+2026-02-21 12:23:31,643 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:31,644 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:31,648 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:31,763 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:31,773 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:31,775 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:31,778 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:31,783 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:31,790 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Verify mount] *******************************************************************************************************************
+2026-02-21 12:23:32,018 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:32,034 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:32,050 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:32,202 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:32,213 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:32,231 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:32,233 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:33,176 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:33,182 p=15113 u=achim.reckeweg n=ansible INFO| PLAY [Install k3s cluster] ************************************************************************************************************
+2026-02-21 12:23:33,190 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Verify VLAN interface exists (Pi)] **********************************************************************************************
+2026-02-21 12:23:33,222 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:23:33,239 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:23:33,256 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:23:33,579 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:23:33,602 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:23:33,612 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:23:33,626 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:23:33,631 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:23:33,638 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Verify VLAN interface exists (GMKtec)] ******************************************************************************************
+2026-02-21 12:23:33,712 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:23:33,729 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:23:33,746 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:23:33,749 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:23:33,764 p=15113 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:23:33,862 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:23:33,879 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:23:33,891 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:23:33,898 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Display node configuration] *****************************************************************************************************
+2026-02-21 12:23:33,963 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": [
+        "Hostname: gmkt-01x",
+        "Inventory: master01",
+        "Management IP: 192.168.11.31",
+        "Kubernetes IP: 192.168.20.31",
+        "Flannel Interface: enp1s0.20",
+        "Node Type: master"
+    ]
+}
+2026-02-21 12:23:33,982 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": [
+        "Hostname: gmkt-02x",
+        "Inventory: master02",
+        "Management IP: 192.168.11.32",
+        "Kubernetes IP: 192.168.20.32",
+        "Flannel Interface: enp1s0.20",
+        "Node Type: master"
+    ]
+}
+2026-02-21 12:23:34,003 p=15113 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": [
+        "Hostname: gmkt-03x",
+        "Inventory: master03",
+        "Management IP: 192.168.11.33",
+        "Kubernetes IP: 192.168.20.33",
+        "Flannel Interface: enp1s0.20",
+        "Node Type: master"
+    ]
+}
+2026-02-21 12:23:34,019 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": [
+        "Hostname: k3s-01a",
+        "Inventory: worker01",
+        "Management IP: 192.168.11.21",
+        "Kubernetes IP: 192.168.20.21",
+        "Flannel Interface: eth0.20",
+        "Node Type: worker"
+    ]
+}
+2026-02-21 12:23:34,020 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": [
+        "Hostname: k3s-02a",
+        "Inventory: worker02",
+        "Management IP: 192.168.11.22",
+        "Kubernetes IP: 192.168.20.22",
+        "Flannel Interface: eth0.20",
+        "Node Type: worker"
+    ]
+}
+2026-02-21 12:23:34,022 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": [
+        "Hostname: k3s-03a",
+        "Inventory: worker03",
+        "Management IP: 192.168.11.23",
+        "Kubernetes IP: 192.168.20.23",
+        "Flannel Interface: eth0.20",
+        "Node Type: worker"
+    ]
+}
+2026-02-21 12:23:34,034 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": [
+        "Hostname: k3s-04a",
+        "Inventory: worker04",
+        "Management IP: 192.168.11.24",
+        "Kubernetes IP: 192.168.20.24",
+        "Flannel Interface: eth0.20",
+        "Node Type: worker"
+    ]
+}
+2026-02-21 12:23:34,052 p=15113 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": [
+        "Hostname: k3s-05a",
+        "Inventory: worker05",
+        "Management IP: 192.168.11.25",
+        "Kubernetes IP: 192.168.20.25",
+        "Flannel Interface: eth0.20",
+        "Node Type: worker"
+    ]
+}
+2026-02-21 12:23:34,090 p=15113 u=achim.reckeweg n=ansible INFO| TASK [Wait for cluster to be ready] ***************************************************************************************************
+2026-02-21 12:23:34,324 p=15113 u=achim.reckeweg n=ansible ERROR| [ERROR]: Task failed: Module failed: non-zero return code
+Origin: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks/site.yml:60:7
+
+58
+59   post_tasks:
+60     - name: Wait for cluster to be ready
+         ^ column 7
+
+
+2026-02-21 12:23:34,325 p=15113 u=achim.reckeweg n=ansible INFO| fatal: [master01]: FAILED! => {"attempts": 1, "changed": true, "cmd": "/usr/local/bin/kubectl get nodes || /usr/local/bin/k3s kubectl get nodes", "delta": "0:00:00.002393", "end": "2026-02-21 12:23:34.307541", "msg": "non-zero return code", "rc": 127, "start": "2026-02-21 12:23:34.305148", "stderr": "/bin/sh: 1: /usr/local/bin/kubectl: not found\n/bin/sh: 1: /usr/local/bin/k3s: not found", "stderr_lines": ["/bin/sh: 1: /usr/local/bin/kubectl: not found", "/bin/sh: 1: /usr/local/bin/k3s: not found"], "stdout": "", "stdout_lines": []}
+2026-02-21 12:23:34,326 p=15113 u=achim.reckeweg n=ansible INFO| PLAY RECAP ****************************************************************************************************************************
+2026-02-21 12:23:34,326 p=15113 u=achim.reckeweg n=ansible INFO| master01                   : ok=29   changed=3    unreachable=0    failed=1    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:23:34,326 p=15113 u=achim.reckeweg n=ansible INFO| master02                   : ok=28   changed=3    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:23:34,326 p=15113 u=achim.reckeweg n=ansible INFO| master03                   : ok=28   changed=3    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:23:34,326 p=15113 u=achim.reckeweg n=ansible INFO| worker01                   : ok=30   changed=4    unreachable=0    failed=0    skipped=4    rescued=0    ignored=0   
+2026-02-21 12:23:34,326 p=15113 u=achim.reckeweg n=ansible INFO| worker02                   : ok=30   changed=4    unreachable=0    failed=0    skipped=4    rescued=0    ignored=0   
+2026-02-21 12:23:34,326 p=15113 u=achim.reckeweg n=ansible INFO| worker03                   : ok=30   changed=4    unreachable=0    failed=0    skipped=4    rescued=0    ignored=0   
+2026-02-21 12:23:34,326 p=15113 u=achim.reckeweg n=ansible INFO| worker04                   : ok=30   changed=4    unreachable=0    failed=0    skipped=4    rescued=0    ignored=0   
+2026-02-21 12:23:34,326 p=15113 u=achim.reckeweg n=ansible INFO| worker05                   : ok=31   changed=4    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+2026-02-21 12:30:13,847 p=16268 u=achim.reckeweg n=ansible INFO| PLAY [Debug k3s installation] *********************************************************************************************************
+2026-02-21 12:30:13,858 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************
+2026-02-21 12:30:15,041 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:30:15,097 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:30:15,141 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:30:15,299 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:30:15,342 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:30:16,294 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:30:16,313 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:30:16,347 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:30:16,354 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Check if k3s binary exists] *****************************************************************************************************
+2026-02-21 12:30:16,757 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:30:16,760 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:30:16,763 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:30:16,869 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:30:16,870 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:30:16,872 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:30:16,876 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:30:16,878 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:30:16,886 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Display k3s binary status] ******************************************************************************************************
+2026-02-21 12:30:16,929 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "k3s binary exists: False"
+}
+2026-02-21 12:30:16,946 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "k3s binary exists: False"
+}
+2026-02-21 12:30:16,962 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": "k3s binary exists: False"
+}
+2026-02-21 12:30:16,978 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": "k3s binary exists: False"
+}
+2026-02-21 12:30:16,994 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": "k3s binary exists: False"
+}
+2026-02-21 12:30:16,997 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": "k3s binary exists: False"
+}
+2026-02-21 12:30:17,003 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": "k3s binary exists: False"
+}
+2026-02-21 12:30:17,020 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": "k3s binary exists: False"
+}
+2026-02-21 12:30:17,027 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Check k3s service file] *********************************************************************************************************
+2026-02-21 12:30:17,243 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:30:17,250 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:30:17,267 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:30:17,394 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:30:17,406 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:30:17,420 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:30:17,436 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:30:17,446 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:30:17,453 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Display service file status] ****************************************************************************************************
+2026-02-21 12:30:17,510 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "k3s service file exists: False"
+}
+2026-02-21 12:30:17,526 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "k3s service file exists: False"
+}
+2026-02-21 12:30:17,542 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": "k3s service file exists: False"
+}
+2026-02-21 12:30:17,556 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "msg": "k3s service file exists: False"
+}
+2026-02-21 12:30:17,557 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "msg": "k3s service file exists: False"
+}
+2026-02-21 12:30:17,558 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "msg": "k3s service file exists: False"
+}
+2026-02-21 12:30:17,566 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "msg": "k3s service file exists: False"
+}
+2026-02-21 12:30:17,582 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "msg": "k3s service file exists: False"
+}
+2026-02-21 12:30:17,588 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Try to get k3s version] *********************************************************************************************************
+2026-02-21 12:30:17,991 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:30:17,995 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:30:17,995 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:30:18,102 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:30:18,104 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:30:18,109 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:30:18,114 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:30:18,115 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:30:18,122 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Display k3s version] ************************************************************************************************************
+2026-02-21 12:30:18,153 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:30:18,169 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:30:18,185 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:30:18,202 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:30:18,219 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:30:18,235 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:30:18,239 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:30:18,253 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:30:18,259 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Check if k3s service exists] ****************************************************************************************************
+2026-02-21 12:30:18,482 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:30:18,492 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:30:18,508 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:30:18,636 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:30:18,648 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:30:18,663 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:30:18,676 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:30:18,683 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:30:18,689 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Display k3s services] ***********************************************************************************************************
+2026-02-21 12:30:18,737 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "k3s_services.stdout_lines": [
+        "  UNIT LOAD ACTIVE SUB DESCRIPTION",
+        "",
+        "0 loaded units listed.",
+        "To show all installed unit files use 'systemctl list-unit-files'."
+    ]
+}
+2026-02-21 12:30:18,753 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "k3s_services.stdout_lines": [
+        "  UNIT LOAD ACTIVE SUB DESCRIPTION",
+        "",
+        "0 loaded units listed.",
+        "To show all installed unit files use 'systemctl list-unit-files'."
+    ]
+}
+2026-02-21 12:30:18,768 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "k3s_services.stdout_lines": [
+        "  UNIT LOAD ACTIVE SUB DESCRIPTION",
+        "",
+        "0 loaded units listed.",
+        "To show all installed unit files use 'systemctl list-unit-files'."
+    ]
+}
+2026-02-21 12:30:18,784 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "k3s_services.stdout_lines": [
+        "  UNIT LOAD ACTIVE SUB DESCRIPTION",
+        "",
+        "0 loaded units listed.",
+        "To show all installed unit files use 'systemctl list-unit-files'."
+    ]
+}
+2026-02-21 12:30:18,802 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "k3s_services.stdout_lines": [
+        "  UNIT LOAD ACTIVE SUB DESCRIPTION",
+        "",
+        "0 loaded units listed.",
+        "To show all installed unit files use 'systemctl list-unit-files'."
+    ]
+}
+2026-02-21 12:30:18,803 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "k3s_services.stdout_lines": [
+        "  UNIT LOAD ACTIVE SUB DESCRIPTION",
+        "",
+        "0 loaded units listed.",
+        "To show all installed unit files use 'systemctl list-unit-files'."
+    ]
+}
+2026-02-21 12:30:18,814 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "k3s_services.stdout_lines": [
+        "  UNIT LOAD ACTIVE SUB DESCRIPTION",
+        "",
+        "0 loaded units listed.",
+        "To show all installed unit files use 'systemctl list-unit-files'."
+    ]
+}
+2026-02-21 12:30:18,831 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "k3s_services.stdout_lines": [
+        "  UNIT LOAD ACTIVE SUB DESCRIPTION",
+        "",
+        "0 loaded units listed.",
+        "To show all installed unit files use 'systemctl list-unit-files'."
+    ]
+}
+2026-02-21 12:30:18,838 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Check k3s service status (if exists)] *******************************************************************************************
+2026-02-21 12:30:18,872 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:30:18,889 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:30:18,907 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:30:18,925 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:30:18,944 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:30:18,994 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:30:18,995 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:30:19,015 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:30:19,021 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Display k3s service status] *****************************************************************************************************
+2026-02-21 12:30:19,072 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:30:19,090 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:30:19,107 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:30:19,125 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:30:19,142 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:30:19,143 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:30:19,146 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:30:19,160 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:30:19,167 p=16268 u=achim.reckeweg n=ansible INFO| TASK [List /usr/local/bin] ************************************************************************************************************
+2026-02-21 12:30:19,390 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:30:19,401 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:30:19,413 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:30:19,542 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:30:19,556 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:30:19,578 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:30:19,590 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:30:19,610 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:30:19,617 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Display /usr/local/bin contents] ************************************************************************************************
+2026-02-21 12:30:19,662 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "usr_local_bin.stdout_lines": [
+        "insgesamt 8",
+        "drwxr-xr-x  2 root root 4096 16. Jan 19:01 .",
+        "drwxr-xr-x 11 root root 4096 16. Jan 19:01 .."
+    ]
+}
+2026-02-21 12:30:19,679 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "usr_local_bin.stdout_lines": [
+        "insgesamt 8",
+        "drwxr-xr-x  2 root root 4096 16. Jan 19:10 .",
+        "drwxr-xr-x 11 root root 4096 16. Jan 19:10 .."
+    ]
+}
+2026-02-21 12:30:19,697 p=16268 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "usr_local_bin.stdout_lines": [
+        "insgesamt 8",
+        "drwxr-xr-x  2 root root 4096 21. Jan 13:35 .",
+        "drwxr-xr-x 11 root root 4096 21. Jan 13:35 .."
+    ]
+}
+2026-02-21 12:30:19,716 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker01] => {
+    "usr_local_bin.stdout_lines": [
+        "total 8",
+        "drwxr-xr-x  2 root root 4096 Feb 19 10:15 .",
+        "drwxr-xr-x 10 root root 4096 Nov 19  2024 .."
+    ]
+}
+2026-02-21 12:30:19,733 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker02] => {
+    "usr_local_bin.stdout_lines": [
+        "total 8",
+        "drwxr-xr-x  2 root root 4096 Feb 19 10:15 .",
+        "drwxr-xr-x 10 root root 4096 May 13  2025 .."
+    ]
+}
+2026-02-21 12:30:19,734 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker03] => {
+    "usr_local_bin.stdout_lines": [
+        "total 8",
+        "drwxr-xr-x  2 root root 4096 Feb 19 10:15 .",
+        "drwxr-xr-x 10 root root 4096 May 13  2025 .."
+    ]
+}
+2026-02-21 12:30:19,743 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker04] => {
+    "usr_local_bin.stdout_lines": [
+        "total 8",
+        "drwxr-xr-x  2 root root 4096 Feb 19 10:15 .",
+        "drwxr-xr-x 10 root root 4096 May 13  2025 .."
+    ]
+}
+2026-02-21 12:30:19,760 p=16268 u=achim.reckeweg n=ansible INFO| ok: [worker05] => {
+    "usr_local_bin.stdout_lines": [
+        "total 8",
+        "drwxr-xr-x  2 root root 4096 Feb 19 10:15 .",
+        "drwxr-xr-x 11 root root 4096 Oct  1 02:04 .."
+    ]
+}
+2026-02-21 12:30:19,767 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Check for k3s logs] *************************************************************************************************************
+2026-02-21 12:30:19,798 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:30:19,815 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:30:19,832 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:30:19,850 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:30:19,868 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:30:19,886 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:30:19,890 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:30:19,904 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:30:19,911 p=16268 u=achim.reckeweg n=ansible INFO| TASK [Display k3s logs] ***************************************************************************************************************
+2026-02-21 12:30:19,944 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master01]
+2026-02-21 12:30:19,963 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master02]
+2026-02-21 12:30:19,981 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [master03]
+2026-02-21 12:30:19,998 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker01]
+2026-02-21 12:30:20,016 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker02]
+2026-02-21 12:30:20,034 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker03]
+2026-02-21 12:30:20,038 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker04]
+2026-02-21 12:30:20,053 p=16268 u=achim.reckeweg n=ansible INFO| skipping: [worker05]
+2026-02-21 12:30:20,057 p=16268 u=achim.reckeweg n=ansible INFO| PLAY RECAP ****************************************************************************************************************************
+2026-02-21 12:30:20,057 p=16268 u=achim.reckeweg n=ansible INFO| master01                   : ok=10   changed=0    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:30:20,057 p=16268 u=achim.reckeweg n=ansible INFO| master02                   : ok=10   changed=0    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:30:20,057 p=16268 u=achim.reckeweg n=ansible INFO| master03                   : ok=10   changed=0    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:30:20,057 p=16268 u=achim.reckeweg n=ansible INFO| worker01                   : ok=10   changed=0    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:30:20,057 p=16268 u=achim.reckeweg n=ansible INFO| worker02                   : ok=10   changed=0    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:30:20,057 p=16268 u=achim.reckeweg n=ansible INFO| worker03                   : ok=10   changed=0    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:30:20,057 p=16268 u=achim.reckeweg n=ansible INFO| worker04                   : ok=10   changed=0    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:30:20,058 p=16268 u=achim.reckeweg n=ansible INFO| worker05                   : ok=10   changed=0    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0   
+2026-02-21 12:39:13,552 p=17486 u=achim.reckeweg n=ansible INFO| master03 | CHANGED | rc=0 >>
+Failed to stop k3s.service: Unit k3s.service not loaded.
+Failed to stop k3s-agent.service: Unit k3s-agent.service not loaded.
+
+2026-02-21 12:39:13,560 p=17486 u=achim.reckeweg n=ansible INFO| master02 | CHANGED | rc=0 >>
+Failed to stop k3s.service: Unit k3s.service not loaded.
+Failed to stop k3s-agent.service: Unit k3s-agent.service not loaded.
+
+2026-02-21 12:39:13,612 p=17486 u=achim.reckeweg n=ansible INFO| master01 | CHANGED | rc=0 >>
+Failed to stop k3s.service: Unit k3s.service not loaded.
+Failed to stop k3s-agent.service: Unit k3s-agent.service not loaded.
+
+2026-02-21 12:39:13,642 p=17486 u=achim.reckeweg n=ansible INFO| worker02 | CHANGED | rc=0 >>
+Failed to stop k3s-agent.service: Unit k3s-agent.service not loaded.
+
+2026-02-21 12:39:13,654 p=17486 u=achim.reckeweg n=ansible INFO| worker05 | CHANGED | rc=0 >>
+Failed to stop k3s.service: Unit k3s.service not loaded.
+Failed to stop k3s-agent.service: Unit k3s-agent.service not loaded.
+
+2026-02-21 12:39:13,671 p=17486 u=achim.reckeweg n=ansible INFO| worker03 | CHANGED | rc=0 >>
+Failed to stop k3s.service: Unit k3s.service not loaded.
+Failed to stop k3s-agent.service: Unit k3s-agent.service not loaded.
+
+2026-02-21 12:39:13,702 p=17486 u=achim.reckeweg n=ansible INFO| worker01 | CHANGED | rc=0 >>
+Failed to stop k3s-agent.service: Unit k3s-agent.service not loaded.
+
+2026-02-21 12:39:13,703 p=17486 u=achim.reckeweg n=ansible INFO| worker04 | CHANGED | rc=0 >>
+Failed to stop k3s.service: Unit k3s.service not loaded.
+Failed to stop k3s-agent.service: Unit k3s-agent.service not loaded.
+
+2026-02-21 12:39:35,084 p=17876 u=achim.reckeweg n=ansible INFO| PLAY [Install k3s on first master] ****************************************************************************************************
+2026-02-21 12:39:35,095 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************
+2026-02-21 12:39:36,028 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:39:36,033 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Download k3s install script] ****************************************************************************************************
+2026-02-21 12:39:36,623 p=17876 u=achim.reckeweg n=ansible WARNING| [WARNING]: Module remote_tmp /root/.ansible/tmp did not exist and was created with a mode of 0700, this may cause issues when running as another user. To avoid this, create the remote_tmp dir with the correct permissions manually
+
+2026-02-21 12:39:36,623 p=17876 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-02-21 12:39:36,627 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Install k3s on first master (cluster-init)] *************************************************************************************
+2026-02-21 12:39:51,658 p=17876 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-02-21 12:39:51,663 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Wait for k3s to be ready] *******************************************************************************************************
+2026-02-21 12:39:57,093 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:39:57,100 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Wait for node to be ready] ******************************************************************************************************
+2026-02-21 12:39:57,398 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:39:57,404 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Get k3s token] ******************************************************************************************************************
+2026-02-21 12:39:57,848 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:39:57,855 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Save token as fact] *************************************************************************************************************
+2026-02-21 12:39:57,987 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-02-21 12:39:57,992 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Display first master status] ****************************************************************************************************
+2026-02-21 12:39:58,022 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "First master gmkt-01x is ready!"
+}
+2026-02-21 12:39:58,025 p=17876 u=achim.reckeweg n=ansible INFO| PLAY [Install k3s on additional masters] **********************************************************************************************
+2026-02-21 12:39:58,029 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************
+2026-02-21 12:39:58,646 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-02-21 12:39:58,650 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Install k3s on additional masters] **********************************************************************************************
+2026-02-21 12:40:20,572 p=17876 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-02-21 12:40:20,578 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Wait for node to join] **********************************************************************************************************
+2026-02-21 12:40:20,874 p=17876 u=achim.reckeweg n=ansible INFO| FAILED - RETRYING: [master02 -> master01]: Wait for node to join (30 retries left).
+2026-02-21 12:40:31,107 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master02 -> master01(192.168.20.31)]
+2026-02-21 12:40:31,112 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Display master status] **********************************************************************************************************
+2026-02-21 12:40:31,145 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "Master gmkt-02x joined the cluster!"
+}
+2026-02-21 12:40:31,147 p=17876 u=achim.reckeweg n=ansible INFO| PLAY [Install k3s on additional masters] **********************************************************************************************
+2026-02-21 12:40:31,151 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************
+2026-02-21 12:40:32,110 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-02-21 12:40:32,114 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Install k3s on additional masters] **********************************************************************************************
+2026-02-21 12:40:49,309 p=17876 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-02-21 12:40:49,313 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Wait for node to join] **********************************************************************************************************
+2026-02-21 12:40:49,598 p=17876 u=achim.reckeweg n=ansible INFO| FAILED - RETRYING: [master03 -> master01]: Wait for node to join (30 retries left).
+2026-02-21 12:40:59,840 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master03 -> master01(192.168.20.31)]
+2026-02-21 12:40:59,846 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Display master status] **********************************************************************************************************
+2026-02-21 12:40:59,878 p=17876 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": "Master gmkt-03x joined the cluster!"
+}
+2026-02-21 12:40:59,881 p=17876 u=achim.reckeweg n=ansible INFO| PLAY [Install k3s agents on workers] **************************************************************************************************
+2026-02-21 12:40:59,886 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************
+2026-02-21 12:41:00,963 p=17876 u=achim.reckeweg n=ansible INFO| ok: [worker03]
+2026-02-21 12:41:01,001 p=17876 u=achim.reckeweg n=ansible INFO| ok: [worker05]
+2026-02-21 12:41:01,006 p=17876 u=achim.reckeweg n=ansible INFO| ok: [worker02]
+2026-02-21 12:41:01,992 p=17876 u=achim.reckeweg n=ansible INFO| ok: [worker04]
+2026-02-21 12:41:02,942 p=17876 u=achim.reckeweg n=ansible INFO| ok: [worker01]
+2026-02-21 12:41:02,949 p=17876 u=achim.reckeweg n=ansible INFO| TASK [Install k3s agent] **************************************************************************************************************
+2026-02-21 12:41:28,722 p=17876 u=achim.reckeweg n=ansible INFO| changed: [worker01]
+2026-02-21 12:41:29,971 p=17876 u=achim.reckeweg n=ansible INFO| changed: [worker02]
+2026-02-21 12:52:53,842 p=17876 u=achim.reckeweg n=ansible INFO| changed: [worker04]
+2026-02-21 13:00:59,467 p=17876 u=achim.reckeweg n=ansible ERROR| [ERROR]: Task failed: Module failed: non-zero return code
+Origin: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks/install-k3s-direct.yml:122:7
+
+120   
+121   tasks:
+122     - name: Install k3s agent
+          ^ column 7
+
+
+2026-02-21 13:00:59,475 p=17876 u=achim.reckeweg n=ansible INFO| fatal: [worker03]: FAILED! => {"changed": true, "cmd": "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.28.5+k3s1 K3S_URL=https://192.168.20.31:6443 K3S_TOKEN=K10dd1ebae67719ce89f21debed09dd6e5eac87bef758c027a36ea3038230376124::server:4792aa9a2a1e27f97a4a9eede54b349b sh -s - agent  --node-ip=192.168.20.23  --flannel-iface=eth0.20\n", "delta": "0:19:56.092556", "end": "2026-02-21 13:00:59.407676", "msg": "non-zero return code", "rc": 1, "start": "2026-02-21 12:41:03.315120", "stderr": "Created symlink '/etc/systemd/system/multi-user.target.wants/k3s-agent.service' → '/etc/systemd/system/k3s-agent.service'.\nJob for k3s-agent.service canceled.", "stderr_lines": ["Created symlink '/etc/systemd/system/multi-user.target.wants/k3s-agent.service' → '/etc/systemd/system/k3s-agent.service'.", "Job for k3s-agent.service canceled."], "stdout": "[INFO]  Using v1.28.5+k3s1 as release\n[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.28.5+k3s1/sha256sum-arm64.txt\n[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.28.5+k3s1/k3s-arm64\n[INFO]  Verifying binary download\n[INFO]  Installing k3s to /usr/local/bin/k3s\n[INFO]  Finding available k3s-selinux versions\n[INFO]  Creating /usr/local/bin/kubectl symlink to k3s\n[INFO]  Creating /usr/local/bin/crictl symlink to k3s\n[INFO]  Creating /usr/local/bin/ctr symlink to k3s\n[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh\n[INFO]  Creating uninstall script /usr/local/bin/k3s-agent-uninstall.sh\n[INFO]  env: Creating environment file /etc/systemd/system/k3s-agent.service.env\n[INFO]  systemd: Creating service file /etc/systemd/system/k3s-agent.service\n[INFO]  systemd: Enabling k3s-agent unit\n[INFO]  systemd: Starting k3s-agent", "stdout_lines": ["[INFO]  Using v1.28.5+k3s1 as release", "[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.28.5+k3s1/sha256sum-arm64.txt", "[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.28.5+k3s1/k3s-arm64", "[INFO]  Verifying binary download", "[INFO]  Installing k3s to /usr/local/bin/k3s", "[INFO]  Finding available k3s-selinux versions", "[INFO]  Creating /usr/local/bin/kubectl symlink to k3s", "[INFO]  Creating /usr/local/bin/crictl symlink to k3s", "[INFO]  Creating /usr/local/bin/ctr symlink to k3s", "[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh", "[INFO]  Creating uninstall script /usr/local/bin/k3s-agent-uninstall.sh", "[INFO]  env: Creating environment file /etc/systemd/system/k3s-agent.service.env", "[INFO]  systemd: Creating service file /etc/systemd/system/k3s-agent.service", "[INFO]  systemd: Enabling k3s-agent unit", "[INFO]  systemd: Starting k3s-agent"]}
+2026-02-21 13:11:00,881 p=17876 u=achim.reckeweg n=ansible ERROR| [ERROR]: User interrupted execution
+

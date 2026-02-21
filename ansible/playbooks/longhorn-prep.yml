@@ -1,0 +1,22 @@
+---
+- name: Prepare Longhorn storage
+  hosts: k3s_cluster
+  become: true
+  
+  tasks:
+    - name: Create mount point
+      file:
+        path: /mnt/longhorn
+        state: directory
+    
+    - name: Mount Longhorn partition
+      mount:
+        path: /mnt/longhorn
+        src: "UUID={{ var_uuid }}"
+        fstype: ext4
+        opts: defaults
+        state: mounted
+    
+    - name: Verify mount
+      command: df -h /mnt/longhorn
+      changed_when: false

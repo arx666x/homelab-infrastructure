@@ -1,0 +1,16 @@
+---
+# SERI k3s Cluster - Worker Node Configuration
+
+k3s_control_node: false
+
+# Raspberry Pi verwenden eth0.20 für k3s Traffic
+flannel_iface: "eth0.20"
+
+# Node IP ist die IP im Kubernetes VLAN
+k3s_node_ip: "{{ ansible_host }}"
+
+# Kombiniere Base Args mit flannel Interface
+extra_agent_args: >-
+  {{ extra_agent_args_base }}
+  --node-ip={{ k3s_node_ip }}
+  --flannel-iface={{ flannel_iface }}

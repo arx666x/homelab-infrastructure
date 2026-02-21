@@ -1,0 +1,60 @@
+---
+# ansible/playbooks/upgrade-k3s.yml
+- name: Upgrade k3s cluster
+  hosts: all
+  become: true
+  serial: 1  # Ein Node nach dem anderen
+  
+  tasks:
+    - name: Get current k3s version
+      command: k3s --version
+      register: current_version
+      changed_when: false
+      failed_when: false
+    
+    - name: Display current version
+      debug:
+        var: current_version.stdout_lines
+    
+    - name: Download new k3s version
+      get_url:
+        url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s{% if ansible_architecture == 'aarch64' %}-arm64{% endif %}"
+        dest: /usr/local/bin/k3s-new
+        mode: '0755'
+    
+    - name: Stop k3s service
+      systemd:
+        name: "{{ 'k3s' if k3s_control_node else 'k3s-agent' }}"
+        state: stopped
+    
+    - name: Backup old k3s binary
+      command: cp /usr/local/bin/k3s /usr/local/bin/k3s-old
+      args:
+        creates: /usr/local/bin/k3s-old
+    
+    - name: Replace k3s binary
+      command: mv /usr/local/bin/k3s-new /usr/local/bin/k3s
+    
+    - name: Start k3s service
+      systemd:
+        name: "{{ 'k3s' if k3s_control_node else 'k3s-agent' }}"
+        state: started
+    
+    - name: Wait for node to be ready
+      command: k3s kubectl get nodes {{ hostname }}
+      register: node_status
+      until: node_status.stdout.find("Ready") != -1
+      retries: 30
+      delay: 10
+      changed_when: false
+      when: k3s_control_node
+    
+    - name: Verify new version
+      command: k3s --version
+      register: new_version
+      changed_when: false
+    
+    - name: Display new version
+      debug:
+        var: new_version.stdout_lines
+

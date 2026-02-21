@@ -1,0 +1,39 @@
+[defaults]
+# Inventory
+inventory = inventory/hosts.ini
+
+# Roles path - WICHTIG!
+roles_path = ./roles:~/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles
+
+# SSH Settings
+host_key_checking = False
+remote_user = achim
+private_key_file = ~/.ssh/id_rsa
+timeout = 30
+
+# Performance
+gathering = smart
+fact_caching = jsonfile
+fact_caching_connection = /tmp/ansible_facts
+fact_caching_timeout = 86400
+forks = 10
+
+# Output
+stdout_callback = yaml
+display_skipped_hosts = False
+display_ok_hosts = True
+
+# Logging
+log_path = ./ansible.log
+
+[privilege_escalation]
+become = True
+become_method = sudo
+become_user = root
+become_ask_pass = False
+
+[ssh_connection]
+ssh_args = -C -o ControlMaster=auto -o ControlPersist=60s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+pipelining = True
+control_path = /tmp/ansible-ssh-%%h-%%p-%%r
+

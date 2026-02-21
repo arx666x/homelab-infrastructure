@@ -1,0 +1,23 @@
+# SERI k3s Cluster Inventory
+# Update var_uuid values after running scripts/collect-uuids.sh
+
+[master]
+master01 ansible_host=192.168.20.31 mgmt_ip=192.168.11.31 hostname=gmkt-01x var_disk=nvme1n1 var_uuid=3a24f5d8-5f91-4749-b0a0-62b92b75a211
+master02 ansible_host=192.168.20.32 mgmt_ip=192.168.11.32 hostname=gmkt-02x var_disk=nvme1n1 var_uuid=REPLACE_WITH_ACTUAL_UUID
+master03 ansible_host=192.168.20.33 mgmt_ip=192.168.11.33 hostname=gmkt-03x var_disk=nvme1n1 var_uuid=REPLACE_WITH_ACTUAL_UUID
+
+[worker]
+worker01 ansible_host=192.168.20.21 mgmt_ip=192.168.11.21 hostname=rpi5-01x var_disk=sda var_uuid=REPLACE_WITH_ACTUAL_UUID
+worker02 ansible_host=192.168.20.22 mgmt_ip=192.168.11.22 hostname=rpi5-02x var_disk=sda var_uuid=REPLACE_WITH_ACTUAL_UUID
+worker03 ansible_host=192.168.20.23 mgmt_ip=192.168.11.23 hostname=rpi5-03x var_disk=sda var_uuid=REPLACE_WITH_ACTUAL_UUID
+worker04 ansible_host=192.168.20.24 mgmt_ip=192.168.11.24 hostname=rpi5-04x var_disk=sda var_uuid=REPLACE_WITH_ACTUAL_UUID
+worker05 ansible_host=192.168.20.25 mgmt_ip=192.168.11.25 hostname=rpi5-05x var_disk=sda var_uuid=REPLACE_WITH_ACTUAL_UUID
+
+[k3s_cluster:children]
+master
+worker
+
+[k3s_cluster:vars]
+ansible_user=achim
+ansible_ssh_private_key_file=~/.ssh/id_ed25519
+ansible_python_interpreter=/usr/bin/python3

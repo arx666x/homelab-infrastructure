@@ -1,0 +1,17 @@
+---
+- import_playbook: setup-vlan-interfaces.yml
+- import_playbook: prereq.yml
+- import_playbook: longhorn-prep.yml
+
+- name: Install k3s cluster
+  hosts: k3s_cluster
+  become: true
+  gather_facts: true
+  
+  pre_tasks:
+    - name: Display node config
+      debug:
+        msg: "Installing k3s on {{ hostname }} ({{ ansible_host }})"
+  
+  roles:
+    - role: k3s

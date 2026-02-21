@@ -1,0 +1,53 @@
+---
+- name: Prepare all nodes for k3s
+  hosts: k3s_cluster
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Set timezone
+      timezone:
+        name: "{{ timezone }}"
+    
+    - name: Set hostname
+      hostname:
+        name: "{{ hostname }}"
+    
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+    
+    - name: Install packages
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - vim
+          - htop
+          - nfs-common
+          - open-iscsi
+          - python3
+        state: present
+    
+    - name: Enable iscsid
+      systemd:
+        name: iscsid
+        enabled: true
+        state: started
+    
+    - name: Disable swap
+      shell: swapoff -a
+      when: ansible_swaptotal_mb > 0
+    
+    - name: Configure sysctl
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+        - { key: 'net.ipv4.ip_forward', value: '1' }
+        - { key: 'fs.inotify.max_user_watches', value: '524288' }

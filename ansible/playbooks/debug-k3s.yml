@@ -1,0 +1,82 @@
+---
+# ansible/playbooks/debug-k3s.yml
+- name: Debug k3s installation
+  hosts: k3s_cluster
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Check if k3s binary exists
+      stat:
+        path: /usr/local/bin/k3s
+      register: k3s_binary
+    
+    - name: Display k3s binary status
+      debug:
+        msg: "k3s binary exists: {{ k3s_binary.stat.exists }}"
+    
+    - name: Check k3s service file
+      stat:
+        path: /etc/systemd/system/k3s.service
+      register: k3s_service_file
+    
+    - name: Display service file status
+      debug:
+        msg: "k3s service file exists: {{ k3s_service_file.stat.exists }}"
+    
+    - name: Try to get k3s version
+      command: /usr/local/bin/k3s --version
+      register: k3s_version
+      failed_when: false
+      changed_when: false
+    
+    - name: Display k3s version
+      debug:
+        var: k3s_version
+      when: k3s_version.rc == 0
+    
+    - name: Check if k3s service exists
+      command: systemctl list-units --type=service --all | grep k3s
+      register: k3s_services
+      failed_when: false
+      changed_when: false
+    
+    - name: Display k3s services
+      debug:
+        var: k3s_services.stdout_lines
+    
+    - name: Check k3s service status (if exists)
+      command: systemctl status k3s
+      register: k3s_status
+      failed_when: false
+      changed_when: false
+      when: k3s_service_file.stat.exists
+    
+    - name: Display k3s service status
+      debug:
+        var: k3s_status.stdout_lines
+      when: k3s_service_file.stat.exists
+    
+    - name: List /usr/local/bin
+      command: ls -la /usr/local/bin/
+      register: usr_local_bin
+      changed_when: false
+    
+    - name: Display /usr/local/bin contents
+      debug:
+        var: usr_local_bin.stdout_lines
+    
+    - name: Check for k3s logs
+      command: journalctl -u k3s --no-pager -n 50
+      register: k3s_logs
+      failed_when: false
+      changed_when: false
+      when: k3s_service_file.stat.exists
+    
+    - name: Display k3s logs
+      debug:
+        var: k3s_logs.stdout_lines
+      when: 
+        - k3s_service_file.stat.exists
+        - k3s_logs.rc == 0
+

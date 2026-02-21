@@ -1,0 +1,173 @@
+---
+# Direct k3s installation without role
+- name: Install k3s on first master
+  hosts: master[0]
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Download k3s install script
+      get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s-install.sh
+        mode: '0755'
+    
+    - name: Install k3s on first master (cluster-init)
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} sh -s - server \
+          --cluster-init \
+          --node-ip={{ ansible_host }} \
+          --flannel-iface={{ flannel_iface }} \
+          --disable traefik \
+          --disable servicelb \
+          --disable metrics-server \
+          --write-kubeconfig-mode 644 \
+          --tls-san={{ ansible_host }} \
+          --tls-san={{ mgmt_ip }} \
+          --tls-san=192.168.20.31 \
+          --tls-san=192.168.11.31 \
+          --tls-san=192.168.20.32 \
+          --tls-san=192.168.11.32 \
+          --tls-san=192.168.20.33 \
+          --tls-san=192.168.11.33 \
+          --tls-san=k3s.reckeweg.io \
+          --kube-controller-manager-arg bind-address=0.0.0.0 \
+          --kube-proxy-arg metrics-bind-address=0.0.0.0 \
+          --kube-scheduler-arg bind-address=0.0.0.0 \
+          --etcd-expose-metrics true
+      args:
+        creates: /usr/local/bin/k3s
+    
+    - name: Wait for k3s to be ready
+      wait_for:
+        port: 6443
+        delay: 5
+        timeout: 300
+    
+    - name: Wait for node to be ready
+      command: k3s kubectl get nodes {{ hostname }}
+      register: node_ready
+      until: node_ready.stdout.find("Ready") != -1
+      retries: 30
+      delay: 10
+      changed_when: false
+    
+    - name: Get k3s token
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_token
+    
+    - name: Save token as fact
+      set_fact:
+        k3s_master_token: "{{ k3s_token.content | b64decode | trim }}"
+    
+    - name: Display first master status
+      debug:
+        msg: "First master {{ hostname }} is ready!"
+
+- name: Install k3s on additional masters
+  hosts: master[1:]
+  become: true
+  gather_facts: true
+  serial: 1
+  
+  vars:
+    k3s_master_token: "{{ hostvars[groups['master'][0]]['k3s_master_token'] }}"
+    k3s_master_ip: "{{ hostvars[groups['master'][0]]['ansible_host'] }}"
+  
+  tasks:
+    - name: Install k3s on additional masters
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} \
+        K3S_TOKEN={{ k3s_master_token }} sh -s - server \
+          --server https://{{ k3s_master_ip }}:6443 \
+          --node-ip={{ ansible_host }} \
+          --flannel-iface={{ flannel_iface }} \
+          --disable traefik \
+          --disable servicelb \
+          --disable metrics-server \
+          --write-kubeconfig-mode 644 \
+          --tls-san={{ ansible_host }} \
+          --tls-san={{ mgmt_ip }} \
+          --tls-san=k3s.reckeweg.io \
+          --kube-controller-manager-arg bind-address=0.0.0.0 \
+          --kube-proxy-arg metrics-bind-address=0.0.0.0 \
+          --kube-scheduler-arg bind-address=0.0.0.0
+      args:
+        creates: /usr/local/bin/k3s
+    
+    - name: Wait for node to join
+      command: k3s kubectl get nodes {{ hostname }}
+      register: node_ready
+      until: node_ready.stdout.find("Ready") != -1
+      retries: 30
+      delay: 10
+      changed_when: false
+      delegate_to: "{{ groups['master'][0] }}"
+    
+    - name: Display master status
+      debug:
+        msg: "Master {{ hostname }} joined the cluster!"
+
+- name: Install k3s agents on workers
+  hosts: worker
+  become: true
+  gather_facts: true
+  
+  vars:
+    k3s_master_token: "{{ hostvars[groups['master'][0]]['k3s_master_token'] }}"
+    k3s_master_ip: "{{ hostvars[groups['master'][0]]['ansible_host'] }}"
+  
+  tasks:
+    - name: Install k3s agent
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} \
+        K3S_URL=https://{{ k3s_master_ip }}:6443 \
+        K3S_TOKEN={{ k3s_master_token }} sh -s - agent \
+          --node-ip={{ ansible_host }} \
+          --flannel-iface={{ flannel_iface }}
+      args:
+        creates: /usr/local/bin/k3s
+    
+    - name: Wait for node to join
+      command: k3s kubectl get nodes {{ hostname }}
+      register: node_ready
+      until: node_ready.stdout.find("Ready") != -1
+      retries: 30
+      delay: 10
+      changed_when: false
+      delegate_to: "{{ groups['master'][0] }}"
+    
+    - name: Display worker status
+      debug:
+        msg: "Worker {{ hostname }} joined the cluster!"
+
+- name: Display cluster status
+  hosts: master[0]
+  become: true
+  gather_facts: false
+  
+  tasks:
+    - name: Get all nodes
+      command: k3s kubectl get nodes -o wide
+      register: all_nodes
+      changed_when: false
+    
+    - name: Display cluster
+      debug:
+        var: all_nodes.stdout_lines
+    
+    - name: Get cluster info
+      command: k3s kubectl cluster-info
+      register: cluster_info
+      changed_when: false
+    
+    - name: Display cluster info
+      debug:
+        var: cluster_info.stdout_lines
+    
+    - name: Copy kubeconfig for local use
+      fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: /tmp/k3s-kubeconfig-raw.yaml
+        flat: yes

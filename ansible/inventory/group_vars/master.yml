@@ -1,0 +1,17 @@
+---
+# SERI k3s Cluster - Master Node Configuration
+
+k3s_control_node: true
+
+# GMKtec verwenden enp1s0.20 für k3s Traffic
+flannel_iface: "enp1s0.20"
+
+# Node IP ist die IP im Kubernetes VLAN
+k3s_node_ip: "{{ ansible_host }}"
+
+# Kombiniere Base Args mit flannel Interface und node-specific settings
+extra_server_args: >-
+  {{ extra_server_args_base }}
+  --node-ip={{ k3s_node_ip }}
+  --flannel-iface={{ flannel_iface }}
+  --node-taint node-role.kubernetes.io/control-plane:NoSchedule

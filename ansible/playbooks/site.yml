@@ -1,0 +1,86 @@
+---
+# ansible/playbooks/site.yml
+# SERI k3s Cluster - Main Installation Playbook
+
+# Step 0: Load kernel modules first
+- name: Load kernel modules
+  import_playbook: load-kernel-modules.yml
+
+# Step 1: Setup VLAN interfaces
+# Note: The interfaces were manually configured with NetworkManager
+#       Nicht noch einmal anlegen, nd vor allem nicht über /etc/network/interfaces.
+#- name: Setup VLAN interfaces
+#  import_playbook: setup-vlan-interfaces.yml
+
+# Step 2: System prerequisites
+- name: System prerequisites
+  import_playbook: prereq.yml
+
+# Step 3: Prepare Longhorn storage
+- name: Longhorn storage preparation
+  import_playbook: longhorn-prep.yml
+
+# Step 4: Install k3s
+- name: Install k3s cluster
+  hosts: k3s_cluster
+  become: true
+  gather_facts: true
+  
+  pre_tasks:
+    - name: Verify VLAN interface exists (Pi)
+      command: ip addr show eth0.20
+      register: vlan_check_pi
+      when: "'worker' in group_names"
+      changed_when: false
+      failed_when: vlan_check_pi.rc != 0
+    
+    - name: Verify VLAN interface exists (GMKtec)
+      command: ip addr show enp1s0.20
+      register: vlan_check_gmk
+      when: "'master' in group_names"
+      changed_when: false
+      failed_when: vlan_check_gmk.rc != 0
+    
+    - name: Display node configuration
+      debug:
+        msg:
+          - "Hostname: {{ hostname }}"
+          - "Inventory: {{ inventory_hostname }}"
+          - "Management IP: {{ mgmt_ip }}"
+          - "Kubernetes IP: {{ ansible_host }}"
+          - "Flannel Interface: {{ flannel_iface }}"
+          - "Node Type: {{ 'master' if k3s_control_node else 'worker' }}"
+  
+  roles:
+    - role: k3s
+      vars:
+        k3s_become: true
+
+  post_tasks:
+    - name: Wait for cluster to be ready
+      shell: /usr/local/bin/kubectl get nodes || /usr/local/bin/k3s kubectl get nodes
+      register: nodes_status
+      until: nodes_status.stdout.find("NotReady") == -1
+      retries: 30
+      delay: 10
+      when: inventory_hostname == groups['master'][0]
+      delegate_to: "{{ groups['master'][0] }}"
+      run_once: true
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+    
+    - name: Display cluster status
+      shell: /usr/local/bin/kubectl get nodes -o wide || /usr/local/bin/k3s kubectl get nodes -o wide
+      register: cluster_nodes
+      when: inventory_hostname == groups['master'][0]
+      changed_when: false
+      run_once: true
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+    
+    - name: Show cluster nodes
+      debug:
+        var: cluster_nodes.stdout_lines
+      when: inventory_hostname == groups['master'][0]
+      run_once: true
+

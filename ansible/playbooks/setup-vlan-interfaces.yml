@@ -1,0 +1,40 @@
+---
+- name: Setup VLAN interfaces
+  hosts: k3s_cluster
+  become: true
+  
+  tasks:
+    - name: Install vlan package
+      apt:
+        name: vlan
+        state: present
+    
+    - name: Load 8021q module
+      modprobe:
+        name: 8021q
+        state: present
+    
+    - name: Configure VLAN 20 (Pi)
+      copy:
+        dest: /etc/network/interfaces.d/eth0.20
+        content: |
+          auto eth0.20
+          iface eth0.20 inet static
+              address {{ ansible_host }}/24
+              vlan-raw-device eth0
+      when: "'worker' in group_names"
+    
+    - name: Configure VLAN 20 (GMKtec)
+      copy:
+        dest: /etc/network/interfaces.d/enp1s0.20
+        content: |
+          auto enp1s0.20
+          iface enp1s0.20 inet static
+              address {{ ansible_host }}/24
+              vlan-raw-device enp1s0
+      when: "'master' in group_names"
+    
+    - name: Restart networking
+      systemd:
+        name: networking
+        state: restarted
