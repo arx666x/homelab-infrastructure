@@ -18,13 +18,28 @@ spec:
           backupTarget: "nfs://192.168.11.55:/volume1/longhorn-backup"
           defaultDataPath: "/mnt/longhorn"
           defaultReplicaCount: 3
+        
         persistence:
           defaultClass: true
+        
         preUpgradeChecker:
           jobEnabled: false
+        
+        # Ingress Configuration
+        ingress:
+          enabled: true
+          ingressClassName: traefik
+          host: longhorn.reckeweg.io
+          tls: true
+          tlsSecret: longhorn-tls
+          annotations:
+            cert-manager.io/cluster-issuer: letsencrypt-prod
+            traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  
   destination:
     server: https://kubernetes.default.svc
     namespace: longhorn-system
+  
   syncPolicy:
     automated:
       prune: true
@@ -32,8 +47,17 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+  
   ignoreDifferences:
     - group: apiextensions.k8s.io
       kind: CustomResourceDefinition
       jsonPointers:
         - /spec/conversion/webhook/clientConfig/caBundle
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jsonPointers:
+        - /webhooks/0/clientConfig/caBundle
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jsonPointers:
+        - /webhooks/0/clientConfig/caBundle
