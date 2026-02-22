@@ -12,7 +12,8 @@ spec:
     directory:
       recurse: true
     path: gitops/infrastructure
-    repoURL: https://gitea.reckeweg.io/achim/seri-infrastructure.git
+    # repoURL: https://gitea.reckeweg.io/achim/seri-infrastructure.git
+    repoURL: https://github.com/arx666x/homelab-infrastructure.git
     targetRevision: main
   syncPolicy:
     automated:
