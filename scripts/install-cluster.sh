@@ -99,6 +99,7 @@ curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.28.5+k3s1 sh -s - server \
   --token $K3S_TOKEN \
   --node-ip=192.168.20.32 \
   --flannel-iface=enp1s0.20 \
+  --flannel-backend=host-gw \
   --disable traefik \
   --disable servicelb \
   --disable metrics-server
@@ -112,6 +113,7 @@ curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.28.5+k3s1 sh -s - server \
   --token $K3S_TOKEN \
   --node-ip=192.168.20.33 \
   --flannel-iface=enp1s0.20 \
+  --flannel-backend=host-gw \
   --disable traefik \
   --disable servicelb \
   --disable metrics-server
