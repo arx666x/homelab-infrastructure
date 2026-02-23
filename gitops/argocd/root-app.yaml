@@ -10,9 +10,9 @@ spec:
   source:
     repoURL: https://github.com/arx666x/homelab-infrastructure.git
     targetRevision: main
-    path: gitops/infrastructure
+    path: gitops/apps
     directory:
-      recurse: true
+      recurse: false
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

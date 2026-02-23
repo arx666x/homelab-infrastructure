@@ -7,17 +7,25 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
 spec:
   project: default
-  source:
-    chart: cert-manager
-    repoURL: https://charts.jetstack.io
-    targetRevision: v1.13.3
-    helm:
-      releaseName: cert-manager
-      values: |
-        installCRDs: true
+  sources:
+    # cert-manager Helm Chart
+    - chart: cert-manager
+      repoURL: https://charts.jetstack.io
+      targetRevision: v1.13.3
+      helm:
+        releaseName: cert-manager
+        values: |
+          installCRDs: true
+    
+    # ClusterIssuer Config aus Git
+    - repoURL: https://github.com/arx666x/homelab-infrastructure.git
+      targetRevision: main
+      path: gitops/config/cert-manager
+  
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
+  
   syncPolicy:
     automated:
       prune: true
@@ -29,6 +37,7 @@ spec:
       backoff:
         duration: 5s
         maxDuration: 2m
+  
   ignoreDifferences:
     - group: apiextensions.k8s.io
       kind: CustomResourceDefinition

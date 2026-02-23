@@ -7,15 +7,23 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
-  source:
-    chart: metallb
-    repoURL: https://metallb.github.io/metallb
-    targetRevision: 0.14.8
-    helm:
-      releaseName: metallb
+  sources:
+    # MetalLB Helm Chart
+    - chart: metallb
+      repoURL: https://metallb.github.io/metallb
+      targetRevision: 0.14.8
+      helm:
+        releaseName: metallb
+    
+    # MetalLB Config aus Git
+    - repoURL: https://github.com/arx666x/homelab-infrastructure.git
+      targetRevision: main
+      path: gitops/config/metallb
+  
   destination:
     server: https://kubernetes.default.svc
     namespace: metallb-system
+  
   syncPolicy:
     automated:
       prune: true
@@ -27,6 +35,7 @@ spec:
       backoff:
         duration: 5s
         maxDuration: 2m
+  
   ignoreDifferences:
     - group: apiextensions.k8s.io
       kind: CustomResourceDefinition

@@ -32,9 +32,11 @@ spec:
         ingressClass:
           enabled: true
           isDefaultClass: true
+  
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik
+  
   syncPolicy:
     automated:
       prune: true
