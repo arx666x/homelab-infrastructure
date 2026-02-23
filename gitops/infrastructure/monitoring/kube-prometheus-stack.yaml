@@ -25,21 +25,40 @@ spec:
                   resources:
                     requests:
                       storage: 50Gi
+          
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            hosts:
+              - prometheus.reckeweg.io
+            tls:
+              - secretName: prometheus-tls
+                hosts:
+                  - prometheus.reckeweg.io
+            annotations:
+              cert-manager.io/cluster-issuer: letsencrypt-prod
+              traefik.ingress.kubernetes.io/router.entrypoints: websecure
         
         grafana:
           enabled: true
+          adminPassword: changeme
           persistence:
             enabled: true
             storageClassName: longhorn
             size: 10Gi
-          adminPassword: changeme
+          
           ingress:
             enabled: true
             ingressClassName: traefik
             hosts:
               - grafana.reckeweg.io
+            tls:
+              - secretName: grafana-tls
+                hosts:
+                  - grafana.reckeweg.io
             annotations:
               cert-manager.io/cluster-issuer: letsencrypt-prod
+              traefik.ingress.kubernetes.io/router.entrypoints: websecure
         
         alertmanager:
           alertmanagerSpec:

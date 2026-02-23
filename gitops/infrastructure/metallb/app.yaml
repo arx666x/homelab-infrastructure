@@ -3,17 +3,33 @@ kind: Application
 metadata:
   name: metallb
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   source:
-    repoURL: https://metallb.github.io/metallb
     chart: metallb
-    targetRevision: 0.13.12
+    repoURL: https://metallb.github.io/metallb
+    targetRevision: 0.14.8
+    helm:
+      releaseName: metallb
   destination:
     server: https://kubernetes.default.svc
     namespace: metallb-system
   syncPolicy:
     automated:
       prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 2m
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /spec/conversion/webhook/clientConfig/caBundle
+        - /status

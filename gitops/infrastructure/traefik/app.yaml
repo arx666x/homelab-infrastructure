@@ -3,30 +3,46 @@ kind: Application
 metadata:
   name: traefik
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   project: default
   source:
-    repoURL: https://traefik.github.io/charts
     chart: traefik
+    repoURL: https://traefik.github.io/charts
     targetRevision: 26.0.0
     helm:
+      releaseName: traefik
       values: |
         service:
           type: LoadBalancer
           annotations:
-            metallb.universe.tf/loadBalancerIPs: "192.168.20.100"
+            metallb.universe.tf/address-pool: default-pool
+        
         ports:
           web:
+            port: 80
             redirectTo:
               port: websecure
           websecure:
+            port: 443
             tls:
               enabled: true
+        
+        ingressClass:
+          enabled: true
+          isDefaultClass: true
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik
   syncPolicy:
     automated:
       prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 2m

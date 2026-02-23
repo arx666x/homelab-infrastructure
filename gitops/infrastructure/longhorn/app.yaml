@@ -18,14 +18,16 @@ spec:
           backupTarget: "nfs://192.168.11.55:/volume1/longhorn-backup"
           defaultDataPath: "/mnt/longhorn"
           defaultReplicaCount: 3
+          guaranteedInstanceManagerCpu: 12
         
         persistence:
           defaultClass: true
+          defaultClassReplicaCount: 3
+          reclaimPolicy: Delete
         
         preUpgradeChecker:
           jobEnabled: false
         
-        # Ingress Configuration
         ingress:
           enabled: true
           ingressClassName: traefik
@@ -47,17 +49,31 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
   
   ignoreDifferences:
     - group: apiextensions.k8s.io
       kind: CustomResourceDefinition
       jsonPointers:
         - /spec/conversion/webhook/clientConfig/caBundle
+        - /status
     - group: admissionregistration.k8s.io
       kind: MutatingWebhookConfiguration
       jsonPointers:
         - /webhooks/0/clientConfig/caBundle
+        - /webhooks/1/clientConfig/caBundle
+        - /webhooks/2/clientConfig/caBundle
+        - /webhooks/3/clientConfig/caBundle
     - group: admissionregistration.k8s.io
       kind: ValidatingWebhookConfiguration
       jsonPointers:
         - /webhooks/0/clientConfig/caBundle
+        - /webhooks/1/clientConfig/caBundle
+        - /webhooks/2/clientConfig/caBundle
+        - /webhooks/3/clientConfig/caBundle
