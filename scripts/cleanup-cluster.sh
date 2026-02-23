@@ -17,13 +17,13 @@ echo -e "\n${YELLOW}=== Step 1: Uninstalling k3s ===${NC}\n"
 # Masters
 for ip in 31 32 33; do
   echo "Uninstalling k3s on Master .11.$ip..."
-  ssh achim@192.168.11.$ip "sudo /usr/local/bin/k3s-uninstall.sh" 2>/dev/null || true
+  ssh 192.168.11.$ip "sudo /usr/local/bin/k3s-uninstall.sh" 2>/dev/null || true
 done
 
 # Workers
 for ip in 21 22 23 24 25; do
   echo "Uninstalling k3s on Worker .11.$ip..."
-  ssh achim@192.168.11.$ip "sudo /usr/local/bin/k3s-agent-uninstall.sh" 2>/dev/null || true
+  ssh 192.168.11.$ip "sudo /usr/local/bin/k3s-agent-uninstall.sh" 2>/dev/null || true
 done
 
 echo -e "${GREEN}✓ k3s uninstalled${NC}"
@@ -33,7 +33,7 @@ echo -e "\n${YELLOW}=== Step 2: Cleaning Longhorn data ===${NC}\n"
 
 for ip in 31 32 33 21 22 23 24 25; do
   echo "Cleaning /mnt/longhorn on .11.$ip..."
-  ssh achim@192.168.11.$ip "sudo rm -rf /mnt/longhorn/*" 2>/dev/null || true
+  ssh 192.168.11.$ip "sudo rm -rf /mnt/longhorn/*" 2>/dev/null || true
 done
 
 echo -e "${GREEN}✓ Longhorn data cleaned${NC}"
@@ -50,7 +50,7 @@ echo -e "\n${YELLOW}=== Step 4: Verification ===${NC}\n"
 
 # Check k3s process
 for ip in 31; do
-  RUNNING=$(ssh achim@192.168.11.$ip "pgrep k3s || true")
+  RUNNING=$(ssh 192.168.11.$ip "pgrep k3s || true")
   if [ -z "$RUNNING" ]; then
     echo -e "${GREEN}✓ No k3s process on .11.$ip${NC}"
   else

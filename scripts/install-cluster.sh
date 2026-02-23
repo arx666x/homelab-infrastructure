@@ -20,7 +20,7 @@ echo -e "\n${YELLOW}=== Pre-Flight Checks ===${NC}\n"
 # Check 1: DNS Search Domain
 echo "Check 1: DNS Search Domain..."
 for ip in 31 32 33 21 22 23 24 25; do
-  SEARCH=$(ssh achim@192.168.11.$ip "cat /etc/resolv.conf | grep 'search reckeweg.io' || true")
+  SEARCH=$(ssh 192.168.11.$ip "cat /etc/resolv.conf | grep 'search reckeweg.io' || true")
   if [ -n "$SEARCH" ]; then
     echo -e "${RED}❌ Node .11.$ip has DNS search domain${NC}"
     echo "Fix: Remove 'Domain Name' in UniFi DHCP settings for VLAN 11 & 20"
@@ -32,8 +32,8 @@ echo -e "${GREEN}✓ DNS Search Domain OK${NC}"
 # Check 2: VLAN Static IPs
 echo "Check 2: VLAN Interface Configuration..."
 for ip in 21 22 23 24 25; do
-  VLAN_IP=$(ssh achim@192.168.11.$ip "ip addr show eth0.20 | grep 'inet 192.168.20.$ip' || true")
-  DYNAMIC=$(ssh achim@192.168.11.$ip "ip addr show eth0.20 | grep dynamic || true")
+  VLAN_IP=$(ssh 192.168.11.$ip "ip addr show eth0.20 | grep 'inet 192.168.20.$ip' || true")
+  DYNAMIC=$(ssh 192.168.11.$ip "ip addr show eth0.20 | grep dynamic || true")
   
   if [ -z "$VLAN_IP" ]; then
     echo -e "${RED}❌ Worker .11.$ip missing VLAN 20 IP${NC}"
@@ -50,7 +50,7 @@ echo -e "${GREEN}✓ VLAN IPs OK${NC}"
 # Check 3: SSH Connectivity
 echo "Check 3: SSH Connectivity..."
 for ip in 31 32 33 21 22 23 24 25; do
-  ssh -o ConnectTimeout=5 achim@192.168.11.$ip "exit" || {
+  ssh -o ConnectTimeout=5 192.168.11.$ip "exit" || {
     echo -e "${RED}❌ Cannot SSH to .11.$ip${NC}"
     exit 1
   }
@@ -67,7 +67,7 @@ echo -e "${YELLOW}=== Installing k3s Cluster ===${NC}\n"
 
 # Step 1: First Master
 echo "Step 1: Installing first master (gmkt-01x)..."
-ssh achim@192.168.11.31 << 'EOF'
+ssh 192.168.11.31 << 'EOF'
 curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.28.5+k3s1 sh -s - server \
   --cluster-init \
   --node-ip=192.168.20.31 \
@@ -86,14 +86,14 @@ echo "Waiting for k3s to be ready..."
 sleep 30
 
 # Get token
-K3S_TOKEN=$(ssh achim@192.168.11.31 "sudo cat /var/lib/rancher/k3s/server/node-token")
+K3S_TOKEN=$(ssh 192.168.11.31 "sudo cat /var/lib/rancher/k3s/server/node-token")
 
 echo -e "${GREEN}✓ First master installed${NC}"
 
 # Step 2: Additional Masters
 echo "Step 2: Installing additional masters..."
 
-ssh achim@192.168.11.32 << EOF
+ssh 192.168.11.32 << EOF
 curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.28.5+k3s1 sh -s - server \
   --server https://192.168.20.31:6443 \
   --token $K3S_TOKEN \
@@ -106,7 +106,7 @@ EOF
 
 sleep 10
 
-ssh achim@192.168.11.33 << EOF
+ssh 192.168.11.33 << EOF
 curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.28.5+k3s1 sh -s - server \
   --server https://192.168.20.31:6443 \
   --token $K3S_TOKEN \
@@ -124,7 +124,7 @@ echo "Step 3: Installing workers..."
 
 for ip in 21 22 23 24 25; do
   echo "Installing worker k3s-0${ip:1}a..."
-  ssh achim@192.168.11.$ip << EOF
+  ssh 192.168.11.$ip << EOF
 curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.28.5+k3s1 \
   K3S_URL=https://192.168.20.31:6443 \
   K3S_TOKEN=$K3S_TOKEN \
@@ -140,7 +140,7 @@ echo -e "${GREEN}✓ Workers installed${NC}"
 # Step 4: Get kubeconfig
 echo "Step 4: Configuring kubectl..."
 mkdir -p ~/.kube
-scp achim@192.168.11.31:/etc/rancher/k3s/k3s.yaml ~/.kube/seri-homelab
+scp 192.168.11.31:/etc/rancher/k3s/k3s.yaml ~/.kube/seri-homelab
 sed -i '' 's/127.0.0.1/192.168.11.31/g' ~/.kube/seri-homelab
 chmod 600 ~/.kube/seri-homelab
 export KUBECONFIG=~/.kube/seri-homelab
