@@ -19,7 +19,6 @@ spec:
           defaultDataPath: "/mnt/longhorn"
           defaultReplicaCount: 3
           guaranteedInstanceManagerCpu: 12
-          nfsOptions: "nfsvers=3,actimeo=1,soft,timeo=300,retry=2"
         
         persistence:
           defaultClass: true
