@@ -66,7 +66,9 @@ gitea:
 postgresql:
   enabled: true
   image:
-    tag: "16"   # immer aktuellsten 16er nehmen, kein gepinnter Patch-Tag
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+    tag: "16"
   global:
     postgresql:
       auth:
@@ -101,7 +103,9 @@ redis-cluster:
 redis:
   enabled: true
   image:
-    tag: "7.2"   # immer aktuellsten 7.2er nehmen
+    registry: docker.io
+    repository: bitnamilegacy/redis
+    tag: "7.2"
   architecture: standalone
   auth:
     enabled: false
