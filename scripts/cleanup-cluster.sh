@@ -28,6 +28,7 @@ echo -e "${GREEN}✓ k3s uninstalled${NC}"
 
 echo -e "\n${YELLOW}=== Step 2: Cleaning all k3s data ===${NC}\n"
 
+# Cleanup OHNE iptables
 for ip in 31 32 33 21 22 23 24 25; do
   echo "Deep cleaning .11.$ip..."
   ssh 192.168.11.$ip << 'EOF'
@@ -39,11 +40,14 @@ for ip in 31 32 33 21 22 23 24 25; do
     sudo rm -rf /run/k3s
     sudo rm -rf /var/lib/kubelet
     
-    # Clean iptables (k3s rules)
-    sudo iptables -F
-    sudo iptables -t nat -F
-    sudo iptables -t mangle -F
-    sudo iptables -X
+    # Clean firewall (if exists)
+    sudo iptables -F 2>/dev/null || true
+    sudo iptables -t nat -F 2>/dev/null || true
+    sudo iptables -t mangle -F 2>/dev/null || true
+    sudo iptables -X 2>/dev/null || true
+    
+    # nftables cleanup
+    sudo nft flush ruleset 2>/dev/null || true
 EOF
 done
 

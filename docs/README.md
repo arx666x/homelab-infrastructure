@@ -99,6 +99,10 @@ export KUBECONFIG=~/.kube/seri-homelab
 #### 4. Secrets
 
 ```bash
+# Erst den Namespace anlegen - er würde sonst erst durch argocd angelegt.
+
+kubectl create namespace cert-manager
+
 read -p "Cloudflare Token: " CF_TOKEN
 kubectl create secret generic cloudflare-api-token \
   --from-literal=api-token=$CF_TOKEN -n cert-manager
