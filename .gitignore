@@ -1,0 +1,14 @@
+# Mac
+.DS_Store
+
+# Secrets (never commit these!)
+**/secrets-*.yaml
+**/.*secret*.yaml
+
+# Generated files
+docs-portal/generated/
+*.tmp
+
+# Backup files
+*.bak
+*~
