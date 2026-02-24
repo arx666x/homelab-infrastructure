@@ -1,0 +1,186 @@
+# =============================================================================
+# Gitea Helm Values - SERI Homelab
+# Chart: gitea/gitea v10.6.x
+# https://gitea.com/gitea/helm-chart
+# =============================================================================
+
+gitea:
+  admin:
+    existingSecret: gitea-admin-secret
+    existingSecretKey:
+      username: username
+      password: password
+      email: email
+
+  config:
+    server:
+      DOMAIN: gitea.reckeweg.io
+      ROOT_URL: https://gitea.reckeweg.io
+      SSH_DOMAIN: gitea.reckeweg.io
+      SSH_PORT: 22
+      SSH_LISTEN_PORT: 22
+      LFS_START_SERVER: true
+
+    database:
+      DB_TYPE: postgres
+      HOST: gitea-postgresql:5432
+      NAME: gitea
+      USER: gitea
+      # Passwort kommt aus gitea-postgresql-secret
+
+    cache:
+      ADAPTER: redis
+      HOST: redis://:@gitea-redis-master:6379/0
+
+    session:
+      PROVIDER: redis
+      PROVIDER_CONFIG: redis://:@gitea-redis-master:6379/1
+
+    queue:
+      TYPE: redis
+      CONN_STR: redis://:@gitea-redis-master:6379/2
+
+    indexer:
+      ISSUE_INDEXER_TYPE: bleve
+      REPO_INDEXER_ENABLED: true
+      REPO_INDEXER_TYPE: bleve
+
+    packages:
+      ENABLED: true
+
+    actions:
+      ENABLED: true
+      DEFAULT_ACTIONS_URL: https://github.com
+
+    service:
+      DISABLE_REGISTRATION: false   # Nach erstem Login auf true setzen
+      REQUIRE_SIGNIN_VIEW: false
+
+    log:
+      MODE: console
+      LEVEL: Info
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Subchart
+# -----------------------------------------------------------------------------
+postgresql:
+  enabled: true
+  global:
+    postgresql:
+      auth:
+        username: gitea
+        database: gitea
+        existingSecret: gitea-postgresql-secret
+        secretKeys:
+          adminPasswordKey: postgres-password
+          userPasswordKey: password
+  primary:
+    persistence:
+      enabled: true
+      storageClass: longhorn
+      size: 10Gi
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+
+postgresql-ha:
+  enabled: false
+
+# -----------------------------------------------------------------------------
+# Redis Subchart
+# -----------------------------------------------------------------------------
+redis-cluster:
+  enabled: false
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      storageClass: longhorn
+      size: 2Gi
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 50m
+      limits:
+        memory: 128Mi
+        cpu: 200m
+
+# -----------------------------------------------------------------------------
+# Persistenz
+# -----------------------------------------------------------------------------
+persistence:
+  enabled: true
+  storageClass: longhorn
+  size: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  annotations:
+    "helm.sh/resource-policy": keep   # Volumen beim Helm-Delete erhalten!
+
+# -----------------------------------------------------------------------------
+# Ingress via Traefik
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  hosts:
+    - host: gitea.reckeweg.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: gitea-tls
+      hosts:
+        - gitea.reckeweg.io
+
+# -----------------------------------------------------------------------------
+# Service - HTTP via ClusterIP (Traefik übernimmt), SSH via MetalLB
+# -----------------------------------------------------------------------------
+service:
+  http:
+    type: ClusterIP
+    port: 3000
+  ssh:
+    type: LoadBalancer
+    port: 22
+    annotations:
+      metallb.universe.tf/loadBalancerIPs: "192.168.20.101"   # .100 = Traefik
+    loadBalancerIP: "192.168.20.101"
+
+# -----------------------------------------------------------------------------
+# Deployment
+# -----------------------------------------------------------------------------
+replicaCount: 1
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 1Gi
+    cpu: 1000m
+
+# AMD64 (GMKtec) bevorzugen - mehr Power für Git-Operationen
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 50
+        preference:
+          matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+                - amd64
