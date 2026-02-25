@@ -67,11 +67,17 @@ Pi-hole → **Local DNS → DNS Records**:
 
 ## Longhorn Plugin installieren
 
-Nach dem Login in Headlamp:
-1. Zahnrad-Icon → **Plugins**
-2. Im Plugin-Katalog `Longhorn` suchen
-3. Installieren → Seite neu laden
+Die Plugins werden über den Plugin Manager installiert - der leider noch nicht 
+im Headlamp Deployment enthalten ist.
 
+Nach dem Login in Headlamp kann man über 
+1. Zahnrad-Icon → **Plugins**
+
+die installierten Plugins einsehen.<br>
+
+Aber die Installation selber erfolgt über einen zusätzlichen Init Container in der Datei 
+**gitops/config/headlamp/headlamp.yaml**<br>
+Sollten weitere Plugins gewünscht sein, werden diese hierhinzugefügt<br>
 ---
 
 ## Version aktualisieren
