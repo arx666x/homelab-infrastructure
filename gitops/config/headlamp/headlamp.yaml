@@ -21,6 +21,32 @@ spec:
         runAsNonRoot: true
         runAsUser: 100
         fsGroup: 101
+
+      # =================================================================
+      # Init-Container: lädt das cert-manager Plugin aus dem offiziellen
+      # Plugin-Image und kopiert es in das geteilte plugins-Volume,
+      # bevor Headlamp startet.
+      #
+      # Weitere Plugins einfach als zusätzliche initContainers ergänzen,
+      # z.B. für prometheus, flux, etc.
+      # =================================================================
+      initContainers:
+        - name: install-cert-manager-plugin
+          image: ghcr.io/headlamp-k8s/headlamp-plugin-cert-manager:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo ">>> Installiere cert-manager Plugin..."
+              cp -r /plugins/* /headlamp/plugins/
+              echo ">>> Fertig. Installierte Plugins:"
+              ls /headlamp/plugins/
+          volumeMounts:
+            - name: plugins
+              mountPath: /headlamp/plugins
+          securityContext:
+            allowPrivilegeEscalation: false
+
       containers:
         - name: headlamp
           image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
@@ -56,6 +82,14 @@ spec:
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: plugins
+              mountPath: /headlamp/plugins
+
+      volumes:
+        - name: plugins
+          emptyDir: {}
+
       nodeSelector:
         kubernetes.io/os: linux
 
