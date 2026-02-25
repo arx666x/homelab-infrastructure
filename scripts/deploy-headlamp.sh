@@ -29,7 +29,7 @@ kubectl apply -f "${SCRIPT_DIR}/../gitops/config/headlamp/rbac.yaml"
 # 3. ArgoCD Application anlegen
 echo ""
 echo ">>> ArgoCD Application deployen..."
-kubectl apply -f "${SCRIPT_DIR}/gitpos/apps/headlamp.yaml"
+kubectl apply -f "${SCRIPT_DIR}/../gitops/apps/headlamp.yaml"
 
 # 4. Sync abwarten
 echo ""
