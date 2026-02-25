@@ -11,9 +11,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://headlamp-k8s.github.io/headlamp/
+    repoURL: https://kubernetes-sigs.github.io/headlamp/
     chart: headlamp
-    targetRevision: "0.26.0"   # aktuell Feb 2025 – ggf. anpassen
+    targetRevision: "0.40.1"   # aktuell Feb 2025 – ggf. anpassen
     helm:
       valuesObject:
         replicaCount: 1
