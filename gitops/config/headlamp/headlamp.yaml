@@ -87,7 +87,7 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - headlamp.homelab.reckeweg.io
+    - headlamp.reckeweg.io
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -105,10 +105,10 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - headlamp.homelab.reckeweg.io
+        - headlamp.reckeweg.io
       secretName: headlamp-tls
   rules:
-    - host: headlamp.homelab.reckeweg.io
+    - host: headlamp.reckeweg.io
       http:
         paths:
           - path: /
