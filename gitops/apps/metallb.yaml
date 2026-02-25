@@ -16,7 +16,7 @@ spec:
         releaseName: metallb
     
     # MetalLB Config aus Git
-    - repoURL: https://github.com/arx666x/homelab-infrastructure.git
+    - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
       targetRevision: main
       path: gitops/config/metallb
   

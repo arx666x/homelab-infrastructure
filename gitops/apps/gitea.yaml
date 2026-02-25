@@ -16,7 +16,7 @@ spec:
         valueFiles:
           - $values/gitops/config/gitea/values.yaml
     # Values aus dem SERI-Repo
-    - repoURL: https://github.com/arx666x/homelab-infrastructure.git
+    - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
       targetRevision: HEAD
       ref: values
   destination:

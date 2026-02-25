@@ -11,7 +11,7 @@ spec:
   project: default
 
   sources:
-    - repoURL: https://github.com/arx666x/homelab-infrastructure.git   # <-- anpassen
+    - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git   # <-- anpassen
       targetRevision: HEAD
       path: gitops/config/headlamp
 
