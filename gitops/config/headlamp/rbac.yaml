@@ -4,25 +4,24 @@ kind: Namespace
 metadata:
   name: headlamp
   labels:
-    app: headlamp
+    app.kubernetes.io/name: headlamp
 
 ---
-# ServiceAccount für Headlamp (falls nicht per Helm angelegt)
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: headlamp
   namespace: headlamp
+  labels:
+    app.kubernetes.io/name: headlamp
 
 ---
-# ClusterAdmin – für Homelab akzeptabel.
-# Für produktive Umgebungen: eigenes ClusterRole mit eingeschränkten Rechten.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: headlamp-cluster-admin
   labels:
-    app: headlamp
+    app.kubernetes.io/name: headlamp
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

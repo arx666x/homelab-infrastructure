@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy-argocd.sh
-# Deployt Headlamp via ArgoCD:
-#   1. RBAC (Namespace, ServiceAccount, ClusterRoleBinding)
-#   2. ArgoCD Application -> ArgoCD übernimmt Helm-Deployment
+# deploy-headlamp.sh
+# Deployt Headlamp auf dem homelab k3s Cluster.
+# Legt RBAC + Manifeste an und registriert die ArgoCD Application.
 # =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-echo "============================================================"
-echo "  Headlamp Deployment via ArgoCD"
-echo "============================================================"
+echo "================================================================"
+echo "  Headlamp Deployment – homelab.reckeweg.io"
+echo "================================================================"
 
-# 1. Prüfe ob ArgoCD läuft
+# 1. ArgoCD prüfen
 echo ""
 echo ">>> Prüfe ArgoCD..."
 kubectl get namespace argocd &>/dev/null || {
@@ -21,40 +21,26 @@ kubectl get namespace argocd &>/dev/null || {
   exit 1
 }
 
-# 2. RBAC anlegen (Namespace + ServiceAccount + ClusterRoleBinding)
+# 2. RBAC vorab anlegen (ArgoCD braucht den Namespace schon beim ersten Sync)
 echo ""
-echo ">>> RBAC anlegen..."
-kubectl apply -f "${SCRIPT_DIR}/../gitops/config/headlamp/rbac.yaml"
+echo ">>> RBAC anlegen (Namespace, ServiceAccount, ClusterRoleBinding)..."
+kubectl apply -f "${REPO_ROOT}/gitops/config/headlamp/rbac.yaml"
 
-# 3. ArgoCD Application anlegen
+# 3. Manifeste direkt anwenden (Deployment, Service, Cert, Ingress)
 echo ""
-echo ">>> ArgoCD Application deployen..."
-kubectl apply -f "${SCRIPT_DIR}/../gitops/apps/headlamp.yaml"
+echo ">>> Headlamp Manifeste anwenden..."
+kubectl apply -f "${REPO_ROOT}/gitops/config/headlamp/headlamp.yaml"
 
-# 4. Sync abwarten
+# 4. ArgoCD Application registrieren
 echo ""
-echo ">>> Warte auf ArgoCD Sync..."
-sleep 5
+echo ">>> ArgoCD Application registrieren..."
+kubectl apply -f "${REPO_ROOT}/gitops/apps/headlamp.yaml"
 
-# argocd CLI verwenden falls vorhanden, sonst kubectl polling
-if command -v argocd &>/dev/null; then
-  argocd app wait headlamp \
-    --health \
-    --sync \
-    --timeout 300 \
-    --grpc-web 2>/dev/null || echo "argocd CLI nicht eingeloggt – prüfe Status manuell."
-else
-  echo "argocd CLI nicht gefunden – warte auf Deployment via kubectl..."
-  until kubectl get deployment headlamp -n headlamp &>/dev/null; do
-    echo "  Warte auf Deployment-Objekt..."; sleep 5
-  done
-  kubectl rollout status deployment/headlamp -n headlamp --timeout=300s
-fi
-
+# 5. Deployment abwarten
 echo ""
-echo ">>> Deployment erfolgreich!"
-echo ""
+echo ">>> Warte auf Rollout..."
+kubectl rollout status deployment/headlamp -n headlamp --timeout=180s
 
-# 5. Token generieren
-echo ">>> Login-Token generieren..."
+# 6. Token generieren
+echo ""
 bash "${SCRIPT_DIR}/headlamp-token.sh"

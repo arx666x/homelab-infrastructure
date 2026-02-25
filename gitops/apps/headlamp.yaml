@@ -4,59 +4,16 @@ metadata:
   name: headlamp
   namespace: argocd
   labels:
-    app: headlamp
-    environment: homelab
+    app.kubernetes.io/name: headlamp
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://kubernetes-sigs.github.io/headlamp/
-    chart: headlamp
-    targetRevision: "0.40.1"   # aktuell Feb 2025 – ggf. anpassen
-    helm:
-      valuesObject:
-        replicaCount: 1
 
-        image:
-          pullPolicy: IfNotPresent
-
-        # Headlamp im In-Cluster-Modus
-        config:
-          pluginsDir: /headlamp/plugins
-
-        serviceAccount:
-          create: true
-          name: headlamp
-
-        # ClusterAdmin-Binding wird separat via base/rbac.yaml angelegt
-        clusterRoleBinding:
-          create: false
-
-        resources:
-          requests:
-            cpu: 50m
-            memory: 64Mi
-          limits:
-            cpu: 200m
-            memory: 256Mi
-
-        ingress:
-          enabled: true
-          ingressClassName: traefik
-          annotations:
-            cert-manager.io/cluster-issuer: letsencrypt-prod
-            traefik.ingress.kubernetes.io/router.entrypoints: websecure
-            traefik.ingress.kubernetes.io/router.tls: "true"
-          hosts:
-            - host: headlamp.homelab.reckeweg.io
-              paths:
-                - path: /
-                  pathType: Prefix
-          tls:
-            - secretName: headlamp-tls
-              hosts:
-                - headlamp.homelab.reckeweg.io
+  sources:
+    - repoURL: https://github.com/arx666x/homelab-infrastructure.git   # <-- anpassen
+      targetRevision: HEAD
+      path: gitops/config/headlamp
 
   destination:
     server: https://kubernetes.default.svc
