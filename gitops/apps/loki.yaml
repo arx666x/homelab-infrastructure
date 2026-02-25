@@ -1,0 +1,126 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    chart: loki-stack
+    repoURL: https://grafana.github.io/helm-charts
+    targetRevision: "2.10.2"
+    helm:
+      releaseName: loki-stack
+      values: |
+        loki:
+          enabled: true
+          persistence:
+            enabled: true
+            storageClassName: longhorn
+            size: 20Gi
+          config:
+            schema_config:
+              configs:
+                - from: 2024-01-01
+                  store: boltdb-shipper
+                  object_store: filesystem
+                  schema: v11
+                  index:
+                    prefix: index_
+                    period: 24h
+            storage_config:
+              boltdb_shipper:
+                active_index_directory: /data/loki/boltdb-shipper-active
+                cache_location: /data/loki/boltdb-shipper-cache
+                cache_ttl: 24h
+                shared_store: filesystem
+              filesystem:
+                directory: /data/loki/chunks
+            retention_period: 744h  # 31 Tage
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+        promtail:
+          enabled: true
+          config:
+            clients:
+              - url: http://loki-stack:3100/loki/api/v1/push
+            scrape_configs:
+              - job_name: kubernetes-pods
+                kubernetes_sd_configs:
+                  - role: pod
+                pipeline_stages:
+                  - cri: {}
+                relabel_configs:
+                  - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                    action: drop
+                    regex: "false"
+                  - source_labels: [__meta_kubernetes_pod_label_app]
+                    target_label: app
+                  - source_labels: [__meta_kubernetes_namespace]
+                    target_label: namespace
+                  - source_labels: [__meta_kubernetes_pod_name]
+                    target_label: pod
+                  - source_labels: [__meta_kubernetes_container_name]
+                    target_label: container
+                  - replacement: /var/log/pods/*$1/*.log
+                    separator: /
+                    source_labels:
+                      - __meta_kubernetes_pod_uid
+                      - __meta_kubernetes_pod_container_name
+                    target_label: __path__
+              - job_name: kubernetes-nodes
+                kubernetes_sd_configs:
+                  - role: node
+                pipeline_stages:
+                  - cri: {}
+                relabel_configs:
+                  - target_label: __address__
+                    replacement: kubernetes.default.svc:443
+                  - source_labels: [__meta_kubernetes_node_name]
+                    regex: (.+)
+                    target_label: __metrics_path__
+                    replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+                  - source_labels: [__meta_kubernetes_node_name]
+                    target_label: node
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          tolerations:
+            - key: node-role.kubernetes.io/master
+              operator: Exists
+              effect: NoSchedule
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+
+        grafana:
+          enabled: false  # Grafana läuft bereits im kube-prometheus-stack
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
