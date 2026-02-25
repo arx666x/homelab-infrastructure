@@ -21,24 +21,10 @@ spec:
             storageClassName: longhorn
             size: 20Gi
           config:
-            schema_config:
-              configs:
-                - from: 2024-01-01
-                  store: boltdb-shipper
-                  object_store: filesystem
-                  schema: v11
-                  index:
-                    prefix: index_
-                    period: 24h
-            storage_config:
-              boltdb_shipper:
-                active_index_directory: /data/loki/boltdb-shipper-active
-                cache_location: /data/loki/boltdb-shipper-cache
-                cache_ttl: 24h
-                shared_store: filesystem
-              filesystem:
-                directory: /data/loki/chunks
-            retention_period: 744h  # 31 Tage
+            limits_config:
+              retention_period: 744h
+            compactor:
+              retention_enabled: true
           resources:
             requests:
               cpu: 100m
@@ -52,44 +38,6 @@ spec:
           config:
             clients:
               - url: http://loki-stack:3100/loki/api/v1/push
-            scrape_configs:
-              - job_name: kubernetes-pods
-                kubernetes_sd_configs:
-                  - role: pod
-                pipeline_stages:
-                  - cri: {}
-                relabel_configs:
-                  - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-                    action: drop
-                    regex: "false"
-                  - source_labels: [__meta_kubernetes_pod_label_app]
-                    target_label: app
-                  - source_labels: [__meta_kubernetes_namespace]
-                    target_label: namespace
-                  - source_labels: [__meta_kubernetes_pod_name]
-                    target_label: pod
-                  - source_labels: [__meta_kubernetes_container_name]
-                    target_label: container
-                  - replacement: /var/log/pods/*$1/*.log
-                    separator: /
-                    source_labels:
-                      - __meta_kubernetes_pod_uid
-                      - __meta_kubernetes_pod_container_name
-                    target_label: __path__
-              - job_name: kubernetes-nodes
-                kubernetes_sd_configs:
-                  - role: node
-                pipeline_stages:
-                  - cri: {}
-                relabel_configs:
-                  - target_label: __address__
-                    replacement: kubernetes.default.svc:443
-                  - source_labels: [__meta_kubernetes_node_name]
-                    regex: (.+)
-                    target_label: __metrics_path__
-                    replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
-                  - source_labels: [__meta_kubernetes_node_name]
-                    target_label: node
           resources:
             requests:
               cpu: 50m
@@ -106,7 +54,7 @@ spec:
               effect: NoSchedule
 
         grafana:
-          enabled: false  # Grafana läuft bereits im kube-prometheus-stack
+          enabled: false
 
   destination:
     server: https://kubernetes.default.svc
