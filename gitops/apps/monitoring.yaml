@@ -59,15 +59,8 @@ spec:
             annotations:
               cert-manager.io/cluster-issuer: letsencrypt-prod
               traefik.ingress.kubernetes.io/router.entrypoints: websecure
-
-          additionalDataSources:
-            - name: Loki
-              type: loki
-              url: http://loki-stack.monitoring.svc.cluster.local:3100
-              access: proxy
-              isDefault: false
-              jsonData:
-                maxLines: 1000
+          # Kein additionalDataSources für Loki - wird automatisch
+          # durch den loki-stack Helm-Chart als ConfigMap bereitgestellt
         
         alertmanager:
           alertmanagerSpec:
