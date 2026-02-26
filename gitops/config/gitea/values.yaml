@@ -80,11 +80,6 @@ postgresql:
   global:
     security:
       allowInsecureImages: true
-  image:
-    registry: docker.io
-    repository: bitnamilegacy/postgresql
-    tag: "16"
-  global:
     postgresql:
       auth:
         username: gitea
@@ -93,6 +88,10 @@ postgresql:
         secretKeys:
           adminPasswordKey: postgres-password
           userPasswordKey: password
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+    tag: "16"
   primary:
     persistence:
       enabled: true
