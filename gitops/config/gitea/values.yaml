@@ -77,6 +77,9 @@ gitea:
 # -----------------------------------------------------------------------------
 postgresql:
   enabled: true
+  global:
+    security:
+      allowInsecureImages: true
   image:
     registry: docker.io
     repository: bitnamilegacy/postgresql
