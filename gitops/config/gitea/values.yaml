@@ -1,7 +1,12 @@
 # =============================================================================
 # Gitea Helm Values - SERI Homelab
-# Chart: gitea/gitea v10.6.x
-# https://gitea.com/gitea/helm-chart
+# Chart: gitea/gitea v11.x
+# https://gitea.com/gitea/helm-gitea
+#
+# Änderungen gegenüber v10.6.x:
+#   - redis: -> valkey: (Redis wurde durch Valkey ersetzt)
+#   - Connection-Strings: gitea-redis-master -> gitea-valkey-master
+#   - actions.enabled: Muss jetzt explizit gesetzt werden (default: false in v11)
 # =============================================================================
 
 gitea:
@@ -29,15 +34,15 @@ gitea:
 
     cache:
       ADAPTER: redis
-      HOST: redis://:@gitea-redis-master:6379/0
+      HOST: redis://:@gitea-valkey-master:6379/0
 
     session:
       PROVIDER: redis
-      PROVIDER_CONFIG: redis://:@gitea-redis-master:6379/1
+      PROVIDER_CONFIG: redis://:@gitea-valkey-master:6379/1
 
     queue:
       TYPE: redis
-      CONN_STR: redis://:@gitea-redis-master:6379/2
+      CONN_STR: redis://:@gitea-valkey-master:6379/2
 
     indexer:
       ISSUE_INDEXER_TYPE: bleve
@@ -68,7 +73,7 @@ gitea:
           key: password
 
 # -----------------------------------------------------------------------------
-# PostgreSQL Subchart
+# PostgreSQL Subchart - unverändert, bereits auf v16
 # -----------------------------------------------------------------------------
 postgresql:
   enabled: true
@@ -102,21 +107,22 @@ postgresql-ha:
   enabled: false
 
 # -----------------------------------------------------------------------------
-# Redis Subchart
+# Valkey Subchart (ersetzt Redis ab Chart v11)
+# Hinweis: Kein Datenmigration nötig - Cache füllt sich automatisch neu
 # -----------------------------------------------------------------------------
-redis-cluster:
+valkey-cluster:
   enabled: false
 
-redis:
+valkey:
   enabled: true
   image:
     registry: docker.io
-    repository: bitnamilegacy/redis
-    tag: "7.2"
+    repository: bitnami/valkey
+    tag: "8"
   architecture: standalone
   auth:
     enabled: false
-  master:
+  primary:
     persistence:
       enabled: true
       storageClass: longhorn
@@ -128,6 +134,13 @@ redis:
       limits:
         memory: 128Mi
         cpu: 200m
+
+# Alten Redis-Subchart deaktivieren
+redis-cluster:
+  enabled: false
+
+redis:
+  enabled: false
 
 # -----------------------------------------------------------------------------
 # Persistenz
