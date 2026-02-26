@@ -11,7 +11,7 @@ spec:
     # Helm Chart von Gitea
     - repoURL: https://dl.gitea.com/charts/
       chart: gitea
-      targetRevision: 11.0.1
+      targetRevision: 10.6.0
       helm:
         valueFiles:
           - $values/gitops/config/gitea/values.yaml
