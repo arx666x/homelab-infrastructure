@@ -1,0 +1,89 @@
+# =============================================================================
+# Gitea Actions (act-runner) Helm Values - SERI Homelab
+# Chart: gitea/actions v0.0.3
+# https://gitea.com/gitea/helm-actions
+#
+# WICHTIG: Vor dem ersten Deploy:
+#   1. Gitea muss laufen
+#   2. Actions in Gitea aktiviert (siehe gitea values.yaml: [actions] ENABLED=true)
+#   3. Runner-Token holen:
+#      https://gitea.reckeweg.io/-/admin/actions/runners → "Create new runner"
+#   4. Secret anlegen:
+#      kubectl create secret generic gitea-actions-secret \
+#        --from-literal=token=<DEIN_TOKEN> \
+#        -n gitea
+#   5. syncPolicy in gitea-actions.yaml aktivieren
+# =============================================================================
+
+# Gitea-Instanz URL (intern via Service, nicht extern via Ingress)
+gitea:
+  instanceURL: http://gitea-http.gitea.svc.cluster.local:3000
+
+# Runner-Token aus Secret
+act_runner:
+  registration:
+    token:
+      existingSecret: gitea-actions-secret
+      existingSecretKey: token
+
+  # Runner-Name und Labels
+  name: homelab-runner
+  # Labels definieren welche runner-images unterstützt werden
+  # Achtung: ohne Docker-in-Docker nur ubuntu-latest via host möglich
+  labels: "ubuntu-latest:docker://node:20-bullseye,ubuntu-22.04:docker://node:20-bullseye"
+
+image:
+  repository: docker.io/gitea/act_runner
+  tag: "0.2.11"
+  pullPolicy: IfNotPresent
+  # rootless: false  →  Standard-Image, kein rootless
+
+# Anzahl Runner-Pods
+replicaCount: 1
+
+# Persistenz für .runner Datei (Registrierungsinfo)
+persistence:
+  enabled: true
+  storageClass: longhorn
+  size: 1Gi
+  accessModes:
+    - ReadWriteOnce
+
+# Runner benötigt Docker-Zugriff um Jobs in Containern auszuführen.
+# Zwei Optionen:
+#
+# OPTION A: Docker-in-Docker (DinD) - sicherer, aber privilegiert
+# dind:
+#   enabled: true
+#
+# OPTION B: Docker Socket vom Host mounten - einfacher, aber weniger sicher
+# extraVolumes:
+#   - name: docker-sock
+#     hostPath:
+#       path: /var/run/docker.sock
+# extraVolumeMounts:
+#   - name: docker-sock
+#     mountPath: /var/run/docker.sock
+#
+# Für Homelab empfohlen: DinD (sicherer, isolierter)
+dind:
+  enabled: true
+
+resources:
+  requests:
+    memory: 128Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi
+    cpu: 500m
+
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 50
+        preference:
+          matchExpressions:
+            - key: kubernetes.io/arch
+              operator: In
+              values:
+                - amd64

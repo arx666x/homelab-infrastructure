@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitea-actions
+  namespace: argocd
+  annotations:
+    # Nach Gitea deployen (wave 25)
+    # ACHTUNG: Erst aktivieren nachdem:
+    #   1. Gitea läuft
+    #   2. Actions in Gitea aktiviert (app.ini: [actions] ENABLED=true)
+    #   3. Runner-Token aus UI geholt: https://gitea.reckeweg.io/-/admin/actions/runners
+    #   4. Token in Secret gitea-actions-secret gespeichert
+    #   5. syncPolicy unten von null auf automated umgestellt
+    argocd.argoproj.io/sync-wave: "25"
+spec:
+  project: default
+  sources:
+    - repoURL: https://dl.gitea.com/charts/
+      chart: actions
+      targetRevision: 0.0.3
+      helm:
+        valueFiles:
+          - $values/gitops/config/gitea/actions-values.yaml
+    - repoURL: https://github.com/arx666x/homelab-infrastructure.git
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitea
+  syncPolicy:
+    # DEAKTIVIERT - erst manuell aktivieren sobald Token vorhanden
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

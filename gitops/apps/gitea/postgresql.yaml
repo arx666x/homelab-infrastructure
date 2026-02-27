@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitea-postgresql
+  namespace: argocd
+  annotations:
+    # PostgreSQL muss vor Gitea bereit sein
+    argocd.argoproj.io/sync-wave: "15"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/arx666x/homelab-infrastructure.git
+    targetRevision: HEAD
+    path: gitops/config/gitea/postgresql
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitea
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

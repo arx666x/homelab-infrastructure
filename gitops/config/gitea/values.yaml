@@ -1,12 +1,17 @@
 # =============================================================================
 # Gitea Helm Values - SERI Homelab
-# Chart: gitea/gitea v11.x
+# Chart: gitea/gitea v12.4.0  →  Gitea 1.25.x
 # https://gitea.com/gitea/helm-gitea
 #
+# PostgreSQL: Externes StatefulSet (gitops/config/gitea/postgresql/)
+#             Offizielles docker.io/library/postgres:16-alpine Image
+#             Kein Bitnami-Subchart, kein bitnamilegacy
+#
 # Änderungen gegenüber v10.6.x:
-#   - redis: -> valkey: (Redis wurde durch Valkey ersetzt)
-#   - Connection-Strings: gitea-redis-master -> gitea-valkey-master
-#   - actions.enabled: Muss jetzt explizit gesetzt werden (default: false in v11)
+#   - postgresql: Subchart deaktiviert → externes StatefulSet
+#   - redis: → valkey: (Valkey 8.x, bitnami/valkey noch frei verfügbar)
+#   - Connection-Strings: gitea-redis-master → gitea-valkey-master
+#   - Actions ausgelagert in separates helm-actions Chart (nicht enthalten)
 # =============================================================================
 
 gitea:
@@ -28,6 +33,7 @@ gitea:
 
     database:
       DB_TYPE: postgres
+      # Service-Name des externen StatefulSets
       HOST: gitea-postgresql:5432
       NAME: gitea
       USER: gitea
@@ -52,19 +58,22 @@ gitea:
     packages:
       ENABLED: true
 
-    actions:
-      ENABLED: true
-      DEFAULT_ACTIONS_URL: github
-
     service:
       DISABLE_REGISTRATION: false
       REQUIRE_SIGNIN_VIEW: false
+
+    actions:
+      # Actions aktivieren - act-runner wird via separatem helm-actions Chart deployed
+      ENABLED: true
+      # DEFAULT_ACTIONS_URL: github  →  Fallback für Actions ohne eigenen Mirror
+      # Alternativ: https://gitea.reckeweg.io für vollständig self-hosted
+      DEFAULT_ACTIONS_URL: github
 
     log:
       MODE: console
       LEVEL: Info
 
-  # DB-Passwort via Env-Variable - Gitea liest GITEA__DATABASE__PASSWD automatisch
+  # DB-Passwort via Env-Variable
   additionalConfigFromEnvs:
     - name: GITEA__DATABASE__PASSWD
       valueFrom:
@@ -73,44 +82,19 @@ gitea:
           key: password
 
 # -----------------------------------------------------------------------------
-# PostgreSQL Subchart - unverändert, bereits auf v16
+# PostgreSQL Subchart - DEAKTIVIERT
+# Wird durch externes StatefulSet ersetzt (gitops/config/gitea/postgresql/)
 # -----------------------------------------------------------------------------
 postgresql:
-  enabled: true
-  global:
-    security:
-      allowInsecureImages: true
-    postgresql:
-      auth:
-        username: gitea
-        database: gitea
-        existingSecret: gitea-postgresql-secret
-        secretKeys:
-          adminPasswordKey: postgres-password
-          userPasswordKey: password
-  image:
-    registry: docker.io
-    repository: bitnamilegacy/postgresql
-    tag: "16"
-  primary:
-    persistence:
-      enabled: true
-      storageClass: longhorn
-      size: 10Gi
-    resources:
-      requests:
-        memory: 256Mi
-        cpu: 100m
-      limits:
-        memory: 512Mi
-        cpu: 500m
+  enabled: false
 
 postgresql-ha:
   enabled: false
 
 # -----------------------------------------------------------------------------
-# Valkey Subchart (ersetzt Redis ab Chart v11)
-# Hinweis: Kein Datenmigration nötig - Cache füllt sich automatisch neu
+# Valkey Subchart
+# bitnami/valkey ist noch frei verfügbar (neu genug, nicht von Bitnami-Änderung
+# betroffen). Tag gepinnt für Stabilität.
 # -----------------------------------------------------------------------------
 valkey-cluster:
   enabled: false
@@ -120,7 +104,7 @@ valkey:
   image:
     registry: docker.io
     repository: bitnami/valkey
-    tag: "8"
+    tag: "8.0"
   architecture: standalone
   auth:
     enabled: false
@@ -137,7 +121,6 @@ valkey:
         memory: 128Mi
         cpu: 200m
 
-# Alten Redis-Subchart deaktivieren
 redis-cluster:
   enabled: false
 
@@ -145,7 +128,7 @@ redis:
   enabled: false
 
 # -----------------------------------------------------------------------------
-# Persistenz
+# Persistenz (Gitea Daten: Repos, LFS, Avatare etc.)
 # -----------------------------------------------------------------------------
 persistence:
   enabled: true
