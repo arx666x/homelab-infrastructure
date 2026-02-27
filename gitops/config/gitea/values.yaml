@@ -92,34 +92,16 @@ postgresql-ha:
   enabled: false
 
 # -----------------------------------------------------------------------------
-# Valkey Subchart
-# bitnami/valkey ist noch frei verfügbar (neu genug, nicht von Bitnami-Änderung
-# betroffen). Tag gepinnt für Stabilität.
+# Valkey Subchart - DEAKTIVIERT
+# Wird durch externes StatefulSet ersetzt (gitops/config/gitea/valkey/)
+# Offizielles docker.io/valkey/valkey:8-alpine Image
+# bitnami/valkey Tags sind seit Sep 2025 nicht mehr auf Docker Hub verfügbar
 # -----------------------------------------------------------------------------
 valkey-cluster:
   enabled: false
 
 valkey:
-  enabled: true
-  image:
-    registry: docker.io
-    repository: bitnami/valkey
-    tag: "8.0"
-  architecture: standalone
-  auth:
-    enabled: false
-  primary:
-    persistence:
-      enabled: true
-      storageClass: longhorn
-      size: 2Gi
-    resources:
-      requests:
-        memory: 64Mi
-        cpu: 50m
-      limits:
-        memory: 128Mi
-        cpu: 200m
+  enabled: false
 
 redis-cluster:
   enabled: false
