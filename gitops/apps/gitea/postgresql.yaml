@@ -4,7 +4,6 @@ metadata:
   name: gitea-postgresql
   namespace: argocd
   annotations:
-    # PostgreSQL muss vor Gitea bereit sein
     argocd.argoproj.io/sync-wave: "15"
 spec:
   project: default
@@ -15,6 +14,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: gitea
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/volumeClaimTemplates/0/apiVersion
+        - /spec/volumeClaimTemplates/0/kind
   syncPolicy:
     automated:
       prune: true
