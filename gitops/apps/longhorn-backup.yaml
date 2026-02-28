@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: longhorn-backup
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
+    targetRevision: main
+    path: gitops/apps/longhorn
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: longhorn-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+

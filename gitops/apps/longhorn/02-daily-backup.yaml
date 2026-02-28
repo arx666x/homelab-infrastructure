@@ -1,0 +1,13 @@
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: daily-incremental-backup
+  namespace: longhorn-system
+spec:
+  cron: "0 3 * * 1-6"      # Mo-Sa um 03:00 Uhr (nicht Sonntag = Weekly-Tag)
+  task: backup
+  groups:
+    - default
+  retain: 90                # 90 Snapshots ≈ 3 Monate
+  concurrency: 1
+  labels: {}

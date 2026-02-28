@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: longhorn-system-backup
+  namespace: longhorn-system
+spec:
+  schedule: "0 1 * * 0"    # Sonntags um 01:00 Uhr (vor dem Volume-Backup)
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: longhorn-service-account
+          restartPolicy: OnFailure
+          containers:
+            - name: kubectl
+              image: bitnami/kubectl:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  BACKUP_NAME="system-backup-$(date +%Y%m%d-%H%M)"
+                  echo "Creating Longhorn SystemBackup: ${BACKUP_NAME}"
+                  kubectl apply -f - <<YAML
+                  apiVersion: longhorn.io/v1beta2
+                  kind: SystemBackup
+                  metadata:
+                    name: ${BACKUP_NAME}
+                    namespace: longhorn-system
+                  YAML
+                  echo "SystemBackup ${BACKUP_NAME} created."
