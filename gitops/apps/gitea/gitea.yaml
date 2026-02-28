@@ -4,20 +4,17 @@ metadata:
   name: gitea
   namespace: argocd
   annotations:
-    # Nach PostgreSQL deployen (sync-wave 15)
     argocd.argoproj.io/sync-wave: "20"
 spec:
   project: default
   sources:
-    # Helm Chart von Gitea
     - repoURL: https://dl.gitea.com/charts/
       chart: gitea
       targetRevision: 12.4.0
       helm:
         valueFiles:
           - $values/gitops/config/gitea/values.yaml
-    # Values aus GitHub (temporär bis Gitea wieder läuft)
-    - repoURL: https://github.com/arx666x/homelab-infrastructure.git
+    - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
       targetRevision: HEAD
       ref: values
   destination:
