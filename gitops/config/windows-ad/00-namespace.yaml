@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: windows-ad
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/name: windows-ad
+    ldap-access: "true"
+    tomcat-ad-access: "true"
+    trust: "enabled"

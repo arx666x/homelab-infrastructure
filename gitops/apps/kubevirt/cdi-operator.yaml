@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cdi-operator
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: kubevirt
+  annotations:
+    # Wave 21: CDI nach KubeVirt-Operator, vor windows-ad
+    argocd.argoproj.io/sync-wave: "21"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
+    targetRevision: HEAD
+    path: gitops/config/cdi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cdi
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    - group: cdi.kubevirt.io
+      kind: CDI
+      jsonPointers:
+        - /status
+        - /metadata/annotations
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /status
+        - /metadata/annotations

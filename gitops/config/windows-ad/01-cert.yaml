@@ -1,0 +1,31 @@
+# Wave 1: Zertifikat anfordern bevor VM startet
+# Voraussetzung: ClusterIssuer "ca-issuer" existiert (cert-manager)
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ad-ldaps-cert
+  namespace: windows-ad
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  secretName: ad-ldaps-tls
+  duration: 8760h
+  renewBefore: 720h
+  subject:
+    organizations:
+      - seri.sailpointdemo.com
+  commonName: ad-resource.seri.sailpointdemo.com
+  dnsNames:
+    - ad-resource.seri.sailpointdemo.com
+    - ad-resource.windows-ad.svc.cluster.local
+    - ad-resource
+  issuerRef:
+    name: ca-issuer
+    kind: ClusterIssuer
+  keystores:
+    pkcs12:
+      create: true
+      passwordSecretRef:
+        name: ad-ldaps-pkcs12-password
+        key: password

@@ -1,0 +1,90 @@
+# LoadBalancer fuer externen Zugriff (MetalLB)
+apiVersion: v1
+kind: Service
+metadata:
+  name: windows-ad-lb
+  namespace: windows-ad
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    metallb.universe.tf/loadBalancerIPs: "192.168.20.50"
+  labels:
+    app: windows-ad
+spec:
+  selector:
+    app: windows-ad
+    role: domain-controller
+  type: LoadBalancer
+  ports:
+    - name: ldaps
+      port: 636
+      targetPort: 636
+      protocol: TCP
+    - name: ldap
+      port: 389
+      targetPort: 389
+      protocol: TCP
+    - name: dns-tcp
+      port: 53
+      targetPort: 53
+      protocol: TCP
+    - name: dns-udp
+      port: 53
+      targetPort: 53
+      protocol: UDP
+    - name: kerberos-tcp
+      port: 88
+      targetPort: 88
+      protocol: TCP
+    - name: kerberos-udp
+      port: 88
+      targetPort: 88
+      protocol: UDP
+    - name: rpc
+      port: 135
+      targetPort: 135
+      protocol: TCP
+    - name: smb
+      port: 445
+      targetPort: 445
+      protocol: TCP
+    - name: rdp
+      port: 3389
+      targetPort: 3389
+      protocol: TCP
+---
+# ClusterIP fuer cluster-internen Zugriff
+apiVersion: v1
+kind: Service
+metadata:
+  name: windows-ad-internal
+  namespace: windows-ad
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    app: windows-ad
+spec:
+  selector:
+    app: windows-ad
+    role: domain-controller
+  type: ClusterIP
+  ports:
+    - name: ldaps
+      port: 636
+      targetPort: 636
+      protocol: TCP
+    - name: ldap
+      port: 389
+      targetPort: 389
+      protocol: TCP
+    - name: dns-tcp
+      port: 53
+      targetPort: 53
+      protocol: TCP
+    - name: dns-udp
+      port: 53
+      targetPort: 53
+      protocol: UDP
+    - name: tomcat-proprietary
+      port: 6060
+      targetPort: 6060
+      protocol: TCP

@@ -1,0 +1,47 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: windows-ad-ingress
+  namespace: windows-ad
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  podSelector:
+    matchLabels:
+      app: windows-ad
+  policyTypes:
+    - Ingress
+  ingress:
+    # LDAPS/LDAP: nur von gelabelten Namespaces
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              ldap-access: "true"
+      ports:
+        - port: 636
+          protocol: TCP
+        - port: 389
+          protocol: TCP
+    # Port 6060 proprietaer: nur vom Tomcat-Namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              tomcat-ad-access: "true"
+      ports:
+        - port: 6060
+          protocol: TCP
+    # DNS: von ueberall im Cluster
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: TCP
+        - port: 53
+          protocol: UDP
+    # RDP + Management: nur aus Management-VLAN
+    - from:
+        - ipBlock:
+            cidr: 192.168.11.0/24
+      ports:
+        - port: 3389
+          protocol: TCP

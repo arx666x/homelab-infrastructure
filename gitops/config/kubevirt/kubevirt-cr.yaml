@@ -1,0 +1,35 @@
+# KubeVirt CustomResource — aktiviert und konfiguriert KubeVirt
+# Nach dem Anlegen deployt der Operator alle virt-* Komponenten:
+#   virt-api, virt-controller, virt-handler (DaemonSet auf allen Nodes)
+apiVersion: kubevirt.io/v1
+kind: KubeVirt
+metadata:
+  name: kubevirt
+  namespace: kubevirt
+spec:
+  # Nur auf AMD64-Nodes deployen
+  # ARM64 (Raspberry Pi) bekommt keinen virt-handler
+  infra:
+    nodePlacement:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+
+  workloads:
+    nodePlacement:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+
+  # Feature Gates
+  configuration:
+    developerConfiguration:
+      featureGates:
+        - LiveMigration       # VM zwischen Nodes migrieren
+        - Snapshot            # VM-Snapshots
+        - HotplugVolumes      # Volumes im Betrieb hinzufuegen
+        - HostDisk            # Direkter Node-Disk-Zugriff (optional)
+    # NUMA-Topologie respektieren (gut fuer AMD Ryzen)
+    cpuModel: "host-passthrough"
+
+  # Emulation-Fallback DEAKTIVIEREN
+  # Deine AMD64-Nodes haben echtes KVM - keine Software-Emulation noetig
+  # (useEmulation: false ist der Default, hier explizit zur Klarheit)

@@ -1,0 +1,22 @@
+# Wave 2: Image-Import starten (laeuft asynchron, ~5-10 min)
+# CDI importiert von Synology NAS via HTTP
+# SHA256-Pruefung: http://diskstation:6666/windows-server-2025-ad-seri.x86.qcow2.sha256
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: windows-ad-disk
+  namespace: windows-ad
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    cdi.kubevirt.io/storage.deleteAfterCompletion: "false"
+spec:
+  source:
+    http:
+      url: "http://diskstation:6666/windows-server-2025-ad-seri.x86.qcow2"
+  storage:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 60Gi
+    storageClassName: longhorn

@@ -1,0 +1,89 @@
+# Wave 3: VM erst starten wenn DataVolume Completed und Zertifikat bereit
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: windows-ad-dc
+  namespace: windows-ad
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    app: windows-ad
+    role: domain-controller
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        app: windows-ad
+        role: domain-controller
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      domain:
+        cpu:
+          cores: 4
+          sockets: 1
+          threads: 1
+          model: host-passthrough
+        memory:
+          guest: 4Gi
+        devices:
+          interfaces:
+            - name: default
+              masquerade: {}
+              model: virtio
+          disks:
+            - name: windows-disk
+              bootOrder: 1
+              disk:
+                bus: virtio
+            - name: ldaps-cert
+              disk:
+                bus: virtio
+          tpm: {}
+        features:
+          acpi: {}
+          apic: {}
+          hyperv:
+            relaxed: {}
+            vapic: {}
+            vpindex: {}
+            spinlocks:
+              enabled: true
+              spinlocks: 8191
+            synic: {}
+            synictimer:
+              enabled: true
+            tlbflush: {}
+            frequencies: {}
+            reenlightenment: {}
+            ipi: {}
+        clock:
+          utc: {}
+          timer:
+            hpet:
+              present: false
+            pit:
+              tickPolicy: delay
+            rtc:
+              tickPolicy: catchup
+            hyperv: {}
+        machine:
+          type: q35
+        resources:
+          requests:
+            memory: 4Gi
+            cpu: "2"
+          limits:
+            memory: 4Gi
+            cpu: "4"
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: windows-disk
+          dataVolume:
+            name: windows-ad-disk
+        - name: ldaps-cert
+          secret:
+            secretName: ad-ldaps-tls

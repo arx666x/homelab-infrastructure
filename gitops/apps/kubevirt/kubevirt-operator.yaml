@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubevirt-operator
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: kubevirt
+  annotations:
+    # Wave 20: nach cert-manager (10), vor windows-ad (30)
+    argocd.argoproj.io/sync-wave: "20"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
+    targetRevision: HEAD
+    path: gitops/config/kubevirt
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kubevirt
+  syncPolicy:
+    automated:
+      prune: false      # Operator nie automatisch loeschen
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    # KubeVirt-Operator schreibt Status-Felder zurueck
+    - group: kubevirt.io
+      kind: KubeVirt
+      jsonPointers:
+        - /status
+        - /metadata/annotations
+    # CRDs haben generierte Felder
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /status
+        - /metadata/annotations

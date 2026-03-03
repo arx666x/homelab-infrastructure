@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: windows-ad
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: kubevirt
+  annotations:
+    # Wave 30: nach cert-manager (10), nach KubeVirt-Operator (20)
+    # CA-Issuer und StorageClass (Longhorn) muessen existieren
+    argocd.argoproj.io/sync-wave: "30"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
+    targetRevision: HEAD
+    path: gitops/config/windows-ad
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: windows-ad
+  syncPolicy:
+    automated:
+      prune: false      # NIEMALS automatisch loeschen - VM wuerde vernichtet
+      selfHeal: false   # KubeVirt/CDI schreiben Status zurueck - kein Auto-Heal
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    - group: cdi.kubevirt.io
+      kind: DataVolume
+      jsonPointers:
+        - /status
+        - /metadata/annotations
+    - group: kubevirt.io
+      kind: VirtualMachine
+      jsonPointers:
+        - /status
+        - /metadata/annotations
+        - /spec/template/metadata/annotations
+  retry:
+    limit: 5
+    backoff:
+      duration: 30s
+      factor: 2
+      maxDuration: 5m

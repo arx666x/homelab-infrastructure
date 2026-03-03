@@ -1,0 +1,27 @@
+# CDI CustomResource — aktiviert den Containerized Data Importer
+# CDI ist zustaendig fuer DataVolumes (zieht das Image von der Synology)
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: CDI
+metadata:
+  name: cdi
+  namespace: cdi
+spec:
+  # Upload-Proxy fuer virtctl image-upload (optional, aber praktisch)
+  config:
+    uploadProxyURLOverride: "https://cdi-uploadproxy.reckeweg.io"
+
+    # Erlaubte Import-Quellen
+    # http: erlaubt Import von deiner Synology (diskstation:6666)
+    # registry: erlaubt Import aus Gitea Container Registry
+    featureGates:
+      - HonorWaitForFirstConsumer
+
+  # Nur auf AMD64-Nodes
+  infra:
+    nodePlacement:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+  workloads:
+    nodePlacement:
+      nodeSelector:
+        kubernetes.io/arch: amd64

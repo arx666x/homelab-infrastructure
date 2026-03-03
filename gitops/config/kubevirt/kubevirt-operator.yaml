@@ -1,0 +1,36 @@
+# KubeVirt Operator — installiert CRDs und Controller
+# Version: v1.3.1 (aktuell stabil, ggf. anpassen)
+# Releases: https://github.com/kubevirt/kubevirt/releases
+#
+# WICHTIG: Nach einem KubeVirt-Versions-Upgrade muss zuerst
+# der Operator upgedated werden, dann die KubeVirt-CR.
+# Nie beide gleichzeitig aendern.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubevirt
+  labels:
+    kubevirt.io: ""
+---
+# Der Operator selbst wird direkt vom offiziellen Release-Manifest installiert.
+# ArgoCD kann Raw-URLs nicht direkt referenzieren, daher nutzen wir
+# ein Kustomize-Remote-Base-Pattern:
+#
+# Alternativ: Manifest lokal ins Repo kopieren (stabiler, empfohlen):
+#   curl -L https://github.com/kubevirt/kubevirt/releases/download/v1.3.1/kubevirt-operator.yaml \
+#     -o gitops/config/kubevirt/kubevirt-operator-raw.yaml
+#
+# Fuer den Start reicht der ConfigMap-Ansatz mit Kustomize:
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubevirt-version
+  namespace: kubevirt
+  annotations:
+    # Dokumentiert welche Version deployed ist
+    kubevirt.io/version: "v1.3.1"
+data:
+  version: "v1.3.1"
+  operator-url: "https://github.com/kubevirt/kubevirt/releases/download/v1.3.1/kubevirt-operator.yaml"
+  cr-url: "https://github.com/kubevirt/kubevirt/releases/download/v1.3.1/kubevirt-cr.yaml"
