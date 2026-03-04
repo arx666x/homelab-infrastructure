@@ -1,0 +1,56 @@
+# Internal CA fuer LDAPS und andere cluster-interne Zertifikate
+# Wird benoetigt fuer: windows-ad LDAPS, zukuenftige interne Services
+#
+# Funktionsweise:
+#   selfsigned-issuer  ->  stellt seri-root-ca aus (einmalig)
+#   ca-issuer          ->  stellt alle internen Zertifikate aus (z.B. ad-ldaps-cert)
+#
+# Das CA-Zertifikat (seri-root-ca-secret) muss in alle Clients
+# importiert werden die LDAPS nutzen (Java Truststore, OS-Zertifikatsspeicher)
+---
+# Schritt 1: Bootstrapper - stellt nur die Root-CA aus, sonst nichts
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  selfSigned: {}
+---
+# Schritt 2: Root CA - laeuft 10 Jahre, wird im cert-manager Namespace gespeichert
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: seri-root-ca
+  namespace: cert-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  isCA: true
+  commonName: SERI Root CA
+  subject:
+    organizations:
+      - SERI
+    organizationalUnits:
+      - Infrastructure
+  secretName: seri-root-ca-secret
+  duration: 87600h    # 10 Jahre
+  renewBefore: 720h   # 30 Tage vor Ablauf
+  privateKey:
+    algorithm: RSA
+    size: 4096
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+---
+# Schritt 3: ca-issuer - referenziert von allen internen Zertifikaten
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: ca-issuer
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  ca:
+    secretName: seri-root-ca-secret
