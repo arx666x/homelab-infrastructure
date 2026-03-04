@@ -19,3 +19,5 @@ metadata:
 spec:
   ipAddressPools:
     - default-pool
+  interfaces:
+    - enp1s0.20
