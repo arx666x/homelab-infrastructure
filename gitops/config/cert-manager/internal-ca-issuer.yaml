@@ -35,8 +35,8 @@ spec:
     organizationalUnits:
       - Infrastructure
   secretName: seri-root-ca-secret
-  duration: 87600h    # 10 Jahre
-  renewBefore: 720h   # 30 Tage vor Ablauf
+  duration: 87600h0m0s    # 10 Jahre
+  renewBefore: 720h0m0s   # 30 Tage vor Ablauf
   privateKey:
     algorithm: RSA
     size: 4096
