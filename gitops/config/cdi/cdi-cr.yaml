@@ -21,7 +21,3 @@ spec:
     nodePlacement:
       nodeSelector:
         kubernetes.io/arch: amd64
-  workloads:
-    nodePlacement:
-      nodeSelector:
-        kubernetes.io/arch: amd64
