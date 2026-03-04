@@ -36,7 +36,7 @@ spec:
             - name: windows-disk
               bootOrder: 1
               disk:
-                bus: virtio
+                bus: scsi # statt virtio
             - name: ldaps-cert
               disk:
                 bus: virtio
