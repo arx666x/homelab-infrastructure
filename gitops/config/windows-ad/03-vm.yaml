@@ -20,6 +20,10 @@ spec:
       nodeSelector:
         kubernetes.io/arch: amd64
       domain:
+        firmware:
+          bootloader:
+            efi:
+              secureBoot: false
         cpu:
           cores: 4
           sockets: 1
@@ -27,10 +31,6 @@ spec:
           model: host-passthrough
         memory:
           guest: 4Gi
-	firmware:
-	  bootloader:
-	    efi:
-	      secureBoot: false
         devices:
           interfaces:
             - name: default
@@ -40,7 +40,7 @@ spec:
             - name: windows-disk
               bootOrder: 1
               disk:
-                bus: scsi # statt virtio
+                bus: scsi
             - name: ldaps-cert
               disk:
                 bus: virtio
