@@ -40,10 +40,10 @@ spec:
             - name: windows-disk
               bootOrder: 1
               disk:
-                bus: sata
+                bus: scsi # was termorary set to sata
             - name: ldaps-cert
               disk:
-                bus: sata
+                bus: scsi # sata
           tpm: {}
         features:
           acpi: {}
