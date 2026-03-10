@@ -1,6 +1,7 @@
 # =============================================================================
 # Headlamp - Kubernetes UI
 # mit Longhorn + Cert-Manager Plugin via Init-Container
+# Authentifizierung via kubeconfig Secret (kein Token-Ablauf)
 # URL: https://headlamp.reckeweg.io
 # =============================================================================
 
@@ -31,8 +32,6 @@ spec:
       initContainers:
         # -----------------------------------------------------------------
         # Plugin 1: Longhorn
-        # Image existiert nicht auf ghcr.io/giantswarm – daher wget aus
-        # dem GitHub-Repo (dist/ ist committed, kein Build nötig)
         # -----------------------------------------------------------------
         - name: install-longhorn-plugin
           image: alpine:3.19
@@ -49,7 +48,7 @@ spec:
                 https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/dist/main.js
               wget -q -O "$PLUGIN_DIR/package.json" \
                 https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/package.json
-              echo ">>> Longhorn Plugin installiert: $(ls -lh $PLUGIN_DIR)"
+              echo ">>> Longhorn Plugin installiert."
           volumeMounts:
             - name: plugins
               mountPath: /headlamp/plugins
@@ -59,8 +58,6 @@ spec:
 
         # -----------------------------------------------------------------
         # Plugin 2: Cert-Manager
-        # Offizielles Plugin-Image von headlamp-k8s existiert und ist
-        # öffentlich verfügbar
         # -----------------------------------------------------------------
         - name: install-cert-manager-plugin
           image: ghcr.io/headlamp-k8s/headlamp-plugin-cert-manager:latest
@@ -83,7 +80,7 @@ spec:
         - name: headlamp
           image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
           args:
-            - "-in-cluster"
+            - "-kubeconfig=/headlamp/kubeconfig/config"
             - "-plugins-dir=/headlamp/plugins"
           ports:
             - containerPort: 4466
@@ -117,10 +114,16 @@ spec:
           volumeMounts:
             - name: plugins
               mountPath: /headlamp/plugins
+            - name: kubeconfig
+              mountPath: /headlamp/kubeconfig
+              readOnly: true
 
       volumes:
         - name: plugins
           emptyDir: {}
+        - name: kubeconfig
+          secret:
+            secretName: headlamp-kubeconfig
 
       nodeSelector:
         kubernetes.io/os: linux
