@@ -78,9 +78,7 @@ spec:
 
         # -----------------------------------------------------------------
         # Fix: Kopiere static-plugins aus dem Headlamp-Image ins Volume
-        # und ergänze die fehlende prometheus translation.json
-        # Das Volume wird auf /headlamp/static-plugins gemountet und
-        # überschreibt damit das Image-Verzeichnis
+        # und ergänze alle fehlenden Locale-Dateien für das Prometheus Plugin
         # -----------------------------------------------------------------
         - name: fix-static-plugins
           image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
@@ -91,9 +89,11 @@ spec:
             - |
               echo ">>> Kopiere static-plugins aus Image..."
               cp -r /headlamp/static-plugins/. /static-plugins-init/
-              echo ">>> Ergänze fehlende prometheus translation.json..."
-              mkdir -p /static-plugins-init/prometheus/locales/en
-              echo '{}' > /static-plugins-init/prometheus/locales/en/translation.json
+              echo ">>> Ergänze fehlende Locale-Dateien..."
+              for lang in en de fr es it pt ja ko zh; do
+                mkdir -p /static-plugins-init/prometheus/locales/$lang
+                echo '{}' > /static-plugins-init/prometheus/locales/$lang/translation.json
+              done
               echo ">>> Fertig:"
               find /static-plugins-init -type f
           volumeMounts:
@@ -107,7 +107,7 @@ spec:
         - name: headlamp
           image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
           args:
-            - "-kubeconfig=/headlamp/kubeconfig/config"
+            - "-in-cluster"
             - "-plugins-dir=/headlamp/plugins"
           ports:
             - containerPort: 4466
@@ -143,18 +143,12 @@ spec:
               mountPath: /headlamp/plugins
             - name: static-plugins
               mountPath: /headlamp/static-plugins
-            - name: kubeconfig
-              mountPath: /headlamp/kubeconfig
-              readOnly: true
 
       volumes:
         - name: plugins
           emptyDir: {}
         - name: static-plugins
           emptyDir: {}
-        - name: kubeconfig
-          secret:
-            secretName: headlamp-kubeconfig
 
       nodeSelector:
         kubernetes.io/os: linux
