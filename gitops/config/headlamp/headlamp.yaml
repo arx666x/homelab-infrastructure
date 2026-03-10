@@ -1,3 +1,9 @@
+# =============================================================================
+# Headlamp - Kubernetes UI
+# mit Longhorn Plugin via Init-Container
+# URL: https://headlamp.reckeweg.io
+# =============================================================================
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -23,28 +29,34 @@ spec:
         fsGroup: 101
 
       # =================================================================
-      # Init-Container: lädt das cert-manager Plugin aus dem offiziellen
-      # Plugin-Image und kopiert es in das geteilte plugins-Volume,
-      # bevor Headlamp startet.
+      # Init-Container: Kopiert Plugin-Dateien in das geteilte
+      # plugins-Volume, bevor Headlamp startet.
       #
-      # Weitere Plugins einfach als zusätzliche initContainers ergänzen,
-      # z.B. für prometheus, flux, etc.
+      # Headlamp lädt Plugins beim Start aus -plugins-dir.
+      # Das emptyDir-Volume vermittelt zwischen Init- und Hauptcontainer.
+      #
+      # Weitere Plugins: einfach zusätzliche initContainers ergänzen,
+      # die alle auf dasselbe Volume mounten.
       # =================================================================
       initContainers:
-        - name: install-cert-manager-plugin
-          image: ghcr.io/headlamp-k8s/headlamp-plugin-cert-manager:latest
+        - name: install-longhorn-plugin
+          image: ghcr.io/giantswarm/headlamp-longhorn:latest
+          imagePullPolicy: Always
           command:
-            - sh
+            - /bin/sh
             - -c
             - |
-              echo ">>> Installiere cert-manager Plugin..."
-              cp -r /plugins/* /headlamp/plugins/
-              echo ">>> Fertig. Installierte Plugins:"
-              ls /headlamp/plugins/
+              echo ">>> Kopiere Longhorn Plugin..."
+              mkdir -p /headlamp/plugins/headlamp-longhorn
+              cp -r /plugins/headlamp-longhorn/* /headlamp/plugins/headlamp-longhorn/
+              echo ">>> Installierte Plugins:"
+              ls -la /headlamp/plugins/
+              echo ">>> Fertig."
           volumeMounts:
             - name: plugins
               mountPath: /headlamp/plugins
           securityContext:
+            runAsNonRoot: false
             allowPrivilegeEscalation: false
 
       containers:
