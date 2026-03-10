@@ -1,6 +1,6 @@
 # =============================================================================
 # Headlamp - Kubernetes UI
-# mit Longhorn Plugin via Init-Container (download aus GitHub dist/)
+# mit Longhorn + Cert-Manager Plugin via Init-Container
 # URL: https://headlamp.reckeweg.io
 # =============================================================================
 
@@ -28,14 +28,12 @@ spec:
         runAsUser: 100
         fsGroup: 101
 
-      # =================================================================
-      # Init-Container: Lädt das Longhorn Plugin direkt aus dem
-      # GitHub-Repository (dist/ ist im Repo committed) herunter
-      # und legt es im geteilten plugins-Volume ab.
-      #
-      # Kein eigenes Image-Build nötig – alpine + wget reicht.
-      # =================================================================
       initContainers:
+        # -----------------------------------------------------------------
+        # Plugin 1: Longhorn
+        # Image existiert nicht auf ghcr.io/giantswarm – daher wget aus
+        # dem GitHub-Repo (dist/ ist committed, kein Build nötig)
+        # -----------------------------------------------------------------
         - name: install-longhorn-plugin
           image: alpine:3.19
           imagePullPolicy: IfNotPresent
@@ -45,21 +43,35 @@ spec:
             - |
               set -e
               PLUGIN_DIR="/headlamp/plugins/headlamp-longhorn"
-              BASE_URL="https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/dist"
-
-              echo ">>> Erstelle Plugin-Verzeichnis..."
+              echo ">>> Installiere Longhorn Plugin..."
               mkdir -p "$PLUGIN_DIR"
-
-              echo ">>> Lade main.js herunter..."
-              wget -q -O "$PLUGIN_DIR/main.js" "$BASE_URL/main.js"
-
-              echo ">>> Lade package.json herunter..."
+              wget -q -O "$PLUGIN_DIR/main.js" \
+                https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/dist/main.js
               wget -q -O "$PLUGIN_DIR/package.json" \
-                "https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/package.json"
+                https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/package.json
+              echo ">>> Longhorn Plugin installiert: $(ls -lh $PLUGIN_DIR)"
+          volumeMounts:
+            - name: plugins
+              mountPath: /headlamp/plugins
+          securityContext:
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
 
-              echo ">>> Installierte Dateien:"
-              ls -lh "$PLUGIN_DIR/"
-              echo ">>> Fertig."
+        # -----------------------------------------------------------------
+        # Plugin 2: Cert-Manager
+        # Offizielles Plugin-Image von headlamp-k8s existiert und ist
+        # öffentlich verfügbar
+        # -----------------------------------------------------------------
+        - name: install-cert-manager-plugin
+          image: ghcr.io/headlamp-k8s/headlamp-plugin-cert-manager:latest
+          imagePullPolicy: Always
+          command:
+            - sh
+            - -c
+            - |
+              echo ">>> Installiere Cert-Manager Plugin..."
+              cp -r /plugins/* /headlamp/plugins/
+              echo ">>> Cert-Manager Plugin installiert."
           volumeMounts:
             - name: plugins
               mountPath: /headlamp/plugins
