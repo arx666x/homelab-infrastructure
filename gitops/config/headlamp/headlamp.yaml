@@ -1,7 +1,7 @@
 # =============================================================================
 # Headlamp - Kubernetes UI
 # mit Longhorn + Cert-Manager Plugin via Init-Container
-# Authentifizierung via kubeconfig Secret (kein Token-Ablauf)
+# Fix: fehlende prometheus translation.json wird per Init-Container ergänzt
 # URL: https://headlamp.reckeweg.io
 # =============================================================================
 
@@ -76,6 +76,33 @@ spec:
             runAsNonRoot: false
             allowPrivilegeEscalation: false
 
+        # -----------------------------------------------------------------
+        # Fix: Kopiere static-plugins aus dem Headlamp-Image ins Volume
+        # und ergänze die fehlende prometheus translation.json
+        # Das Volume wird auf /headlamp/static-plugins gemountet und
+        # überschreibt damit das Image-Verzeichnis
+        # -----------------------------------------------------------------
+        - name: fix-static-plugins
+          image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo ">>> Kopiere static-plugins aus Image..."
+              cp -r /headlamp/static-plugins/. /static-plugins-init/
+              echo ">>> Ergänze fehlende prometheus translation.json..."
+              mkdir -p /static-plugins-init/prometheus/locales/en
+              echo '{}' > /static-plugins-init/prometheus/locales/en/translation.json
+              echo ">>> Fertig:"
+              find /static-plugins-init -type f
+          volumeMounts:
+            - name: static-plugins
+              mountPath: /static-plugins-init
+          securityContext:
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+
       containers:
         - name: headlamp
           image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
@@ -114,12 +141,16 @@ spec:
           volumeMounts:
             - name: plugins
               mountPath: /headlamp/plugins
+            - name: static-plugins
+              mountPath: /headlamp/static-plugins
             - name: kubeconfig
               mountPath: /headlamp/kubeconfig
               readOnly: true
 
       volumes:
         - name: plugins
+          emptyDir: {}
+        - name: static-plugins
           emptyDir: {}
         - name: kubeconfig
           secret:
