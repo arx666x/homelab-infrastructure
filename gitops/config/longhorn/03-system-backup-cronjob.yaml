@@ -28,5 +28,7 @@ spec:
                   metadata:
                     name: ${BACKUP_NAME}
                     namespace: longhorn-system
+                  spec:
+                    volumeBackupPolicy: if-not-present
                   YAML
                   echo "SystemBackup ${BACKUP_NAME} created."
