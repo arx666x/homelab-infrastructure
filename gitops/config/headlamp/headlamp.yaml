@@ -1,6 +1,6 @@
 # =============================================================================
 # Headlamp - Kubernetes UI
-# mit Longhorn + Cert-Manager + Prometheus Plugin
+# mit Longhorn + Cert-Manager Plugin via Init-Container
 # Longhorn Plugin: eigener Fork mit Dashboard-Fix (gitea.reckeweg.io)
 # URL: https://headlamp.reckeweg.io
 # =============================================================================
@@ -74,8 +74,9 @@ spec:
 
         # -----------------------------------------------------------------
         # Fix: Kopiere static-plugins aus dem Headlamp-Image ins Volume
-        # und ergänze fehlende Locale-Dateien für das Prometheus Plugin
-        # (translation.json fehlt in v0.40.1 für alle Sprachen)
+        # Workaround fuer Headlamp v0.40.1 Bug - Static Plugins erscheinen
+        # sonst nicht in der Sidebar
+        # Die 404s fuer fehlende Locale-Dateien sind kosmetisch (fallback: en)
         # -----------------------------------------------------------------
         - name: fix-static-plugins
           image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
@@ -86,13 +87,7 @@ spec:
             - |
               echo ">>> Kopiere static-plugins aus Image..."
               cp -r /headlamp/static-plugins/. /static-plugins-init/
-              echo ">>> Ergänze fehlende Locale-Dateien..."
-              for lang in en de fr es it pt ja ko zh; do
-                mkdir -p /static-plugins-init/prometheus/locales/$lang
-                echo '{}' > /static-plugins-init/prometheus/locales/$lang/translation.json
-              done
-              echo ">>> Fertig:"
-              find /static-plugins-init -type f
+              echo ">>> Fertig."
           volumeMounts:
             - name: static-plugins
               mountPath: /static-plugins-init
