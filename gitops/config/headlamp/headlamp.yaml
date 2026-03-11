@@ -1,6 +1,6 @@
 # =============================================================================
 # Headlamp - Kubernetes UI
-# mit Longhorn + Cert-Manager Plugin via Init-Container
+# mit Longhorn + Cert-Manager + Prometheus Plugin
 # Longhorn Plugin: eigener Fork mit Dashboard-Fix (gitea.reckeweg.io)
 # URL: https://headlamp.reckeweg.io
 # =============================================================================
@@ -24,8 +24,6 @@ spec:
         app.kubernetes.io/name: headlamp
     spec:
       serviceAccountName: headlamp
-      imagePullSecrets:
-        - name: gitea-registry
       securityContext:
         runAsNonRoot: true
         runAsUser: 100
@@ -74,6 +72,34 @@ spec:
             runAsNonRoot: false
             allowPrivilegeEscalation: false
 
+        # -----------------------------------------------------------------
+        # Fix: Kopiere static-plugins aus dem Headlamp-Image ins Volume
+        # und ergänze fehlende Locale-Dateien für das Prometheus Plugin
+        # (translation.json fehlt in v0.40.1 für alle Sprachen)
+        # -----------------------------------------------------------------
+        - name: fix-static-plugins
+          image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo ">>> Kopiere static-plugins aus Image..."
+              cp -r /headlamp/static-plugins/. /static-plugins-init/
+              echo ">>> Ergänze fehlende Locale-Dateien..."
+              for lang in en de fr es it pt ja ko zh; do
+                mkdir -p /static-plugins-init/prometheus/locales/$lang
+                echo '{}' > /static-plugins-init/prometheus/locales/$lang/translation.json
+              done
+              echo ">>> Fertig:"
+              find /static-plugins-init -type f
+          volumeMounts:
+            - name: static-plugins
+              mountPath: /static-plugins-init
+          securityContext:
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+
       containers:
         - name: headlamp
           image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
@@ -112,9 +138,13 @@ spec:
           volumeMounts:
             - name: plugins
               mountPath: /headlamp/plugins
+            - name: static-plugins
+              mountPath: /headlamp/static-plugins
 
       volumes:
         - name: plugins
+          emptyDir: {}
+        - name: static-plugins
           emptyDir: {}
 
       nodeSelector:
