@@ -1,7 +1,8 @@
 # =============================================================================
 # Headlamp - Kubernetes UI
+# mit Longhorn + Cert-Manager Plugin via Init-Container
+# Longhorn Plugin: eigener Fork mit Dashboard-Fix (gitea.reckeweg.io)
 # URL: https://headlamp.reckeweg.io
-# Longhorn Plugin: aus ConfigMap (lokaler Build)
 # =============================================================================
 
 ---
@@ -23,6 +24,8 @@ spec:
         app.kubernetes.io/name: headlamp
     spec:
       serviceAccountName: headlamp
+      imagePullSecrets:
+        - name: gitea-registry
       securityContext:
         runAsNonRoot: true
         runAsUser: 100
@@ -30,31 +33,43 @@ spec:
 
       initContainers:
         # -----------------------------------------------------------------
-        # Longhorn Plugin: aus ConfigMap (lokaler Build) ins plugins-Volume
+        # Plugin 1: Longhorn
+        # Eigener Fork mit Fix: :namespace aus Detail-Routes entfernt
+        # https://gitea.reckeweg.io/achim/headlamp-longhorn
         # -----------------------------------------------------------------
         - name: install-longhorn-plugin
-          image: alpine:3.19
-          imagePullPolicy: IfNotPresent
+          image: gitea.reckeweg.io/achim/headlamp-longhorn:latest
+          imagePullPolicy: Always
           command:
-            - /bin/sh
+            - sh
             - -c
             - |
-              set -e
-              PLUGIN_DIR="/headlamp/plugins/headlamp-longhorn"
-              echo ">>> Installiere Longhorn Plugin aus ConfigMap..."
-              mkdir -p "$PLUGIN_DIR"
-              cp /longhorn-src/main.js "$PLUGIN_DIR/main.js"
-              # package.json weiterhin von GitHub - ist identisch
-              wget -q -O "$PLUGIN_DIR/package.json" \
-                https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/package.json
-              echo ">>> Longhorn Plugin installiert:"
-              ls -lh "$PLUGIN_DIR/"
+              echo ">>> Installiere Longhorn Plugin..."
+              cp -r /plugins/headlamp-longhorn /headlamp/plugins/
+              echo ">>> Longhorn Plugin installiert."
           volumeMounts:
             - name: plugins
               mountPath: /headlamp/plugins
-            - name: longhorn-plugin-src
-              mountPath: /longhorn-src
-              readOnly: true
+          securityContext:
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+
+        # -----------------------------------------------------------------
+        # Plugin 2: Cert-Manager
+        # -----------------------------------------------------------------
+        - name: install-cert-manager-plugin
+          image: ghcr.io/headlamp-k8s/headlamp-plugin-cert-manager:latest
+          imagePullPolicy: Always
+          command:
+            - sh
+            - -c
+            - |
+              echo ">>> Installiere Cert-Manager Plugin..."
+              cp -r /plugins/* /headlamp/plugins/
+              echo ">>> Cert-Manager Plugin installiert."
+          volumeMounts:
+            - name: plugins
+              mountPath: /headlamp/plugins
           securityContext:
             runAsNonRoot: false
             allowPrivilegeEscalation: false
@@ -101,9 +116,6 @@ spec:
       volumes:
         - name: plugins
           emptyDir: {}
-        - name: longhorn-plugin-src
-          configMap:
-            name: longhorn-plugin-main
 
       nodeSelector:
         kubernetes.io/os: linux
