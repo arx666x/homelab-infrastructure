@@ -1,7 +1,5 @@
 # =============================================================================
 # Headlamp - Kubernetes UI
-# mit Longhorn + Cert-Manager Plugin via Init-Container
-# Fix: fehlende prometheus translation.json wird per Init-Container ergänzt
 # URL: https://headlamp.reckeweg.io
 # =============================================================================
 
@@ -29,86 +27,11 @@ spec:
         runAsUser: 100
         fsGroup: 101
 
-      initContainers:
-        # -----------------------------------------------------------------
-        # Plugin 1: Longhorn
-        # -----------------------------------------------------------------
-        - name: install-longhorn-plugin
-          image: alpine:3.19
-          imagePullPolicy: IfNotPresent
-          command:
-            - /bin/sh
-            - -c
-            - |
-              set -e
-              PLUGIN_DIR="/headlamp/plugins/headlamp-longhorn"
-              echo ">>> Installiere Longhorn Plugin..."
-              mkdir -p "$PLUGIN_DIR"
-              wget -q -O "$PLUGIN_DIR/main.js" \
-                https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/dist/main.js
-              wget -q -O "$PLUGIN_DIR/package.json" \
-                https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/package.json
-              echo ">>> Longhorn Plugin installiert."
-          volumeMounts:
-            - name: plugins
-              mountPath: /headlamp/plugins
-          securityContext:
-            runAsNonRoot: false
-            allowPrivilegeEscalation: false
-
-        # -----------------------------------------------------------------
-        # Plugin 2: Cert-Manager
-        # -----------------------------------------------------------------
-        - name: install-cert-manager-plugin
-          image: ghcr.io/headlamp-k8s/headlamp-plugin-cert-manager:latest
-          imagePullPolicy: Always
-          command:
-            - sh
-            - -c
-            - |
-              echo ">>> Installiere Cert-Manager Plugin..."
-              cp -r /plugins/* /headlamp/plugins/
-              echo ">>> Cert-Manager Plugin installiert."
-          volumeMounts:
-            - name: plugins
-              mountPath: /headlamp/plugins
-          securityContext:
-            runAsNonRoot: false
-            allowPrivilegeEscalation: false
-
-        # -----------------------------------------------------------------
-        # Fix: Kopiere static-plugins aus dem Headlamp-Image ins Volume
-        # und ergänze alle fehlenden Locale-Dateien für das Prometheus Plugin
-        # -----------------------------------------------------------------
-        - name: fix-static-plugins
-          image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
-          imagePullPolicy: IfNotPresent
-          command:
-            - /bin/sh
-            - -c
-            - |
-              echo ">>> Kopiere static-plugins aus Image..."
-              cp -r /headlamp/static-plugins/. /static-plugins-init/
-              echo ">>> Ergänze fehlende Locale-Dateien..."
-              for lang in en de fr es it pt ja ko zh; do
-                mkdir -p /static-plugins-init/prometheus/locales/$lang
-                echo '{}' > /static-plugins-init/prometheus/locales/$lang/translation.json
-              done
-              echo ">>> Fertig:"
-              find /static-plugins-init -type f
-          volumeMounts:
-            - name: static-plugins
-              mountPath: /static-plugins-init
-          securityContext:
-            runAsNonRoot: false
-            allowPrivilegeEscalation: false
-
       containers:
         - name: headlamp
           image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
           args:
             - "-in-cluster"
-            - "-plugins-dir=/headlamp/plugins"
           ports:
             - containerPort: 4466
               name: http
@@ -138,17 +61,6 @@ spec:
             capabilities:
               drop:
                 - ALL
-          volumeMounts:
-            - name: plugins
-              mountPath: /headlamp/plugins
-            - name: static-plugins
-              mountPath: /headlamp/static-plugins
-
-      volumes:
-        - name: plugins
-          emptyDir: {}
-        - name: static-plugins
-          emptyDir: {}
 
       nodeSelector:
         kubernetes.io/os: linux
