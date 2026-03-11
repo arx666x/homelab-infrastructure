@@ -1,7 +1,7 @@
 # =============================================================================
 # Headlamp - Kubernetes UI
 # URL: https://headlamp.reckeweg.io
-# Test: nur Longhorn Plugin
+# Longhorn Plugin: aus ConfigMap (lokaler Build)
 # =============================================================================
 
 ---
@@ -29,6 +29,9 @@ spec:
         fsGroup: 101
 
       initContainers:
+        # -----------------------------------------------------------------
+        # Longhorn Plugin: aus ConfigMap (lokaler Build) ins plugins-Volume
+        # -----------------------------------------------------------------
         - name: install-longhorn-plugin
           image: alpine:3.19
           imagePullPolicy: IfNotPresent
@@ -38,16 +41,20 @@ spec:
             - |
               set -e
               PLUGIN_DIR="/headlamp/plugins/headlamp-longhorn"
-              echo ">>> Installiere Longhorn Plugin..."
+              echo ">>> Installiere Longhorn Plugin aus ConfigMap..."
               mkdir -p "$PLUGIN_DIR"
-              wget -q -O "$PLUGIN_DIR/main.js" \
-                https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/dist/main.js
+              cp /longhorn-src/main.js "$PLUGIN_DIR/main.js"
+              # package.json weiterhin von GitHub - ist identisch
               wget -q -O "$PLUGIN_DIR/package.json" \
                 https://raw.githubusercontent.com/giantswarm/headlamp-longhorn/main/package.json
-              echo ">>> Longhorn Plugin installiert."
+              echo ">>> Longhorn Plugin installiert:"
+              ls -lh "$PLUGIN_DIR/"
           volumeMounts:
             - name: plugins
               mountPath: /headlamp/plugins
+            - name: longhorn-plugin-src
+              mountPath: /longhorn-src
+              readOnly: true
           securityContext:
             runAsNonRoot: false
             allowPrivilegeEscalation: false
@@ -94,6 +101,9 @@ spec:
       volumes:
         - name: plugins
           emptyDir: {}
+        - name: longhorn-plugin-src
+          configMap:
+            name: longhorn-plugin-main
 
       nodeSelector:
         kubernetes.io/os: linux
