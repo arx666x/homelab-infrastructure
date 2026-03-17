@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: guacamole
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://git.reckeweg.io/seri/homelab-gitops.git
+    targetRevision: HEAD
+    path: gitops/config/guacamole
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: guacamole
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+  ignoreDifferences:
+    # init-schema läuft nur beim ersten Start; danach darf ArgoCD den Drift ignorieren
+    - group: apps
+      kind: Deployment
+      name: guacamole
+      jsonPointers:
+        - /spec/template/spec/initContainers

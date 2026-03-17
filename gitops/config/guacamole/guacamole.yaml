@@ -1,0 +1,161 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guacamole
+  namespace: guacamole
+  labels:
+    app: guacamole
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guacamole
+  template:
+    metadata:
+      labels:
+        app: guacamole
+    spec:
+      initContainers:
+        # Spielt das DB-Schema beim ersten Start ein.
+        # Idempotent: psql gibt non-zero zurück wenn Objekte bereits existieren → || true
+        - name: init-schema
+          image: guacamole/guacamole:1.6.0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              /opt/guacamole/bin/initdb.sh --postgresql > /tmp/initdb.sql
+              PGPASSWORD=$POSTGRESQL_PASSWORD psql \
+                -h $POSTGRESQL_HOSTNAME \
+                -U $POSTGRESQL_USER \
+                -d $POSTGRESQL_DATABASE \
+                -f /tmp/initdb.sql || true
+          env:
+            - name: POSTGRESQL_HOSTNAME
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-db-secret
+                  key: hostname
+            - name: POSTGRESQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-db-secret
+                  key: database
+            - name: POSTGRESQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-db-secret
+                  key: username
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-db-secret
+                  key: password
+      containers:
+        - name: guacamole
+          image: guacamole/guacamole:1.6.0
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            # ── Core ─────────────────────────────────────────────────────────
+            - name: GUACD_HOSTNAME
+              value: guacd
+            - name: GUACD_PORT
+              value: "4822"
+
+            # ── Database ─────────────────────────────────────────────────────
+            - name: POSTGRESQL_HOSTNAME
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-db-secret
+                  key: hostname
+            - name: POSTGRESQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-db-secret
+                  key: database
+            - name: POSTGRESQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-db-secret
+                  key: username
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-db-secret
+                  key: password
+
+            # ── OpenID Connect / Keycloak (Phase 2 – jetzt deaktiviert) ──────
+            # OPENID_ENABLED=false → lokales DB-Login (guacadmin) aktiv,
+            # OIDC-Plugin wird nicht geladen.
+            # Auf "true" setzen sobald Keycloak deployed und Client konfiguriert ist.
+            - name: OPENID_ENABLED
+              value: "false"
+            - name: OPENID_USERNAME_CLAIM_TYPE
+              value: "preferred_username"
+            - name: OPENID_GROUPS_CLAIM_TYPE
+              value: "groups"
+            - name: OPENID_ISSUER
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-oidc-secret
+                  key: issuer
+                  optional: true
+            - name: OPENID_AUTHORIZATION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-oidc-secret
+                  key: authorization_endpoint
+                  optional: true
+            - name: OPENID_JWKS_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-oidc-secret
+                  key: jwks_endpoint
+                  optional: true
+            - name: OPENID_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-oidc-secret
+                  key: client_id
+                  optional: true
+            - name: OPENID_REDIRECT_URI
+              valueFrom:
+                secretKeyRef:
+                  name: guacamole-oidc-secret
+                  key: redirect_uri
+                  optional: true
+
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /guacamole/
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /guacamole/
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guacamole
+  namespace: guacamole
+spec:
+  selector:
+    app: guacamole
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
