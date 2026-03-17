@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://git.reckeweg.io/seri/homelab-gitops.git
+    repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
     targetRevision: HEAD
     path: gitops/config/guacamole
   destination:
