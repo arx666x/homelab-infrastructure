@@ -1,23 +1,30 @@
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
   name: guacamole
   namespace: guacamole
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.middlewares: guacamole-guacamole-redirect-root@kubernetescrd
 spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`guacamole.reckeweg.io`)
-      kind: Rule
-      services:
-        - name: guacamole
-          port: 80
-      middlewares:
-        - name: guacamole-redirect-root
+  ingressClassName: traefik
+  rules:
+    - host: guacamole.reckeweg.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: guacamole
+                port:
+                  number: 80
   tls:
-    certResolver: cloudflare-dns
+    - hosts:
+        - guacamole.reckeweg.io
+      secretName: guacamole-tls
 ---
-# Redirect / → /guacamole/ damit die App ohne manuellen Pfad erreichbar ist
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -28,3 +35,4 @@ spec:
     regex: "^https://guacamole\\.reckeweg\\.io/?$"
     replacement: "https://guacamole.reckeweg.io/guacamole/"
     permanent: false
+
