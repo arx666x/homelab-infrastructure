@@ -59,9 +59,7 @@ spec:
             annotations:
               cert-manager.io/cluster-issuer: letsencrypt-prod
               traefik.ingress.kubernetes.io/router.entrypoints: websecure
-          # Kein additionalDataSources für Loki - wird automatisch
-          # durch den loki-stack Helm-Chart als ConfigMap bereitgestellt
-        
+
         alertmanager:
           alertmanagerSpec:
             storage:
@@ -71,7 +69,224 @@ spec:
                   resources:
                     requests:
                       storage: 10Gi
-  
+
+          config:
+            global:
+              resolve_timeout: 5m
+              smtp_smarthost: 'smtp.gmail.com:587'
+              smtp_from: 'achim.reckeweg@gmail.com'
+              smtp_auth_username: 'achim.reckeweg@gmail.com'
+              smtp_auth_password_file: /etc/alertmanager/secrets/alertmanager-credentials/gmail-password
+              smtp_require_tls: true
+
+            route:
+              group_by: ['alertname', 'node', 'namespace']
+              group_wait: 30s
+              group_interval: 5m
+              repeat_interval: 4h
+              receiver: telegram
+              routes:
+                # Kritische Alerts: Telegram UND E-Mail
+                - receiver: telegram-and-email
+                  matchers:
+                    - name: severity
+                      value: critical
+                  continue: false
+                # Warning Alerts: nur Telegram
+                - receiver: telegram
+                  matchers:
+                    - name: severity
+                      value: warning
+                  continue: false
+
+            receivers:
+              - name: telegram
+                telegram_configs:
+                  - bot_token_file: /etc/alertmanager/secrets/alertmanager-credentials/telegram-bot-token
+                    chat_id: 8677165142
+                    parse_mode: HTML
+                    message: |
+                      {{ if eq .Status "firing" }}🔴{{ else }}🟢{{ end }} <b>{{ .Status | toUpper }}: {{ .CommonLabels.alertname }}</b>
+                      {{ range .Alerts }}
+                      📍 {{ .Annotations.summary }}
+                      {{ if .Annotations.description }}ℹ️ {{ .Annotations.description }}{{ end }}
+                      🕐 {{ .StartsAt.Format "15:04:05" }}
+                      {{ end }}
+
+              - name: email
+                email_configs:
+                  - to: 'achim.reckeweg@gmail.com'
+                    send_resolved: true
+                    headers:
+                      Subject: '[Homelab] {{ .Status | toUpper }}: {{ .CommonLabels.alertname }}'
+
+              - name: telegram-and-email
+                telegram_configs:
+                  - bot_token_file: /etc/alertmanager/secrets/alertmanager-credentials/telegram-bot-token
+                    chat_id: 8677165142  
+                    parse_mode: HTML
+                    message: |
+                      {{ if eq .Status "firing" }}🔴{{ else }}🟢{{ end }} <b>{{ .Status | toUpper }}: {{ .CommonLabels.alertname }}</b>
+                      {{ range .Alerts }}
+                      📍 {{ .Annotations.summary }}
+                      {{ if .Annotations.description }}ℹ️ {{ .Annotations.description }}{{ end }}
+                      🕐 {{ .StartsAt.Format "15:04:05" }}
+                      {{ end }}
+                email_configs:
+                  - to: 'achim.reckeweg@gmail.com'
+                    send_resolved: true
+                    headers:
+                      Subject: '[Homelab] 🔴 {{ .Status | toUpper }}: {{ .CommonLabels.alertname }}'
+
+            inhibit_rules:
+              - source_matchers:
+                  - name: severity
+                    value: critical
+                target_matchers:
+                  - name: severity
+                    value: warning
+                equal: ['alertname', 'node']
+
+          # Secret mit Credentials in Alertmanager mounten
+          alertmanagerSpec:
+            secrets:
+              - alertmanager-credentials
+            storage:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: longhorn
+                  resources:
+                    requests:
+                      storage: 10Gi
+
+        # PrometheusRules fuer Homelab Alerts
+        additionalPrometheusRulesMap:
+          homelab-rules:
+            groups:
+              - name: nodes
+                interval: 1m
+                rules:
+                  - alert: NodeNotReady
+                    expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+                    for: 5m
+                    labels:
+                      severity: critical
+                    annotations:
+                      summary: "Node {{ $labels.node }} ist nicht Ready"
+                      description: "Node {{ $labels.node }} meldet seit 5 Minuten NotReady. Bitte pruefen!"
+
+                  - alert: NodeMemoryPressure
+                    expr: kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+                    for: 2m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Memory Pressure auf Node {{ $labels.node }}"
+                      description: "Node {{ $labels.node }} hat Memory Pressure. Pods koennen nicht mehr scheduled werden."
+
+                  - alert: NodeDiskPressure
+                    expr: kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+                    for: 2m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Disk Pressure auf Node {{ $labels.node }}"
+                      description: "Node {{ $labels.node }} hat Disk Pressure. Speicher pruefen!"
+
+                  - alert: NodeHighMemoryUsage
+                    expr: |
+                      (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+                    for: 5m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Hoher RAM-Verbrauch auf {{ $labels.instance }}"
+                      description: "{{ $labels.instance }} hat {{ $value | humanize }}% RAM Auslastung."
+
+              - name: pods
+                interval: 1m
+                rules:
+                  - alert: PodCrashLooping
+                    expr: rate(kube_pod_container_status_restarts_total[15m]) * 60 * 15 > 3
+                    for: 5m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} crashloopt"
+                      description: "Container {{ $labels.container }} hat mehr als 3 Restarts in 15 Minuten."
+
+                  - alert: PodNotReady
+                    expr: |
+                      kube_pod_status_ready{condition="true"} == 0
+                      and kube_pod_status_phase{phase=~"Pending|Running"} == 1
+                    for: 10m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} nicht Ready"
+                      description: "Pod laeuft seit mehr als 10 Minuten aber ist nicht Ready."
+
+                  - alert: PodOOMKilled
+                    expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+                    for: 0m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} durch OOM gekillt"
+                      description: "Container {{ $labels.container }} wurde wegen Out-of-Memory beendet."
+
+              - name: longhorn
+                interval: 1m
+                rules:
+                  - alert: LonghornVolumeUnhealthy
+                    expr: longhorn_volume_robustness == 3
+                    for: 2m
+                    labels:
+                      severity: critical
+                    annotations:
+                      summary: "Longhorn Volume {{ $labels.volume }} ist unhealthy"
+                      description: "Volume {{ $labels.volume }} hat Robustness-Status 'faulted'. Sofort pruefen!"
+
+                  - alert: LonghornVolumeDegraded
+                    expr: longhorn_volume_robustness == 2
+                    for: 5m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Longhorn Volume {{ $labels.volume }} ist degradiert"
+                      description: "Volume {{ $labels.volume }} laeuft ohne vollstaendige Replikation."
+
+                  - alert: LonghornNodeDown
+                    expr: longhorn_node_status{condition="ready"} == 0
+                    for: 5m
+                    labels:
+                      severity: critical
+                    annotations:
+                      summary: "Longhorn Node {{ $labels.node }} ist down"
+                      description: "Longhorn kann Node {{ $labels.node }} nicht erreichen."
+
+                  - alert: LonghornDiskAlmostFull
+                    expr: |
+                      (longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes) * 100 > 85
+                    for: 5m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Longhorn Disk auf {{ $labels.node }} fast voll"
+                      description: "Disk {{ $labels.disk }} auf {{ $labels.node }} ist zu {{ $value | humanize }}% voll."
+
+              - name: k3s
+                interval: 1m
+                rules:
+                  - alert: K3sAgentDown
+                    expr: up{job="kubelet"} == 0
+                    for: 5m
+                    labels:
+                      severity: critical
+                    annotations:
+                      summary: "k3s Agent auf {{ $labels.node }} nicht erreichbar"
+                      description: "Der kubelet auf Node {{ $labels.node }} antwortet nicht mehr."
+
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
