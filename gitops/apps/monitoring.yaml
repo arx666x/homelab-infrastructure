@@ -90,13 +90,11 @@ spec:
               routes:
                 - receiver: telegram-and-email
                   matchers:
-                    - name: severity
-                      value: critical
+                    - severity = critical
                   continue: false
                 - receiver: telegram
                   matchers:
-                    - name: severity
-                      value: warning
+                    - severity = warning
                   continue: false
 
             receivers:
@@ -140,11 +138,9 @@ spec:
 
             inhibit_rules:
               - source_matchers:
-                  - name: severity
-                    value: critical
+                  - severity = critical
                 target_matchers:
-                  - name: severity
-                    value: warning
+                  - severity = warning
                 equal: ['alertname', 'node']
 
         additionalPrometheusRulesMap:
