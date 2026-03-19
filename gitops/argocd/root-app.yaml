@@ -34,3 +34,5 @@ spec:
       jsonPointers:
         - /status
         - /operation
+        - /spec/syncPolicy/automated/prune
+        - /spec/retry
