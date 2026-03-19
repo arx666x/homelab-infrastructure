@@ -15,6 +15,15 @@ spec:
       releaseName: kube-prometheus-stack
       skipCrds: false
       values: |
+        # k3s-spezifische Default Rules deaktivieren
+        # k3s hat kein separates kube-proxy, kube-scheduler, kube-controller-manager
+        defaultRules:
+          rules:
+            kubeProxy: false
+          disabled:
+            KubeSchedulerDown: true
+            KubeControllerManagerDown: true
+
         prometheus:
           prometheusSpec:
             retention: 30d
