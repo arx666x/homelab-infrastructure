@@ -38,7 +38,17 @@ spec:
           protocol: TCP
         - port: 53
           protocol: UDP
-    # RDP + Management: nur aus Management-VLAN
+    # RDP + Management: Management-VLAN und Cluster-intern
+    - from:
+        - ipBlock:
+            cidr: 192.168.11.0/24
+        - ipBlock:
+            cidr: 192.168.20.0/24
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - port: 3389
+          protocol: TCP
     - from:
         - ipBlock:
             cidr: 192.168.11.0/24
