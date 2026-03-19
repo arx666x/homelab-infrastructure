@@ -40,6 +40,11 @@ spec:
         - /status
         - /metadata/annotations
         - /spec/template/metadata/annotations
+    - group: cert-manager.io
+      kind: Certificate
+      jsonPointers:
+        - /spec/duration
+        - /spec/renewBefore
   retry:
     limit: 5
     backoff:
