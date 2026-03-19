@@ -62,6 +62,8 @@ spec:
 
         alertmanager:
           alertmanagerSpec:
+            secrets:
+              - alertmanager-credentials
             storage:
               volumeClaimTemplate:
                 spec:
@@ -86,13 +88,11 @@ spec:
               repeat_interval: 4h
               receiver: telegram
               routes:
-                # Kritische Alerts: Telegram UND E-Mail
                 - receiver: telegram-and-email
                   matchers:
                     - name: severity
                       value: critical
                   continue: false
-                # Warning Alerts: nur Telegram
                 - receiver: telegram
                   matchers:
                     - name: severity
@@ -123,7 +123,7 @@ spec:
               - name: telegram-and-email
                 telegram_configs:
                   - bot_token_file: /etc/alertmanager/secrets/alertmanager-credentials/telegram-bot-token
-                    chat_id: 8677165142  
+                    chat_id: 8677165142
                     parse_mode: HTML
                     message: |
                       {{ if eq .Status "firing" }}🔴{{ else }}🟢{{ end }} <b>{{ .Status | toUpper }}: {{ .CommonLabels.alertname }}</b>
@@ -147,19 +147,6 @@ spec:
                     value: warning
                 equal: ['alertname', 'node']
 
-          # Secret mit Credentials in Alertmanager mounten
-          alertmanagerSpec:
-            secrets:
-              - alertmanager-credentials
-            storage:
-              volumeClaimTemplate:
-                spec:
-                  storageClassName: longhorn
-                  resources:
-                    requests:
-                      storage: 10Gi
-
-        # PrometheusRules fuer Homelab Alerts
         additionalPrometheusRulesMap:
           homelab-rules:
             groups:
