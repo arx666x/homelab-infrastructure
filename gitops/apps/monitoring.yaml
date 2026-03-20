@@ -20,9 +20,12 @@ spec:
         defaultRules:
           rules:
             kubeProxy: false
+            kubeControllerManager: false
+            kubeScheduler: false
           disabled:
             KubeSchedulerDown: true
             KubeControllerManagerDown: true
+            KubeProxyDown: true
 
         prometheus:
           prometheusSpec:
