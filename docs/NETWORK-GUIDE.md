@@ -191,6 +191,96 @@ This is **normal** and **correct**!
 
 ---
 
+## Known Issue: Cloudflare ECH (Encrypted Client Hello)
+
+### Symptom
+
+After setting up cert-manager with valid Let's Encrypt certificates, services are accessible in **Safari on macOS** but fail in other browsers/devices:
+
+| Client | Behavior |
+|--------|----------|
+| Safari (macOS) | ✅ Works |
+| Chrome (macOS) | ❌ `ERR_ECH_FALLBACK_CERTIFICATE_INVALID` |
+| Safari (iOS/iPadOS) | ❌ Blank/grey page after 10–20s timeout |
+
+Crucially: `openssl s_client` and `curl` confirm the Let's Encrypt certificate is valid and correctly issued. The problem is **not** the certificate itself.
+
+### Root Cause
+
+Cloudflare automatically enables **ECH (Encrypted Client Hello)** for all proxied domains. ECH is a modern TLS extension that encrypts the SNI (Server Name Indication) field in the ClientHello, preventing passive observers from seeing which hostname a client is connecting to.
+
+The conflict arises because:
+1. Cloudflare advertises ECH support via `HTTPS` DNS records and publishes ECH keys
+2. Chrome (since ~v117) and iOS/iPadOS (since iOS 18) actively attempt ECH
+3. Traefik does **not** support ECH — it cannot decrypt the ECH-encrypted ClientHello
+4. The ECH handshake fails and falls back to unencrypted SNI
+5. Cloudflare's fallback validation then detects a certificate mismatch → connection aborted
+
+Safari on macOS does not yet implement ECH, so it never attempts ECH and connects normally via standard TLS — which is why it works while Chrome and iOS fail.
+
+### Solution: Disable ECH via Cloudflare API
+
+The ECH setting is **not exposed in the Cloudflare Dashboard UI** (as of 2026). It must be disabled via the API.
+
+**Step 1: Create an API Token**
+
+Go to [https://dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) → **Create Token** → Custom Token with these permissions:
+
+| Permission | Value |
+|------------|-------|
+| Zone → Settings | Edit |
+| Zone → Zone | Read |
+
+> **Important:** The permission needed is **Zone → Settings → Edit**, NOT "Account: SSL and Certificates - Edit" — that is a different scope and will not work.
+
+**Step 2: Find your Zone ID**
+
+Your Zone ID is visible in the Cloudflare Dashboard on the Overview page for `reckeweg.io` (right sidebar). For this setup:
+```
+Zone ID: 9defaf36407ee5ce11a88802f4fac101
+```
+
+**Step 3: Check current ECH status**
+
+```bash
+curl "https://api.cloudflare.com/client/v4/zones/<ZONE_ID>/settings/ech" \
+  -H "Authorization: Bearer <API_TOKEN>"
+```
+
+Expected response when enabled:
+```json
+{"result":{"id":"ech","value":"on","modified_on":null,"editable":true},"success":true}
+```
+
+**Step 4: Disable ECH**
+
+```bash
+curl -X PATCH "https://api.cloudflare.com/client/v4/zones/<ZONE_ID>/settings/ech" \
+  -H "Authorization: Bearer <API_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"value": "off"}'
+```
+
+Expected response:
+```json
+{"result":{"id":"ech","value":"off","modified_on":null,"editable":true},"success":true}
+```
+
+**Step 5: Verify**
+
+After disabling ECH, re-test in Chrome and on iOS/iPadOS. DNS changes propagate quickly since Cloudflare removes the ECH keys from the `HTTPS` DNS record immediately. A hard refresh (`Cmd+Shift+R`) or clearing the browser DNS cache may be needed.
+
+### Why not just disable the Cloudflare Proxy?
+
+Switching DNS records from "Proxied" (orange cloud) to "DNS only" (grey cloud) would also avoid ECH, but has tradeoffs:
+- Your home IP address becomes publicly visible in DNS
+- You lose Cloudflare's DDoS protection and caching
+- Disabling ECH via API keeps the proxy active with all its benefits
+
+For a homelab with a dynamic IP and no sensitive exposure, either approach is acceptable. Disabling ECH is the cleaner solution.
+
+---
+
 ## Network Testing
 
 ### From Client (Mac)
@@ -211,6 +301,11 @@ curl -v https://argocd.reckeweg.io
 # 4. Ping (expected to fail)
 ping 192.168.20.100
 # Will fail - this is OK!
+
+# 5. Verify certificate issuer
+echo | openssl s_client -connect argocd.reckeweg.io:443 -servername argocd.reckeweg.io 2>/dev/null \
+  | openssl x509 -noout -issuer -subject -dates
+# Should show: issuer=C=US, O=Let's Encrypt, CN=R13
 ```
 
 ### From Kubernetes Node
@@ -259,7 +354,7 @@ curl -k -H "Host: argocd.reckeweg.io" https://192.168.20.100
 2. **Check with curl:**
    ```bash
    curl -v https://<service>.reckeweg.io
-   # If this works → Browser issue (see BROWSER-ISSUES.md)
+   # If this works → Browser issue (see below)
    ```
 
 3. **Check Ingress:**
@@ -273,6 +368,10 @@ curl -k -H "Host: argocd.reckeweg.io" https://192.168.20.100
    kubectl get certificate -A
    # All should be READY=True
    ```
+
+5. **Chrome shows `ERR_ECH_FALLBACK_CERTIFICATE_INVALID` / iOS shows blank page:**
+   → See **Known Issue: Cloudflare ECH** section above.
+   → Quick check: does Safari on macOS work but Chrome/iOS not? → ECH is the cause.
 
 ### Inter-VLAN Routing issues
 
@@ -311,5 +410,6 @@ nslookup argocd.reckeweg.io 192.168.11.55
 4. **Layer 7 Routing:** Traefik inspects HTTP Host header
 5. **TLS Termination:** Traefik handles HTTPS, backends use HTTP
 6. **Valid Certificates:** Let's Encrypt via DNS-01 (fully trusted)
+7. **ECH disabled on Cloudflare:** Required for Chrome and iOS compatibility (Traefik does not support ECH)
 
 **All traffic stays internal** when accessing from LAN - never hits internet!
