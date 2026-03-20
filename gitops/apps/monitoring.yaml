@@ -19,6 +19,8 @@ spec:
         # k3s hat kein separates kube-proxy, kube-scheduler, kube-controller-manager
         defaultRules:
           rules:
+            kubeScheduler: false
+            kubeControllerManager: false
             kubeProxy: false
           disabled:
             KubeSchedulerDown: true
@@ -317,13 +319,13 @@ spec:
         - /webhooks
     - group: monitoring.coreos.com
       kind: PrometheusRule
-      name: kube-prometheus-stack-kubernetes-system-scheduler
+      name: kube-prometheus-stack-kubernetes-system-controller-manager
       namespace: monitoring
       jsonPointers:
         - /spec
     - group: monitoring.coreos.com
       kind: PrometheusRule
-      name: kube-prometheus-stack-kubernetes-system-controller-manager
+      name: kube-prometheus-stack-kubernetes-system-scheduler
       namespace: monitoring
       jsonPointers:
         - /spec
@@ -333,4 +335,3 @@ spec:
       namespace: monitoring
       jsonPointers:
         - /spec
-
