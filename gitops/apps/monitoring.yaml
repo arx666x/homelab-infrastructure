@@ -320,17 +320,17 @@ spec:
       name: kube-prometheus-stack-kubernetes-system-scheduler
       namespace: monitoring
       jsonPointers:
-        - /spec/groups
+        - /spec
     - group: monitoring.coreos.com
       kind: PrometheusRule
       name: kube-prometheus-stack-kubernetes-system-controller-manager
       namespace: monitoring
       jsonPointers:
-        - /spec/groups
+        - /spec
     - group: monitoring.coreos.com
       kind: PrometheusRule
       name: kube-prometheus-stack-kubernetes-system-kube-proxy
       namespace: monitoring
       jsonPointers:
-        - /spec/groups
+        - /spec
 
