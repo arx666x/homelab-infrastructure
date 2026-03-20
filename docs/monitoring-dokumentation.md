@@ -109,24 +109,38 @@ Alle Alerts → Telegram
 
 ## Secrets
 
-Die Alertmanager-Credentials werden als manuell erstelltes Kubernetes Secret
-verwaltet (noch kein Sealed Secrets – geplant):
+Die Monitoring-Secrets werden seit 20.03.2026 als **Sealed Secrets** verwaltet
+und sind im Repo unter `gitops/config/monitoring/` gespeichert.
 
-```bash
-kubectl create secret generic alertmanager-credentials \
-  --namespace monitoring \
-  --from-literal=telegram-bot-token='<TOKEN>' \
-  --from-literal=telegram-chat-id='<CHAT_ID>' \
-  --from-literal=gmail-user='achim.reckeweg@gmail.com' \
-  --from-literal=gmail-password='<APP_PASSWORD_OHNE_SPACES>'
-```
+| Secret | Datei | Keys |
+|--------|-------|------|
+| `alertmanager-credentials` | `sealed-alertmanager-credentials.yaml` | `gmail-password`, `telegram-bot-token` |
+| `grafana-admin-secret` | `sealed-grafana-admin-secret.yaml` | `admin-user`, `admin-password` |
+
+Das Secret `alertmanager-credentials` wird in den Alertmanager Pod gemountet unter:
+`/etc/alertmanager/secrets/alertmanager-credentials/`
 
 **Wichtig:** Das Gmail App-Password muss ohne Leerzeichen gespeichert werden
 (Google zeigt es zur Lesbarkeit mit Spaces an, das eigentliche Passwort
 sind die 16 Zeichen ohne Spaces).
 
-Das Secret wird in den Alertmanager Pod gemountet unter:
-`/etc/alertmanager/secrets/alertmanager-credentials/`
+Secret rotieren (z.B. neues Gmail App-Password):
+
+```bash
+kubectl delete secret alertmanager-credentials -n monitoring
+
+kubectl create secret generic alertmanager-credentials \
+  --namespace monitoring \
+  --from-literal=gmail-password='<NEUES_APP_PASSWORD>' \
+  --from-literal=telegram-bot-token='<TOKEN>' \
+  --dry-run=client -o json \
+  | kubeseal --cert gitops/sealed-secrets/pub-cert.pem --format yaml \
+  > gitops/config/monitoring/sealed-alertmanager-credentials.yaml
+
+git add gitops/config/monitoring/sealed-alertmanager-credentials.yaml
+git commit -m "chore: rotate alertmanager credentials"
+git push
+```
 
 ---
 
@@ -302,7 +316,131 @@ kubectl rollout restart statefulset/alertmanager-kube-prometheus-stack-alertmana
 
 ## Geplante Erweiterungen
 
-- Sealed Secrets für Alertmanager-Credentials (ersetzt manuelles Secret)
+- ~~Sealed Secrets für Alertmanager-Credentials~~ ✅ Erledigt (20.03.2026)
 - Grafana-Dashboards für Node-Übersicht und Longhorn-Status
 - AlertmanagerConfig CRD statt inline Helm Values (nach Sealed Secrets Migration)
 - Windows AD VM Monitoring (QEMU Guest Agent Metriken)
+
+---
+
+## k3s PrometheusRules — null-Rules Problem (20.03.2026)
+
+### Problem
+
+Bei der Sealed Secrets Migration wurde `monitoring.yaml` angepasst. Dabei
+entstanden durch das Deaktivieren von k3s-inkompatiblen Rule-Gruppen drei
+PrometheusRule-Objekte mit `rules: null` statt `rules: []`:
+
+```
+kube-prometheus-stack-kubernetes-system-controller-manager
+kube-prometheus-stack-kubernetes-system-scheduler
+kube-prometheus-stack-kubernetes-system-kube-proxy
+```
+
+Kubernetes lehnt PrometheusRules mit `rules: null` ab:
+
+```
+PrometheusRule is invalid: spec.groups[0].rules:
+  Invalid value: "null": must be of type array: "null"
+```
+
+ArgoCD blieb dauerhaft im `OutOfSync`-Status da es die Rules anlegen wollte,
+Kubernetes sie aber ablehnte.
+
+### Ursache
+
+Der kube-prometheus-stack Helm Chart v55.5.0 generiert beim Deaktivieren
+einer Rule-Gruppe (`kubeControllerManager: false`) das PrometheusRule-Objekt
+weiterhin, befüllt aber `rules` mit `null` statt einem leeren Array. Dies
+ist ein bekanntes Verhalten in dieser Chart-Version.
+
+`ignoreDifferences` in ArgoCD hilft bei `Missing`-Resources nicht — es
+ignoriert nur Drift bei bereits bestehenden Resources.
+
+### Lösung
+
+**Schritt 1** — Rule-Gruppen korrekt deaktivieren in `monitoring.yaml`:
+
+```yaml
+defaultRules:
+  rules:
+    kubeProxy: false
+    kubeControllerManager: false
+    kubeScheduler: false
+  disabled:
+    KubeSchedulerDown: true
+    KubeControllerManagerDown: true
+    KubeProxyDown: true
+```
+
+**Schritt 2** — Die drei PrometheusRules einmalig mit validen leeren Rules
+im Cluster anlegen (damit ArgoCD sie nicht neu anlegen muss):
+
+```bash
+for name in controller-manager scheduler kube-proxy; do
+kubectl apply -f - <<EOF
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kube-prometheus-stack-kubernetes-system-${name}
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: kubernetes-system-${name}
+      rules: []
+EOF
+done
+```
+
+**Schritt 3** — `ignoreDifferences` in `monitoring.yaml` ergänzen damit
+ArgoCD künftige Spec-Änderungen durch den Operator ignoriert:
+
+```yaml
+ignoreDifferences:
+  # ... bestehende Einträge ...
+  - group: monitoring.coreos.com
+    kind: PrometheusRule
+    name: kube-prometheus-stack-kubernetes-system-controller-manager
+    namespace: monitoring
+    jsonPointers:
+      - /spec
+  - group: monitoring.coreos.com
+    kind: PrometheusRule
+    name: kube-prometheus-stack-kubernetes-system-scheduler
+    namespace: monitoring
+    jsonPointers:
+      - /spec
+  - group: monitoring.coreos.com
+    kind: PrometheusRule
+    name: kube-prometheus-stack-kubernetes-system-kube-proxy
+    namespace: monitoring
+    jsonPointers:
+      - /spec
+```
+
+**Schritt 4** — `RespectIgnoreDifferences=true` in `syncOptions`:
+
+```yaml
+syncOptions:
+  - CreateNamespace=true
+  - ServerSideApply=true
+  - RespectIgnoreDifferences=true
+```
+
+### Hinweis für zukünftige Chart-Upgrades
+
+Bei einem Upgrade von kube-prometheus-stack prüfen ob das `null`-Problem
+in der neuen Version behoben ist:
+
+```bash
+helm template kube-prometheus-stack \
+  prometheus-community/kube-prometheus-stack \
+  --version <NEUE_VERSION> \
+  --set defaultRules.rules.kubeControllerManager=false \
+  | grep -c "kubernetes-system-controller-manager"
+```
+
+Ergibt der Befehl `0` → Problem behoben, `ignoreDifferences` und die
+manuell angelegten leeren Rules können entfernt werden.
