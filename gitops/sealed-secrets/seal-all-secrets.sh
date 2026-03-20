@@ -17,6 +17,23 @@
 #   1. Bestehende Secrets aus dem Cluster exportieren und versiegeln
 #   2. Neue Secrets interaktiv abfragen und versiegeln
 #   3. SealedSecret-YAMLs an die richtige Stelle unter gitops/config/ legen
+
+# Wann dieses Script verwenden?
+#
+# 1. NEUES SECRET hinzufügen:
+#    - seal_new() Block für die App ergänzen, ausführen, committed sealed-*.yaml
+#
+# 2. SECRET ROTATION (Passwort ändern):
+#    - kubectl delete secret <name> -n <namespace>
+#    - Diesen Block im Script ausführen (exportiert neu und versiegelt)
+#    - sealed-*.yaml committen und pushen
+#
+# 3. CLUSTER-NEUBAU (z.B. nach Totalverlust):
+#    - Master Key aus Passwortmanager wiederherstellen:
+#        kubectl apply -f sealed-secrets-master-key.yaml
+#        kubectl rollout restart deployment/sealed-secrets-controller -n kube-system
+#    - Dann NICHTS tun — ArgoCD deployt alle SealedSecrets automatisch neu
+#    - Dieses Script wird beim Neubau NICHT benötigt
 # =============================================================================
 
 set -euo pipefail
