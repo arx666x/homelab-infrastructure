@@ -6,3 +6,5 @@ resources:
   - guacd.yaml
   - guacamole.yaml
   - ingressroute.yaml
+  - sealed-db-secret.yaml
+  # sealed-oidc-secret.yaml  # Phase 2: aktivieren sobald Keycloak deployed

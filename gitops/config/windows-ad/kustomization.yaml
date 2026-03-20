@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - 00-namespace.yaml
+  - 01-cert.yaml
+  - 02-datavolume.yaml
+  - 03-vm.yaml
+  - 04-services.yaml
+  - 05-networkpolicy.yaml
+  - sealed-ldaps-pkcs12-password.yaml
+  - sealed-ldap-service-credentials.yaml
+  - sealed-windows-ad-ca.yaml
