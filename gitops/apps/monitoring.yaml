@@ -20,8 +20,6 @@ spec:
         defaultRules:
           rules:
             kubeProxy: false
-            kubeControllerManager: false
-            kubeScheduler: false
           disabled:
             KubeSchedulerDown: true
             KubeControllerManagerDown: true
@@ -316,3 +314,22 @@ spec:
       kind: ValidatingWebhookConfiguration
       jsonPointers:
         - /webhooks
+    - group: monitoring.coreos.com
+      kind: PrometheusRule
+      name: kube-prometheus-stack-kubernetes-system-scheduler
+      namespace: monitoring
+      jsonPointers:
+        - /spec/groups
+    - group: monitoring.coreos.com
+      kind: PrometheusRule
+      name: kube-prometheus-stack-kubernetes-system-controller-manager
+      namespace: monitoring
+      jsonPointers:
+        - /spec/groups
+    - group: monitoring.coreos.com
+      kind: PrometheusRule
+      name: kube-prometheus-stack-kubernetes-system-kube-proxy
+      namespace: monitoring
+      jsonPointers:
+        - /spec/groups
+
