@@ -4,7 +4,7 @@
 # Secrets (never commit these!)
 **/secrets-*.yaml
 **/.*secret*.yaml
-./gitops/config/monitoring/secret-templates.yaml
+gitops/config/monitoring/secret-templates.yaml
 
 # Generated files
 docs-portal/generated/
