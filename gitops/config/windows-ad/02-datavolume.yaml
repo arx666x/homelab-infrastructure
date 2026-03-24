@@ -1,6 +1,6 @@
 # Wave 2: Image-Import starten (laeuft asynchron, ~5-10 min)
 # CDI importiert von Synology NAS via HTTP
-# SHA256-Pruefung: http://diskstation:6666/windows-server-2025-ad-seri.x86.qcow2.sha256
+# SHA256-Pruefung: http://diskstation:6666/Windows-Server-2025-AD-SERI-X86/windows-server-2025-ad-seri.x86.qcow2.sha256
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataVolume
 metadata:
@@ -12,7 +12,7 @@ metadata:
 spec:
   source:
     http:
-      url: "http://diskstation:6666/windows-server-2025-ad-seri.x86.qcow2"
+      url: "http://diskstation:6666/Windows-Server-2025-AD-SERI-X86/windows-server-2025-ad-seri.x86.qcow2"
   storage:
     accessModes:
       - ReadWriteOnce

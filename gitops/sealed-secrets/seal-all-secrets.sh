@@ -210,7 +210,7 @@ if kubectl get secret windows-ad-ca -n windows-ad &>/dev/null; then
     "gitops/config/windows-ad/sealed-windows-ad-ca.yaml"
 else
   warn "windows-ad-ca nicht im Cluster – bitte manuell von Synology laden:"
-  echo "  curl -sf http://diskstation:6666/windows-server-2025-ad-seri.certs/ca.cer -o /tmp/ca.crt"
+  echo "  curl -sf http://diskstation:6666/Windows-Server-2025-AD-SERI-X86/windows-server-2025-ad-seri.certs/ca.cer -o /tmp/ca.crt"
   echo "  kubectl create secret generic windows-ad-ca --namespace=windows-ad \\"
   echo "    --from-file=ca.crt=/tmp/ca.crt --dry-run=client -o json \\"
   echo "    | kubeseal --cert $CERT --format yaml \\"
