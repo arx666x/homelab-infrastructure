@@ -8,5 +8,4 @@ resources:
   - service.yaml
   - certificate.yaml
   - ingressroute.yaml
-  # Uncomment sobald Secrets via kubeseal angelegt wurden:
-   - sealed-secret.yaml
+  - sealed-secret.yaml
