@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homeassistant
+  namespace: homeassistant
+  labels:
+    app: homeassistant
+spec:
+  replicas: 1
+  # Recreate: HA verträgt keinen parallelen Betrieb (SQLite-Lock auf /config)
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: homeassistant
+  template:
+    metadata:
+      labels:
+        app: homeassistant
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: homeassistant
+          image: ghcr.io/home-assistant/home-assistant:2025.3.4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8123
+              name: http
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "Europe/Berlin"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: localtime
+              mountPath: /etc/localtime
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8123
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8123
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: homeassistant-config
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+            type: File
