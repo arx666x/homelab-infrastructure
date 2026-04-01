@@ -1,0 +1,61 @@
+---
+# Setzt PSU_MAX_CURRENT=5000 in der EEPROM-Konfiguration aller Pi Worker Nodes
+# Dadurch nutzt der Pi 5 die vollen 5A ohne USB-PD Negotiation abwarten zu müssen
+#
+# Ausführen mit:
+#   ansible-playbook -i hosts.ini psu_max_current.yml
+#
+# Dry-run (keine Änderungen):
+#   ansible-playbook -i hosts.ini psu_max_current.yml --check
+
+- name: Set PSU_MAX_CURRENT on Raspberry Pi Worker Nodes
+  hosts: worker
+  become: true
+
+  tasks:
+    - name: Aktuelle EEPROM-Konfiguration lesen
+      command: rpi-eeprom-config
+      register: current_config
+      changed_when: false
+
+    - name: Prüfen ob PSU_MAX_CURRENT bereits gesetzt ist
+      set_fact:
+        psu_already_set: "{{ 'PSU_MAX_CURRENT=5000' in current_config.stdout }}"
+
+    - name: PSU_MAX_CURRENT=5000 setzen (falls noch nicht gesetzt)
+      when: not psu_already_set
+      block:
+        - name: Temporäre Config-Datei erstellen
+          shell: |
+            tmpfile=$(mktemp)
+            rpi-eeprom-config > "$tmpfile"
+            echo "PSU_MAX_CURRENT=5000" >> "$tmpfile"
+            echo "$tmpfile"
+          register: tmpfile_path
+          changed_when: false
+
+        - name: EEPROM-Konfiguration anwenden
+          command: rpi-eeprom-config --apply {{ tmpfile_path.stdout | trim }}
+          register: apply_result
+
+        - name: Temporäre Datei aufräumen
+          file:
+            path: "{{ tmpfile_path.stdout | trim }}"
+            state: absent
+
+    - name: Einstellung verifizieren
+      command: rpi-eeprom-config
+      register: final_config
+      changed_when: false
+
+    - name: Ergebnis anzeigen
+      debug:
+        msg: >-
+          {{ inventory_hostname }} ({{ ansible_host }}):
+          {% if 'PSU_MAX_CURRENT=5000' in final_config.stdout %}
+          ✓ PSU_MAX_CURRENT=5000 ist gesetzt
+          {% elif psu_already_set %}
+          ✓ War bereits gesetzt (keine Änderung)
+          {% else %}
+          ✗ Setzen fehlgeschlagen!
+          {% endif %}

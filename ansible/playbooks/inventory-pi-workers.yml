@@ -1,0 +1,14 @@
+# inventory/pi-workers.yml
+#
+# Ansible Inventory für die Raspberry Pi k3s Worker-Nodes
+# Passe die IPs an dein Setup an falls nötig.
+
+all:
+  children:
+    pi_workers:
+      hosts:
+        k3s-01a:
+        k3s-02a:
+        k3s-03a:
+        k3s-04a:
+        k3s-05a:

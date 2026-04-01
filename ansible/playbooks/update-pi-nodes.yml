@@ -1,0 +1,317 @@
+---
+# update-pi-nodes.yml
+#
+# Koordiniertes Update der Raspberry Pi k3s Worker-Nodes
+# mit Longhorn Volume Drain und kontrolliertem Reboot.
+#
+# Ablauf pro Node:
+#   1. Longhorn Disk Eviction aktivieren
+#   2. kubectl drain (Pods evakuieren)
+#   3. Warten bis Longhorn Replicas migriert sind
+#   4. apt upgrade + autoremove
+#   5. EEPROM Update (optional)
+#   6. Reboot
+#   7. Warten bis Node wieder Ready
+#   8. kubectl uncordon
+#   9. Longhorn Disk Scheduling wieder aktivieren
+#  10. Warten bis Longhorn Replicas wieder aufgebaut sind
+#
+# Voraussetzungen:
+#   - ansible-galaxy collection install kubernetes.core
+#   - kubectl konfiguriert auf dem Control-Node (KUBECONFIG)
+#   - SSH-Key Zugang zu allen Pi-Nodes
+#   - Python kubernetes-Package: pip install kubernetes
+#
+# Ausführung:
+#   ansible-playbook update-pi-nodes.yml
+#   ansible-playbook update-pi-nodes.yml --limit k3s-01a   # Einzelner Node
+#   ansible-playbook update-pi-nodes.yml -e eeprom_update=true
+#   ansible-playbook update-pi-nodes.yml -e skip_longhorn=true  # Ohne Longhorn-Drain
+
+- name: Koordiniertes Update der Raspberry Pi k3s Worker-Nodes
+  hosts: pi_workers
+  serial: 1                          # Immer nur einen Node gleichzeitig
+  max_fail_percentage: 0             # Bei Fehler sofort abbrechen
+  gather_facts: true
+
+  vars:
+    eeprom_update: false             # EEPROM Update: -e eeprom_update=true
+    skip_longhorn: false             # Longhorn überspringen: -e skip_longhorn=true
+    longhorn_namespace: longhorn-system
+    longhorn_wait_timeout: 600       # Sekunden warten auf Longhorn (10 min)
+    node_ready_timeout: 300          # Sekunden warten bis Node wieder Ready (5 min)
+    drain_timeout: 300               # Sekunden für kubectl drain
+    k8s_delegate: gmkt-01x          # Kubernetes-Calls über diesen Master-Node
+    kubectl_bin: /usr/local/bin/kubectl
+
+  tasks:
+
+    # -------------------------------------------------------------------------
+    # PRE-CHECK
+    # -------------------------------------------------------------------------
+
+    - name: "[ PRE ] Node-Name ermitteln"
+      set_fact:
+        k8s_node_name: "{{ inventory_hostname }}"
+
+    - name: "[ PRE ] Kubernetes Node Status prüfen"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: "{{ kubectl_bin }} get node {{ k8s_node_name }} --no-headers"
+      register: node_info
+      changed_when: false
+      failed_when: node_info.rc != 0
+
+    - name: "[ PRE ] Aktuellen Kernel und OS anzeigen"
+      debug:
+        msg: "{{ inventory_hostname }}: {{ ansible_kernel }} / {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    # -------------------------------------------------------------------------
+    # LONGHORN DRAIN
+    # -------------------------------------------------------------------------
+
+    - name: "[ LONGHORN ] Disk-ID ermitteln"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} get node.longhorn.io/{{ k8s_node_name }} \
+          -o jsonpath='{.spec.disks}' | python3 -c \
+          "import sys,json; d=json.load(sys.stdin); print(list(d.keys())[0])"
+      register: longhorn_disk_id_result
+      changed_when: false
+      when: not skip_longhorn
+
+    - name: "[ LONGHORN ] Disk-ID extrahieren"
+      set_fact:
+        longhorn_disk_id: "{{ longhorn_disk_id_result.stdout }}"
+      when:
+        - not skip_longhorn
+        - longhorn_disk_id_result is defined
+
+    - name: "[ LONGHORN ] Disk-ID anzeigen"
+      debug:
+        msg: "Longhorn Disk ID auf {{ inventory_hostname }}: {{ longhorn_disk_id }}"
+      when: not skip_longhorn
+
+    - name: "[ LONGHORN ] Eviction aktivieren + Scheduling deaktivieren"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} patch node.longhorn.io/{{ k8s_node_name }} \
+          --type=merge \
+          -p '{"spec":{"allowScheduling":false,"disks":{"{{ longhorn_disk_id }}":{"allowScheduling":false,"evictionRequested":true}}}}'
+      when: not skip_longhorn
+      changed_when: true
+
+    - name: "[ LONGHORN ] Warten bis alle Replicas evakuiert sind"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} \
+          -n {{ longhorn_namespace }} get replicas \
+          -o jsonpath='{.items[?(@.spec.nodeID=="{{ k8s_node_name }}")].metadata.name}' \
+          | tr ' ' '\n' | grep -c . || echo 0
+      register: replica_count
+      until: replica_count.stdout | int == 0
+      retries: "{{ (longhorn_wait_timeout / 10) | int }}"
+      delay: 10
+      when: not skip_longhorn
+      changed_when: false
+
+    - name: "[ LONGHORN ] Replica-Anzahl nach Eviction anzeigen"
+      debug:
+        msg: "Replicas auf {{ inventory_hostname }}: {{ replica_count.stdout }}"
+      when: not skip_longhorn
+
+    # -------------------------------------------------------------------------
+    # KUBERNETES DRAIN
+    # -------------------------------------------------------------------------
+
+    - name: "[ K8S ] Node drainieren (Pods evakuieren)"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} drain {{ k8s_node_name }} \
+          --ignore-daemonsets \
+          --delete-emptydir-data \
+          --timeout={{ drain_timeout }}s
+      register: drain_result
+      changed_when: true
+
+    - name: "[ K8S ] Drain-Ergebnis anzeigen"
+      debug:
+        msg: "{{ drain_result.stdout_lines[-3:] }}"
+
+    # -------------------------------------------------------------------------
+    # APT UPDATE
+    # -------------------------------------------------------------------------
+
+    - name: "[ APT ] apt-daily Timer deaktivieren (falls noch aktiv)"
+      become: true
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop:
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      ignore_errors: true
+
+    - name: "[ APT ] apt update"
+      become: true
+      apt:
+        update_cache: true
+        cache_valid_time: 0
+
+    - name: "[ APT ] Pakete upgraden"
+      become: true
+      apt:
+        upgrade: full
+        autoremove: true
+        autoclean: true
+      register: apt_result
+
+    - name: "[ APT ] Installierte/aktualisierte Pakete anzeigen"
+      debug:
+        msg: "{{ apt_result.stdout_lines | select('match', '^(Inst|Remv)') | list }}"
+      when: apt_result.stdout_lines is defined
+
+    # -------------------------------------------------------------------------
+    # EEPROM UPDATE (optional)
+    # -------------------------------------------------------------------------
+
+    - name: "[ EEPROM ] Verfügbare Updates prüfen"
+      become: true
+      command: rpi-eeprom-update
+      register: eeprom_check
+      changed_when: false
+      failed_when: false
+      when: eeprom_update | bool
+
+    - name: "[ EEPROM ] Update-Status anzeigen"
+      debug:
+        msg: "{{ eeprom_check.stdout_lines }}"
+      when: eeprom_update | bool
+
+    - name: "[ EEPROM ] Update einspielen"
+      become: true
+      command: rpi-eeprom-update -a
+      register: eeprom_apply
+      when:
+        - eeprom_update | bool
+        - "'BOOTLOADER: up to date' not in eeprom_check.stdout"
+      changed_when: true
+
+    # -------------------------------------------------------------------------
+    # REBOOT
+    # -------------------------------------------------------------------------
+
+    - name: "[ REBOOT ] Prüfen ob Reboot erforderlich"
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: "[ REBOOT ] Reboot-Grund anzeigen"
+      debug:
+        msg: "Reboot erforderlich: {{ reboot_required.stat.exists }}"
+
+    - name: "[ REBOOT ] Node neu starten"
+      become: true
+      reboot:
+        reboot_timeout: "{{ node_ready_timeout }}"
+        post_reboot_delay: 15
+        msg: "Reboot durch Ansible update-pi-nodes.yml"
+
+    - name: "[ REBOOT ] Warten bis SSH wieder verfügbar"
+      wait_for_connection:
+        delay: 10
+        timeout: "{{ node_ready_timeout }}"
+
+    # -------------------------------------------------------------------------
+    # POST-REBOOT CHECK
+    # -------------------------------------------------------------------------
+
+    - name: "[ POST ] Neuen Kernel anzeigen"
+      command: uname -r
+      register: new_kernel
+      changed_when: false
+
+    - name: "[ POST ] Kernel nach Update"
+      debug:
+        msg: "{{ inventory_hostname }}: Kernel jetzt {{ new_kernel.stdout }}"
+
+    - name: "[ POST ] k3s-agent Status prüfen"
+      become: true
+      systemd:
+        name: k3s-agent
+      register: k3s_status
+
+    - name: "[ POST ] k3s-agent ggf. starten"
+      become: true
+      systemd:
+        name: k3s-agent
+        state: started
+      when: k3s_status.status.ActiveState != 'active'
+
+    - name: "[ POST ] Warten bis Node im Kubernetes Ready ist"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} get node {{ k8s_node_name }} \
+          -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready
+      until: node_ready.stdout == "True"
+      retries: "{{ (node_ready_timeout / 10) | int }}"
+      delay: 10
+      changed_when: false
+
+    # -------------------------------------------------------------------------
+    # KUBERNETES UNCORDON
+    # -------------------------------------------------------------------------
+
+    - name: "[ K8S ] Node uncordon"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} uncordon {{ k8s_node_name }}
+      changed_when: true
+
+    # -------------------------------------------------------------------------
+    # LONGHORN REAKTIVIEREN
+    # -------------------------------------------------------------------------
+
+    - name: "[ LONGHORN ] Eviction aufheben + Scheduling aktivieren"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} patch node.longhorn.io/{{ k8s_node_name }} \
+          --type=merge \
+          -p '{"spec":{"allowScheduling":true,"disks":{"{{ longhorn_disk_id }}":{"allowScheduling":true,"evictionRequested":false}}}}'
+      when: not skip_longhorn
+      changed_when: true
+
+    - name: "[ LONGHORN ] Warten bis Longhorn-Node wieder Schedulable ist"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} \
+          -n {{ longhorn_namespace }} get node.longhorn.io/{{ k8s_node_name }} \
+          -o jsonpath='{.status.conditions[?(@.type=="Schedulable")].status}'
+      register: lh_schedulable
+      until: lh_schedulable.stdout == "True"
+      retries: 30
+      delay: 10
+      when: not skip_longhorn
+      changed_when: false
+
+    - name: "[ LONGHORN ] Warten bis Replicas wieder aufgebaut werden (max. 10 min)"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} get replicas \
+          -o jsonpath='{.items[?(@.spec.nodeID=="{{ k8s_node_name }}")].metadata.name}' \
+          | grep -o 'replica-' | wc -l | tr -d ' '
+      register: new_replicas
+      until: new_replicas.stdout | int > 0
+      retries: 60
+      delay: 10
+      when: not skip_longhorn
+      changed_when: false
+      ignore_errors: true  # Nicht blockieren falls Longhorn lange braucht
+
+    - name: "[ DONE ] Node abgeschlossen"
+      debug:
+        msg: >
+          ✓ {{ inventory_hostname }} erfolgreich aktualisiert.
+          Kernel: {{ new_kernel.stdout }}.
+          Longhorn Replicas: {{ new_replicas.stdout | default('nicht geprüft') }}.
