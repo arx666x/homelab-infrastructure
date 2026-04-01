@@ -9,3 +9,5 @@ resources:
   - certificate.yaml
   - ingressroute.yaml
   - sealed-secret.yaml
+  - sealed-secret-ccu.yaml
+
