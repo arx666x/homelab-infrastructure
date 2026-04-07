@@ -1,0 +1,130 @@
+---
+# ansible/playbooks/add-worker.yml
+# Fügt einen einzelnen neuen Worker-Node zum bestehenden k3s-Cluster hinzu.
+# Aufruf: ansible-playbook playbooks/add-worker.yml -i inventory/hosts.ini --limit worker06
+
+- name: Prepare new worker node
+  hosts: "{{ target | default('worker06') }}"
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: System aktualisieren
+      apt:
+        update_cache: yes
+        upgrade: dist
+        cache_valid_time: 3600
+
+    - name: Benötigte Pakete installieren
+      apt:
+        name:
+          - curl
+          - open-iscsi
+          - nfs-common
+        state: present
+
+    - name: open-iscsi aktivieren (für Longhorn)
+      systemd:
+        name: iscsid
+        enabled: yes
+        state: started
+
+    - name: cgroup memory in cmdline.txt aktivieren (Raspberry Pi)
+      lineinfile:
+        path: /boot/firmware/cmdline.txt
+        backrefs: yes
+        regexp: '^((?!.*cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory).*)$'
+        line: '\1 cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory'
+      register: cgroup_changed
+
+    - name: Reboot wenn cgroup geändert
+      reboot:
+        reboot_timeout: 300
+      when: cgroup_changed.changed
+
+    - name: Hardware-Watchdog aktivieren
+      lineinfile:
+        path: /etc/systemd/system.conf
+        regexp: '^#?RuntimeWatchdogSec='
+        line: 'RuntimeWatchdogSec=15'
+
+    - name: Persistentes journald Logging einrichten
+      file:
+        path: /var/log/journal
+        state: directory
+        mode: '0755'
+
+- name: Longhorn Storage vorbereiten
+  hosts: "{{ target | default('worker06') }}"
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Mount-Verzeichnis erstellen
+      file:
+        path: /mnt/longhorn
+        state: directory
+
+    - name: Longhorn Partition mounten
+      mount:
+        path: /mnt/longhorn
+        src: "UUID={{ var_uuid }}"
+        fstype: ext4
+        opts: defaults
+        state: mounted
+
+    - name: Mount verifizieren
+      command: df -h /mnt/longhorn
+      changed_when: false
+
+- name: k3s Agent installieren
+  hosts: "{{ target | default('worker06') }}"
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Node-Token vom ersten Master holen
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_token
+      delegate_to: "{{ groups['master'][0] }}"
+
+    - name: k3s Agent installieren
+      shell: |
+        curl -sfL https://get.k3s.io | \
+          INSTALL_K3S_VERSION="{{ k3s_version }}" \
+          K3S_URL="https://{{ hostvars[groups['master'][0]]['ansible_host'] }}:6443" \
+          K3S_TOKEN="{{ k3s_token.content | b64decode | trim }}" \
+          sh -s - agent \
+            --node-ip={{ ansible_host }} \
+            --flannel-iface={{ flannel_iface }}
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Warten bis Node im Cluster erscheint
+      command: kubectl get node {{ hostname }}
+      register: node_ready
+      until: "'Ready' in node_ready.stdout"
+      retries: 30
+      delay: 10
+      changed_when: false
+      delegate_to: "{{ groups['master'][0] }}"
+
+    - name: Erfolg melden
+      debug:
+        msg: "{{ hostname }} ({{ inventory_hostname }}) ist erfolgreich dem Cluster beigetreten!"
+
+- name: Node Labels setzen
+  hosts: "{{ target | default('worker06') }}"
+  become: false
+  gather_facts: false
+
+  tasks:
+    - name: Worker- und Arch-Labels setzen
+      command: >
+        kubectl label node {{ hostname }}
+        node-role.kubernetes.io/worker=worker
+        kubernetes.io/arch=arm64
+        node-type=pi
+        --overwrite
+      delegate_to: "{{ groups['master'][0] }}"
