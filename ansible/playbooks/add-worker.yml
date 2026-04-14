@@ -52,7 +52,24 @@
       file:
         path: /var/log/journal
         state: directory
-        mode: '0755'
+        owner: root
+        group: systemd-journal
+        mode: '2755'  # setgid!
+
+    - name: journald auf persistent setzen
+      copy:
+        dest: /etc/systemd/journald.conf.d/persistent.conf
+        content: |
+          [Journal]
+          Storage=persistent
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: journald neu starten für persistentes Logging
+      systemd:
+         name: systemd-journald
+         state: restarted
 
 - name: Longhorn Storage vorbereiten
   hosts: "{{ target | default('worker06') }}"
