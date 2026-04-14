@@ -14,6 +14,7 @@
   serial: 1  # Einen nach dem anderen – Cluster bleibt mit 2/3 Mastern oben
 
   vars:
+    ansible_host: "{{ mgmt_ip }}"  # Über Management-IP verbinden! Da das VLAN kurz weg ist.
     vlan_id: 20
     vlan_parent: enp1s0
     vlan_iface: enp1s0.20
@@ -158,7 +159,7 @@
 
     - name: Node neu starten
       reboot:
-        reboot_timeout: 120
+        reboot_timeout: 300
         pre_reboot_delay: 5
         msg: "Reboot durch Ansible – NetworkManager-Migration"
 
@@ -188,7 +189,7 @@
         msg: "{{ nm_active.stdout_lines }}"
 
     - name: Cluster-Node-Status prüfen
-      command: kubectl get node {{ inventory_hostname.split('.')[0] }}
+      command: kubectl get node {{ hostname }}
       register: node_status
       changed_when: false
       delegate_to: "{{ groups['master'][0] }}"
