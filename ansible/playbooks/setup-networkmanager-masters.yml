@@ -1,0 +1,198 @@
+---
+# ansible/playbooks/setup-networkmanager-masters.yml
+# Migriert GMKTec Master Nodes von ifupdown auf NetworkManager
+# für zuverlässiges VLAN-Handling nach Stromausfall/Reboot.
+#
+# Aufruf:     ansible-playbook playbooks/setup-networkmanager-masters.yml -i inventory/hosts.ini
+# Dry-run:    ansible-playbook playbooks/setup-networkmanager-masters.yml -i inventory/hosts.ini --check
+# Einzelner:  ansible-playbook playbooks/setup-networkmanager-masters.yml -i inventory/hosts.ini --limit gmkt-01x
+
+- name: NetworkManager auf Master Nodes einrichten
+  hosts: master
+  become: true
+  gather_facts: true
+  serial: 1  # Einen nach dem anderen – Cluster bleibt mit 2/3 Mastern oben
+
+  vars:
+    vlan_id: 20
+    vlan_parent: enp1s0
+    vlan_iface: enp1s0.20
+
+  tasks:
+
+    # ── Voraussetzungen prüfen ────────────────────────────────────────────────
+
+    - name: Aktuelle VLAN-IP anzeigen
+      command: ip -4 addr show {{ vlan_iface }}
+      register: current_vlan_ip
+      changed_when: false
+      failed_when: false
+
+    - name: VLAN-Status vor Migration anzeigen
+      debug:
+        msg: "{{ inventory_hostname }}: {{ current_vlan_ip.stdout | default('VLAN-Interface nicht gefunden') }}"
+
+    # ── Pakete installieren ───────────────────────────────────────────────────
+
+    - name: NetworkManager und vlan-Paket installieren
+      apt:
+        name:
+          - network-manager
+          - vlan
+        state: present
+        update_cache: yes
+
+    - name: 8021q Modul laden
+      modprobe:
+        name: 8021q
+        state: present
+
+    - name: 8021q beim Boot laden
+      lineinfile:
+        path: /etc/modules
+        line: 8021q
+        create: yes
+
+    # ── Backup ───────────────────────────────────────────────────────────────
+
+    - name: Backup von /etc/network/interfaces erstellen
+      copy:
+        src: /etc/network/interfaces
+        dest: /etc/network/interfaces.bak
+        remote_src: yes
+        force: no
+
+    - name: Backup von /etc/network/interfaces.d/ erstellen
+      archive:
+        path: /etc/network/interfaces.d/
+        dest: /etc/network/interfaces.d.bak.tar.gz
+        format: gz
+        force_archive: true
+      failed_when: false
+
+    # ── NM-Verbindungen anlegen ───────────────────────────────────────────────
+
+    - name: NM-Verbindung für Parent-Interface prüfen
+      command: nmcli -t connection show {{ vlan_parent }}
+      register: nm_parent_exists
+      changed_when: false
+      failed_when: false
+
+    - name: NM-Verbindung für Parent-Interface anlegen
+      command: >
+        nmcli connection add
+        type ethernet
+        con-name {{ vlan_parent }}
+        ifname {{ vlan_parent }}
+        ipv4.method disabled
+        ipv6.method disabled
+        connection.autoconnect yes
+      when: nm_parent_exists.rc != 0
+
+    - name: NM-Verbindung für VLAN prüfen
+      command: nmcli -t connection show vlan{{ vlan_id }}
+      register: nm_vlan_exists
+      changed_when: false
+      failed_when: false
+
+    - name: VLAN-IP aus host_vars ableiten
+      set_fact:
+        vlan_address: "192.168.20.{{ ansible_host.split('.')[-1] }}"
+      # ansible_host ist die Management-IP (192.168.11.3x)
+      # letzte Oktet ist identisch für VLAN-IP (192.168.20.3x)
+
+    - name: Geplante VLAN-IP zur Kontrolle anzeigen
+      debug:
+        msg: "{{ inventory_hostname }}: Management {{ ansible_host }} → VLAN {{ vlan_address }}/24"
+
+    - name: NM-Verbindung für VLAN anlegen
+      command: >
+        nmcli connection add
+        type vlan
+        con-name vlan{{ vlan_id }}
+        ifname {{ vlan_iface }}
+        dev {{ vlan_parent }}
+        id {{ vlan_id }}
+        ipv4.method manual
+        ipv4.addresses {{ vlan_address }}/24
+        ipv6.method disabled
+        connection.autoconnect yes
+      when: nm_vlan_exists.rc == 0
+
+    - name: NM-Verbindung für VLAN aktualisieren (falls bereits vorhanden)
+      command: >
+        nmcli connection modify vlan{{ vlan_id }}
+        ipv4.method manual
+        ipv4.addresses {{ vlan_address }}/24
+        connection.autoconnect yes
+      when: nm_vlan_exists.rc == 0
+
+    # ── ifupdown deaktivieren ─────────────────────────────────────────────────
+
+    - name: VLAN-Interface-Datei aus interfaces.d entfernen
+      file:
+        path: /etc/network/interfaces.d/{{ vlan_iface }}
+        state: absent
+
+    - name: /etc/network/interfaces auf NM-Stub reduzieren
+      copy:
+        dest: /etc/network/interfaces
+        content: |
+          # Managed by NetworkManager
+          # Backup: /etc/network/interfaces.bak
+          # Backup interfaces.d: /etc/network/interfaces.d.bak.tar.gz
+
+          auto lo
+          iface lo inet loopback
+        backup: no
+
+    # ── NetworkManager aktivieren ─────────────────────────────────────────────
+
+    - name: NetworkManager aktivieren und starten
+      systemd:
+        name: NetworkManager
+        enabled: yes
+        state: started
+
+    # ── Reboot ────────────────────────────────────────────────────────────────
+
+    - name: Node neu starten
+      reboot:
+        reboot_timeout: 120
+        pre_reboot_delay: 5
+        msg: "Reboot durch Ansible – NetworkManager-Migration"
+
+    # ── Verify nach Reboot ────────────────────────────────────────────────────
+
+    - name: Warten bis Node wieder erreichbar
+      wait_for_connection:
+        delay: 15
+        timeout: 120
+
+    - name: VLAN-Interface nach Reboot prüfen
+      command: ip -4 addr show {{ vlan_iface }}
+      register: vlan_after
+      changed_when: false
+
+    - name: VLAN-Status nach Migration anzeigen
+      debug:
+        msg: "{{ inventory_hostname }} nach Reboot: {{ vlan_after.stdout }}"
+
+    - name: Aktive NM-Verbindungen anzeigen
+      command: nmcli connection show --active
+      register: nm_active
+      changed_when: false
+
+    - name: NM-Verbindungen anzeigen
+      debug:
+        msg: "{{ nm_active.stdout_lines }}"
+
+    - name: Cluster-Node-Status prüfen
+      command: kubectl get node {{ inventory_hostname.split('.')[0] }}
+      register: node_status
+      changed_when: false
+      delegate_to: "{{ groups['master'][0] }}"
+      retries: 10
+      delay: 15
+      until: "'Ready' in node_status.stdout"
+
