@@ -48,12 +48,21 @@ statefulset:
 
   persistence:
     size: 1Gi
+    storageClass: longhorn
 
   actRunner:
     registry: docker.gitea.com
     repository: act_runner
     tag: "0.3.1"
     pullPolicy: IfNotPresent
+    config: |
+      log:
+        level: info
+      cache:
+        enabled: false
+      container:
+        require_docker: true
+        docker_timeout: 300s
 
   dind:
     registry: docker.io
@@ -61,6 +70,4 @@ statefulset:
     tag: "29.4.0-dind"
     pullPolicy: IfNotPresent
 
-global:
-  storageClass: longhorn
 
