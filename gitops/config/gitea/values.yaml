@@ -21,6 +21,11 @@ image:
   tag: "1.26.0-rootless"
   pullPolicy: IfNotPresent
 
+# By default RollingUpgrades are used, but this is in conflict with the RWO PVC.
+# Use Recreate as strategy that terminates the old pod first.
+strategy:
+  type: Recreate
+
 gitea:
   admin:
     existingSecret: gitea-admin-secret
