@@ -14,11 +14,13 @@
 #   - Actions ausgelagert in separates helm-actions Chart (nicht enthalten)
 # =============================================================================
 
+# Tried 1.26.0 already, but running into issues with it.
+# the app.ini container is using -o but this option isn't avail anymore.
 
 image:
   registry: docker.gitea.com
   repository: gitea
-  tag: "1.26.0"
+  tag: "1.25.5"
   pullPolicy: IfNotPresent
 
 # By default RollingUpgrades are used, but this is in conflict with the RWO PVC.
