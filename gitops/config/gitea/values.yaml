@@ -16,7 +16,8 @@
 
 
 image:
-  repository: docker.gitea.com/gitea
+  registry: docker.gitea.com
+  repository: gitea
   tag: "1.26.0-rootless"
   pullPolicy: IfNotPresent
 
