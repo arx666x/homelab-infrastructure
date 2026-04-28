@@ -273,8 +273,6 @@
           INSTALL_K3S_VERSION="{{ k3s_version }}" \
           INSTALL_K3S_SKIP_START=true \
           sh -s - agent
-      args:
-        warn: false
       register: k3s_install_result
       when:
         - k3s_version != ''
@@ -419,9 +417,9 @@
     - name: "[ LONGHORN ] Warten bis Replicas wieder aufgebaut werden (max. 10 min)"
       delegate_to: "{{ k8s_delegate }}"
       shell: |
-        {{ kubectl_bin }} -n {{ longhorn_namespace }} get replicas \
-          -o jsonpath='{.items[?(@.spec.nodeID=="{{ k8s_node_name }}")].metadata.name}' \
-          | grep -o 'replica-' | wc -l | tr -d ' '
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} get replicas.longhorn.io \
+          -o jsonpath='{range .items[?(@.spec.nodeID=="{{ k8s_node_name }}")]}{.metadata.name}{"\n"}{end}' \
+          | grep -c . || echo 0
       register: new_replicas
       until: new_replicas.stdout | int > 0
       retries: 60

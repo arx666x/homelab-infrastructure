@@ -9,7 +9,7 @@
 #   2. etcd-Snapshot erstellen (nur auf gmkt-01x, einmalig pro Runde)
 #   3. kubectl drain
 #   4. apt upgrade
-#   5. k3s-Binary via Install-Script ersetzen (ohne Unit-File zu verändern)
+#   5. k3s-Binary direkt von GitHub herunterladen (ohne Install-Script)
 #   6. k3s-Server neu starten
 #   7. Warten bis Node wieder Ready und etcd wieder im Quorum
 #   8. kubectl uncordon
@@ -85,7 +85,7 @@
 
     - name: "[ PRE ] Kernel und OS anzeigen"
       debug:
-        msg: "{{ inventory_hostname }}: {{ ansible_kernel }} / {{ ansible_distribution }} {{ ansible_distribution_version }}"
+        msg: "{{ inventory_hostname }}: {{ ansible_facts['kernel'] }} / {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
 
     - name: "[ PRE ] Cluster-Nodes prüfen (alle Ready?)"
       delegate_to: "{{ k8s_delegate }}"
@@ -135,7 +135,7 @@
     - name: "[ ETCD ] Snapshot erstellen"
       become: true
       shell: |
-        SNAPSHOT_NAME="pre-upgrade-{{ k3s_version }}-{{ ansible_date_time.date }}"
+        SNAPSHOT_NAME="pre-upgrade-{{ k3s_version }}-{{ ansible_facts['date_time']['date'] }}"
         {{ k3s_bin }} etcd-snapshot save --name "${SNAPSHOT_NAME}"
         echo "Snapshot: ${SNAPSHOT_NAME}"
       register: etcd_snapshot_result
@@ -211,11 +211,10 @@
 
     # -------------------------------------------------------------------------
     # K3S BINARY UPDATE
-    # Strategie: Install-Script ersetzt NUR das Binary (/usr/local/bin/k3s)
-    # und aktualisiert den Systemd-Service. Die bestehenden ExecStart-Flags
-    # (--disable traefik, --flannel-iface, --node-ip usw.) bleiben erhalten,
-    # weil wir KEINE INSTALL_K3S_EXEC Variable setzen und keine Flags an
-    # sh -s - server übergeben.
+    # Strategie: Binary direkt von GitHub herunterladen, Unit-File per
+    # Backup+Restore schützen. Das Install-Script wird NICHT verwendet,
+    # da es die Unit-File überschreibt und dabei alle Flags verliert
+    # (--disable traefik, --flannel-iface, --node-ip, --cluster-init usw.).
     # -------------------------------------------------------------------------
 
     - name: "[ K3S ] Aktuelle Unit-File sichern"
@@ -234,27 +233,48 @@
         state: stopped
       when: k3s_installed_ver != k3s_version
 
-    - name: "[ K3S ] Binary via Installscript aktualisieren (ohne Unit-File-Flags)"
+    - name: "[ K3S ] Binary direkt herunterladen (ohne Install-Script)"
       become: true
       shell: |
-        curl -sfL https://get.k3s.io | \
-          INSTALL_K3S_VERSION="{{ k3s_version }}" \
-          INSTALL_K3S_SKIP_START=true \
-          sh -s - server
-      # HINWEIS: "sh -s - server" ohne weitere Flags → Install-Script übernimmt
-      # die bestehenden ExecStart-Args aus der vorhandenen Unit-File, sofern
-      # keine INSTALL_K3S_EXEC gesetzt ist. Binary + Service werden aktualisiert,
-      # die Flags in ExecStart bleiben unverändert.
+        ARCH=$(uname -m)
+        case ${ARCH} in
+          x86_64)  K3S_BIN="k3s" ;;        # amd64: kein Suffix
+          aarch64) K3S_BIN="k3s-arm64" ;;  # arm64: -arm64 Suffix
+          armv7l)  K3S_BIN="k3s-armhf" ;;  # armhf: -armhf Suffix
+          *)       echo "Unbekannte Architektur: ${ARCH}"; exit 1 ;;
+        esac
+        VERSION_URL=$(echo "{{ k3s_version }}" | sed 's/+/%2B/g')
+        curl -sfL \
+          "https://github.com/k3s-io/k3s/releases/download/${VERSION_URL}/${K3S_BIN}" \
+          -o /usr/local/bin/k3s.new
+        chmod 755 /usr/local/bin/k3s.new
+        mv /usr/local/bin/k3s.new /usr/local/bin/k3s
+        echo "k3s Binary ersetzt: $(k3s --version | head -1)"
+      # gmkt-01x/02x/03x = x86_64 = amd64
       register: k3s_install_result
       when: k3s_installed_ver != k3s_version
       changed_when: true
 
-    - name: "[ K3S ] Installscript-Ausgabe anzeigen"
+    - name: "[ K3S ] Download-Ergebnis anzeigen"
       debug:
         msg: "{{ k3s_install_result.stdout_lines | default([]) }}"
       when: k3s_installed_ver != k3s_version
 
-    - name: "[ K3S ] Unit-File nach Update prüfen (Flags noch vorhanden?)"
+    - name: "[ K3S ] Unit-File aus Backup wiederherstellen"
+      become: true
+      copy:
+        src: "/etc/systemd/system/k3s.service.bak-{{ k3s_installed_ver }}"
+        dest: /etc/systemd/system/k3s.service
+        remote_src: true
+      when: k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] systemd daemon-reload nach Unit-File Wiederherstellung"
+      become: true
+      systemd:
+        daemon_reload: true
+      when: k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] Unit-File Flags verifizieren"
       become: true
       shell: |
         grep -E '\-\-disable|\-\-flannel|\-\-node-ip|\-\-cluster-init' \
@@ -271,10 +291,10 @@
     - name: "[ K3S ] ABBRECHEN wenn Unit-File-Flags fehlen"
       fail:
         msg: >
-          KRITISCH: Die k3s.service Unit-File hat nach dem Update die
-          --disable / --flannel-iface Flags verloren!
+          KRITISCH: Die k3s.service Unit-File hat nach der Wiederherstellung
+          die --disable / --flannel-iface Flags verloren!
           Backup liegt unter: /etc/systemd/system/k3s.service.bak-{{ k3s_installed_ver }}
-          Manuell wiederherstellen und dann fortsetzen.
+          Manuell prüfen und wiederherstellen.
       when:
         - k3s_installed_ver != k3s_version
         - "'WARNUNG' in unit_check.stdout"
