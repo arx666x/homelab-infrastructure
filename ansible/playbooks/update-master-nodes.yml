@@ -1,0 +1,388 @@
+---
+# update-master-nodes.yml
+#
+# Koordiniertes k3s-Upgrade der Master-Nodes (gmkt-01x, gmkt-02x, gmkt-03x)
+# mit etcd-Quorum-Sicherheit und OS-Update.
+#
+# Ablauf pro Node:
+#   1. etcd-Quorum und Cluster-Health prüfen (Pre-Check)
+#   2. etcd-Snapshot erstellen (nur auf gmkt-01x, einmalig pro Runde)
+#   3. kubectl drain
+#   4. apt upgrade
+#   5. k3s-Binary via Install-Script ersetzen (ohne Unit-File zu verändern)
+#   6. k3s-Server neu starten
+#   7. Warten bis Node wieder Ready und etcd wieder im Quorum
+#   8. kubectl uncordon
+#
+# WICHTIG: Master IMMER EINZELN (serial: 1) und IMMER VOR den Workers upgraden!
+# Bei 3-Node-etcd darf maximal 1 Master gleichzeitig down sein.
+#
+# Voraussetzungen:
+#   - SSH-Key Zugang zu allen Master-Nodes
+#   - kubectl auf gmkt-01x konfiguriert (KUBECONFIG)
+#   - k3s_version muss angegeben werden (kein Default!)
+#
+# Ausführung:
+#   ansible-playbook update-master-nodes.yml -e k3s_version=v1.29.15+k3s1
+#   ansible-playbook update-master-nodes.yml -e k3s_version=v1.29.15+k3s1 --limit gmkt-01x
+#   ansible-playbook update-master-nodes.yml -e k3s_version=v1.29.15+k3s1 -e skip_os_update=true
+#   ansible-playbook update-master-nodes.yml -e k3s_version=v1.29.15+k3s1 -e etcd_snapshot=false
+
+- name: Koordiniertes k3s-Upgrade der Master-Nodes
+  hosts: k3s_masters
+  serial: 1                          # Immer nur einen Master gleichzeitig!
+  max_fail_percentage: 0             # Bei Fehler sofort abbrechen
+  gather_facts: true
+
+  vars:
+    k3s_version: ""                  # PFLICHT: -e k3s_version=v1.29.15+k3s1
+    skip_os_update: false            # OS-Update überspringen: -e skip_os_update=true
+    etcd_snapshot: true              # etcd-Snapshot vor erstem Master: -e etcd_snapshot=false
+    k8s_delegate: gmkt-01x          # Kubernetes-Calls über diesen Master
+    kubectl_bin: /usr/local/bin/kubectl
+    k3s_bin: /usr/local/bin/k3s
+    node_ready_timeout: 300          # Sekunden warten bis Node wieder Ready
+    drain_timeout: 300               # Sekunden für kubectl drain
+
+  pre_tasks:
+
+    - name: "[ PREFLIGHT ] k3s_version muss angegeben sein"
+      fail:
+        msg: >
+          k3s_version ist nicht gesetzt!
+          Aufruf: ansible-playbook update-master-nodes.yml -e k3s_version=v1.29.15+k3s1
+      when: k3s_version == ""
+      run_once: true
+
+  tasks:
+
+    # -------------------------------------------------------------------------
+    # PRE-CHECK: Cluster-Health und Quorum
+    # -------------------------------------------------------------------------
+
+    - name: "[ PRE ] Node-Name ermitteln"
+      set_fact:
+        k8s_node_name: "{{ inventory_hostname }}"
+
+    - name: "[ PRE ] Aktuelle k3s-Version ermitteln"
+      command: "{{ k3s_bin }} --version"
+      register: k3s_current_raw
+      changed_when: false
+
+    - name: "[ PRE ] Versions-Facts setzen"
+      set_fact:
+        k3s_installed_ver: >-
+          {{ k3s_current_raw.stdout
+             | regex_search('v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+') | default('unknown') }}
+
+    - name: "[ PRE ] Versions-Info anzeigen"
+      debug:
+        msg: >
+          {{ inventory_hostname }}: installiert={{ k3s_installed_ver }}  ziel={{ k3s_version }}
+          {% if k3s_installed_ver == k3s_version %}→ bereits aktuell{% else %}→ Update wird durchgeführt{% endif %}
+
+    - name: "[ PRE ] Kernel und OS anzeigen"
+      debug:
+        msg: "{{ inventory_hostname }}: {{ ansible_kernel }} / {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    - name: "[ PRE ] Cluster-Nodes prüfen (alle Ready?)"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} get nodes --no-headers | grep -v ' Ready' | grep -v 'SchedulingDisabled' || true
+      register: not_ready_nodes
+      changed_when: false
+
+    - name: "[ PRE ] Warnung bei nicht-Ready Nodes"
+      debug:
+        msg: "⚠️  Folgende Nodes sind nicht Ready: {{ not_ready_nodes.stdout_lines }}"
+      when: not_ready_nodes.stdout != ""
+
+    - name: "[ PRE ] Abbrechen wenn kritische Nodes nicht Ready sind"
+      fail:
+        msg: >
+          Es gibt Nodes die nicht Ready sind: {{ not_ready_nodes.stdout }}
+          Bitte Cluster-Zustand prüfen bevor das Upgrade fortgesetzt wird.
+      when:
+        - not_ready_nodes.stdout != ""
+        # Master-Nodes die gerade ge-drainet sind (SchedulingDisabled) sind OK
+        - not_ready_nodes.stdout_lines | select('search', inventory_hostname) | list | length == 0
+
+    - name: "[ PRE ] etcd-Mitglieder prüfen"
+      become: true
+      shell: |
+        {{ k3s_bin }} etcd-snapshot ls 2>/dev/null | head -1 || \
+        ETCDCTL_API=3 etcdctl \
+          --endpoints=https://127.0.0.1:2379 \
+          --cacert=/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt \
+          --cert=/var/lib/rancher/k3s/server/tls/etcd/server-client.crt \
+          --key=/var/lib/rancher/k3s/server/tls/etcd/server-client.key \
+          member list 2>/dev/null || echo "etcd-check nicht verfügbar"
+      register: etcd_members
+      changed_when: false
+      when: inventory_hostname == k8s_delegate
+
+    - name: "[ PRE ] etcd-Status anzeigen"
+      debug:
+        msg: "{{ etcd_members.stdout_lines | default(['etcd-check übersprungen']) }}"
+      when: inventory_hostname == k8s_delegate
+
+    # -------------------------------------------------------------------------
+    # ETCD SNAPSHOT (nur auf erstem Master, einmalig pro Upgrade-Runde)
+    # -------------------------------------------------------------------------
+
+    - name: "[ ETCD ] Snapshot erstellen"
+      become: true
+      shell: |
+        SNAPSHOT_NAME="pre-upgrade-{{ k3s_version }}-{{ ansible_date_time.date }}"
+        {{ k3s_bin }} etcd-snapshot save --name "${SNAPSHOT_NAME}"
+        echo "Snapshot: ${SNAPSHOT_NAME}"
+      register: etcd_snapshot_result
+      when:
+        - etcd_snapshot | bool
+        - inventory_hostname == k8s_delegate
+        - k3s_installed_ver != k3s_version
+      changed_when: true
+
+    - name: "[ ETCD ] Snapshot-Ergebnis anzeigen"
+      debug:
+        msg: "{{ etcd_snapshot_result.stdout_lines | default(['Snapshot übersprungen']) }}"
+      when: inventory_hostname == k8s_delegate
+
+    # -------------------------------------------------------------------------
+    # KUBERNETES DRAIN
+    # -------------------------------------------------------------------------
+
+    - name: "[ K8S ] Node drainieren"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} drain {{ k8s_node_name }} \
+          --ignore-daemonsets \
+          --delete-emptydir-data \
+          --timeout={{ drain_timeout }}s
+      register: drain_result
+      changed_when: true
+      # Nur drainieren wenn tatsächlich ein Update stattfindet
+      when: k3s_installed_ver != k3s_version
+
+    - name: "[ K8S ] Drain-Ergebnis anzeigen"
+      debug:
+        msg: "{{ drain_result.stdout_lines[-3:] | default(['kein Drain durchgeführt']) }}"
+
+    # -------------------------------------------------------------------------
+    # OS UPDATE (optional)
+    # -------------------------------------------------------------------------
+
+    - name: "[ APT ] apt-daily Timer deaktivieren"
+      become: true
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop:
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      ignore_errors: true
+      when: not skip_os_update | bool
+
+    - name: "[ APT ] apt update"
+      become: true
+      apt:
+        update_cache: true
+        cache_valid_time: 0
+      when: not skip_os_update | bool
+
+    - name: "[ APT ] Pakete upgraden"
+      become: true
+      apt:
+        upgrade: full
+        autoremove: true
+        autoclean: true
+      register: apt_result
+      when: not skip_os_update | bool
+
+    - name: "[ APT ] Aktualisierte Pakete anzeigen"
+      debug:
+        msg: "{{ apt_result.stdout_lines | select('match', '^(Inst|Remv)') | list }}"
+      when:
+        - not skip_os_update | bool
+        - apt_result.stdout_lines is defined
+
+    # -------------------------------------------------------------------------
+    # K3S BINARY UPDATE
+    # Strategie: Install-Script ersetzt NUR das Binary (/usr/local/bin/k3s)
+    # und aktualisiert den Systemd-Service. Die bestehenden ExecStart-Flags
+    # (--disable traefik, --flannel-iface, --node-ip usw.) bleiben erhalten,
+    # weil wir KEINE INSTALL_K3S_EXEC Variable setzen und keine Flags an
+    # sh -s - server übergeben.
+    # -------------------------------------------------------------------------
+
+    - name: "[ K3S ] Aktuelle Unit-File sichern"
+      become: true
+      copy:
+        src: /etc/systemd/system/k3s.service
+        dest: "/etc/systemd/system/k3s.service.bak-{{ k3s_installed_ver }}"
+        remote_src: true
+      when: k3s_installed_ver != k3s_version
+      changed_when: true
+
+    - name: "[ K3S ] k3s-Server stoppen"
+      become: true
+      systemd:
+        name: k3s
+        state: stopped
+      when: k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] Binary via Installscript aktualisieren (ohne Unit-File-Flags)"
+      become: true
+      shell: |
+        curl -sfL https://get.k3s.io | \
+          INSTALL_K3S_VERSION="{{ k3s_version }}" \
+          INSTALL_K3S_SKIP_START=true \
+          sh -s - server
+      # HINWEIS: "sh -s - server" ohne weitere Flags → Install-Script übernimmt
+      # die bestehenden ExecStart-Args aus der vorhandenen Unit-File, sofern
+      # keine INSTALL_K3S_EXEC gesetzt ist. Binary + Service werden aktualisiert,
+      # die Flags in ExecStart bleiben unverändert.
+      register: k3s_install_result
+      when: k3s_installed_ver != k3s_version
+      changed_when: true
+
+    - name: "[ K3S ] Installscript-Ausgabe anzeigen"
+      debug:
+        msg: "{{ k3s_install_result.stdout_lines | default([]) }}"
+      when: k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] Unit-File nach Update prüfen (Flags noch vorhanden?)"
+      become: true
+      shell: |
+        grep -E '\-\-disable|\-\-flannel|\-\-node-ip|\-\-cluster-init' \
+          /etc/systemd/system/k3s.service || echo "WARNUNG: Flags nicht gefunden!"
+      register: unit_check
+      changed_when: false
+      when: k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] Unit-File Flags anzeigen"
+      debug:
+        msg: "{{ unit_check.stdout_lines }}"
+      when: k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] ABBRECHEN wenn Unit-File-Flags fehlen"
+      fail:
+        msg: >
+          KRITISCH: Die k3s.service Unit-File hat nach dem Update die
+          --disable / --flannel-iface Flags verloren!
+          Backup liegt unter: /etc/systemd/system/k3s.service.bak-{{ k3s_installed_ver }}
+          Manuell wiederherstellen und dann fortsetzen.
+      when:
+        - k3s_installed_ver != k3s_version
+        - "'WARNUNG' in unit_check.stdout"
+
+    # -------------------------------------------------------------------------
+    # REBOOT
+    # -------------------------------------------------------------------------
+
+    - name: "[ REBOOT ] Node neu starten"
+      become: true
+      reboot:
+        reboot_timeout: "{{ node_ready_timeout }}"
+        post_reboot_delay: 20
+        msg: "Reboot durch Ansible update-master-nodes.yml"
+
+    - name: "[ REBOOT ] Warten bis SSH wieder verfügbar"
+      wait_for_connection:
+        delay: 15
+        timeout: "{{ node_ready_timeout }}"
+
+    # -------------------------------------------------------------------------
+    # POST-REBOOT: k3s-Server und etcd prüfen
+    # -------------------------------------------------------------------------
+
+    - name: "[ POST ] Neuen Kernel anzeigen"
+      command: uname -r
+      register: new_kernel
+      changed_when: false
+
+    - name: "[ POST ] k3s-Version nach Reboot verifizieren"
+      command: "{{ k3s_bin }} --version"
+      register: k3s_post_ver
+      changed_when: false
+
+    - name: "[ POST ] Versions-Info nach Reboot"
+      debug:
+        msg: >
+          {{ inventory_hostname }}:
+          Kernel: {{ new_kernel.stdout }}
+          k3s: {{ k3s_post_ver.stdout_lines[0] | default('?') }}
+
+    - name: "[ POST ] k3s-Server Status prüfen"
+      become: true
+      systemd:
+        name: k3s
+      register: k3s_status
+
+    - name: "[ POST ] k3s-Server ggf. starten"
+      become: true
+      systemd:
+        name: k3s
+        state: started
+      when: k3s_status.status.ActiveState != 'active'
+
+    - name: "[ POST ] Warten bis Node im Kubernetes Ready ist"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} get node {{ k8s_node_name }} \
+          -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready
+      until: node_ready.stdout == "True"
+      retries: "{{ (node_ready_timeout / 10) | int }}"
+      delay: 10
+      changed_when: false
+
+    - name: "[ POST ] Warten bis alle Master-Nodes Ready sind (Quorum)"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        NOT_READY=$({{ kubectl_bin }} get nodes --no-headers \
+          -l node-role.kubernetes.io/master \
+          | grep -v ' Ready' | grep -v 'SchedulingDisabled' | wc -l)
+        echo "${NOT_READY}"
+      register: masters_not_ready
+      until: masters_not_ready.stdout | int == 0
+      retries: 30
+      delay: 10
+      changed_when: false
+
+    - name: "[ POST ] Master-Quorum-Status"
+      debug:
+        msg: >
+          Alle Master-Nodes Ready: {{ masters_not_ready.stdout | int == 0 }}
+
+    # -------------------------------------------------------------------------
+    # KUBERNETES UNCORDON
+    # -------------------------------------------------------------------------
+
+    - name: "[ K8S ] Node uncordon"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} uncordon {{ k8s_node_name }}
+      changed_when: true
+      when: k3s_installed_ver != k3s_version
+
+    - name: "[ POST ] Finale Versions-Übersicht aller Nodes"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} get nodes -o wide --no-headers
+      register: final_nodes
+      changed_when: false
+      run_once: true
+
+    - name: "[ POST ] Node-Übersicht"
+      debug:
+        msg: "{{ final_nodes.stdout_lines }}"
+      run_once: true
+
+    - name: "[ DONE ] Master-Node abgeschlossen"
+      debug:
+        msg: >
+          ✓ {{ inventory_hostname }} erfolgreich aktualisiert.
+          Kernel: {{ new_kernel.stdout }}.
+          k3s: {{ k3s_post_ver.stdout_lines[0] | default('?') }}.

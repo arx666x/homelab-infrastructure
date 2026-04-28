@@ -10,11 +10,12 @@
 #   3. Warten bis Longhorn Replicas migriert sind
 #   4. apt upgrade + autoremove
 #   5. EEPROM Update (optional)
-#   6. Reboot
-#   7. Warten bis Node wieder Ready
-#   8. kubectl uncordon
-#   9. Longhorn Disk Scheduling wieder aktivieren
-#  10. Warten bis Longhorn Replicas wieder aufgebaut sind
+#   6. k3s Agent Update (optional, vor Reboot)
+#   7. Reboot
+#   8. Warten bis Node wieder Ready
+#   9. kubectl uncordon
+#  10. Longhorn Disk Scheduling wieder aktivieren
+#  11. Warten bis Longhorn Replicas wieder aufgebaut sind
 #
 # Voraussetzungen:
 #   - ansible-galaxy collection install kubernetes.core
@@ -24,9 +25,13 @@
 #
 # Ausführung:
 #   ansible-playbook update-pi-nodes.yml
-#   ansible-playbook update-pi-nodes.yml --limit k3s-01a   # Einzelner Node
+#   ansible-playbook update-pi-nodes.yml --limit k3s-01a        # Einzelner Node
 #   ansible-playbook update-pi-nodes.yml -e eeprom_update=true
 #   ansible-playbook update-pi-nodes.yml -e skip_longhorn=true  # Ohne Longhorn-Drain
+#   ansible-playbook update-pi-nodes.yml -e k3s_version=v1.32.3+k3s1   # Mit k3s-Update
+#   ansible-playbook update-pi-nodes.yml \
+#     -e k3s_version=v1.32.3+k3s1 \
+#     -e eeprom_update=true        # Alles auf einmal
 
 - name: Koordiniertes Update der Raspberry Pi k3s Worker-Nodes
   hosts: pi_workers
@@ -37,6 +42,8 @@
   vars:
     eeprom_update: false             # EEPROM Update: -e eeprom_update=true
     skip_longhorn: false             # Longhorn überspringen: -e skip_longhorn=true
+    k3s_version: ""                  # k3s-Version: -e k3s_version=v1.32.3+k3s1
+                                     # Leer = kein k3s-Update
     longhorn_namespace: longhorn-system
     longhorn_wait_timeout: 600       # Sekunden warten auf Longhorn (10 min)
     node_ready_timeout: 300          # Sekunden warten bis Node wieder Ready (5 min)
@@ -64,6 +71,18 @@
     - name: "[ PRE ] Aktuellen Kernel und OS anzeigen"
       debug:
         msg: "{{ inventory_hostname }}: {{ ansible_kernel }} / {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    - name: "[ PRE ] Aktuelle k3s-Version ermitteln"
+      command: k3s --version
+      register: k3s_current_version
+      changed_when: false
+      failed_when: false
+
+    - name: "[ PRE ] k3s-Version anzeigen"
+      debug:
+        msg: >
+          k3s aktuell: {{ k3s_current_version.stdout_lines[0] | default('unbekannt') }}
+          {% if k3s_version != '' %}→ Ziel: {{ k3s_version }}{% else %}(kein Update angefordert){% endif %}
 
     # -------------------------------------------------------------------------
     # LONGHORN DRAIN
@@ -198,6 +217,91 @@
       changed_when: true
 
     # -------------------------------------------------------------------------
+    # K3S AGENT UPDATE (optional, vor Reboot)
+    # -------------------------------------------------------------------------
+    #
+    # Läuft VOR dem Reboot, damit nach dem Neustart direkt die neue Version
+    # aktiv ist. Das offizielle k3s-Installscript ist idempotent:
+    # es überschreibt nur das Binary und den Systemd-Service, berührt aber
+    # weder kubeconfig noch Cluster-State.
+    #
+    # Reihenfolge:
+    #   1. Zielversion gegen installierte Version prüfen (kein Download wenn gleich)
+    #   2. k3s-Binary via Installscript ersetzen
+    #   3. k3s-agent stoppen (Reboot startet ihn wieder)
+    #
+    # Der Node ist zu diesem Zeitpunkt bereits ge-drainet und cordoniert,
+    # d.h. es laufen keine Workload-Pods mehr.
+
+    - name: "[ K3S ] Installiertes k3s-Binary-Version ermitteln"
+      command: k3s --version
+      register: k3s_installed_raw
+      changed_when: false
+      failed_when: false
+      when: k3s_version != ''
+
+    - name: "[ K3S ] Versions-Fact setzen"
+      set_fact:
+        # Extrahiert z.B. "v1.31.4+k3s1" aus "k3s version v1.31.4+k3s1 (abc1234)"
+        k3s_installed_ver: >-
+          {{ k3s_installed_raw.stdout
+             | regex_search('v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+') | default('unknown') }}
+      when: k3s_version != ''
+
+    - name: "[ K3S ] Versionsvergleich"
+      debug:
+        msg: >
+          k3s: installiert={{ k3s_installed_ver }}  ziel={{ k3s_version }}
+          {% if k3s_installed_ver == k3s_version %}→ bereits aktuell, überspringe Update{% else %}→ Update wird durchgeführt{% endif %}
+      when: k3s_version != ''
+
+    - name: "[ K3S ] k3s-agent stoppen (vor Update)"
+      become: true
+      systemd:
+        name: k3s-agent
+        state: stopped
+      when:
+        - k3s_version != ''
+        - k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] k3s Binary via Installscript aktualisieren"
+      become: true
+      shell: |
+        curl -sfL https://get.k3s.io | \
+          INSTALL_K3S_VERSION="{{ k3s_version }}" \
+          INSTALL_K3S_SKIP_START=true \
+          sh -s - agent
+      args:
+        warn: false
+      register: k3s_install_result
+      when:
+        - k3s_version != ''
+        - k3s_installed_ver != k3s_version
+      changed_when: true
+
+    - name: "[ K3S ] Installscript-Ausgabe anzeigen"
+      debug:
+        msg: "{{ k3s_install_result.stdout_lines | default([]) }}"
+      when:
+        - k3s_version != ''
+        - k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] Neue Version verifizieren (Binary)"
+      command: k3s --version
+      register: k3s_new_ver_check
+      changed_when: false
+      when:
+        - k3s_version != ''
+        - k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] Neue Version anzeigen"
+      debug:
+        msg: "k3s nach Update: {{ k3s_new_ver_check.stdout_lines[0] | default('?') }}"
+      when:
+        - k3s_version != ''
+        - k3s_installed_ver != k3s_version
+
+    # -------------------------------------------------------------------------
     # REBOOT
     # -------------------------------------------------------------------------
 
@@ -208,7 +312,11 @@
 
     - name: "[ REBOOT ] Reboot-Grund anzeigen"
       debug:
-        msg: "Reboot erforderlich: {{ reboot_required.stat.exists }}"
+        msg: >
+          Reboot-Flag /var/run/reboot-required: {{ reboot_required.stat.exists }}
+          {% if k3s_version != '' and k3s_installed_ver != k3s_version %}
+          k3s wurde aktualisiert → Reboot auf jeden Fall sinnvoll
+          {% endif %}
 
     - name: "[ REBOOT ] Node neu starten"
       become: true
@@ -247,6 +355,17 @@
         name: k3s-agent
         state: started
       when: k3s_status.status.ActiveState != 'active'
+
+    - name: "[ POST ] k3s-Version nach Reboot verifizieren"
+      command: k3s --version
+      register: k3s_post_reboot_ver
+      changed_when: false
+      when: k3s_version != ''
+
+    - name: "[ POST ] k3s-Version nach Reboot anzeigen"
+      debug:
+        msg: "k3s nach Reboot: {{ k3s_post_reboot_ver.stdout_lines[0] | default('?') }}"
+      when: k3s_version != ''
 
     - name: "[ POST ] Warten bis Node im Kubernetes Ready ist"
       delegate_to: "{{ k8s_delegate }}"
@@ -314,4 +433,5 @@
         msg: >
           ✓ {{ inventory_hostname }} erfolgreich aktualisiert.
           Kernel: {{ new_kernel.stdout }}.
+          k3s: {{ k3s_post_reboot_ver.stdout_lines[0] | default('nicht aktualisiert') }}.
           Longhorn Replicas: {{ new_replicas.stdout | default('nicht geprüft') }}.
