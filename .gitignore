@@ -5,6 +5,7 @@
 **/secrets-*.yaml
 **/.*secret*.yaml
 gitops/config/monitoring/secret-templates.yaml
+ansible/ansible.log
 
 # Generated files
 docs-portal/generated/
