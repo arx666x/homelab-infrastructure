@@ -1706,3 +1706,288 @@ Origin: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks
 2026-02-21 13:00:59,475 p=17876 u=achim.reckeweg n=ansible INFO| fatal: [worker03]: FAILED! => {"changed": true, "cmd": "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.28.5+k3s1 K3S_URL=https://192.168.20.31:6443 K3S_TOKEN=K10dd1ebae67719ce89f21debed09dd6e5eac87bef758c027a36ea3038230376124::server:4792aa9a2a1e27f97a4a9eede54b349b sh -s - agent  --node-ip=192.168.20.23  --flannel-iface=eth0.20\n", "delta": "0:19:56.092556", "end": "2026-02-21 13:00:59.407676", "msg": "non-zero return code", "rc": 1, "start": "2026-02-21 12:41:03.315120", "stderr": "Created symlink '/etc/systemd/system/multi-user.target.wants/k3s-agent.service' → '/etc/systemd/system/k3s-agent.service'.\nJob for k3s-agent.service canceled.", "stderr_lines": ["Created symlink '/etc/systemd/system/multi-user.target.wants/k3s-agent.service' → '/etc/systemd/system/k3s-agent.service'.", "Job for k3s-agent.service canceled."], "stdout": "[INFO]  Using v1.28.5+k3s1 as release\n[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.28.5+k3s1/sha256sum-arm64.txt\n[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.28.5+k3s1/k3s-arm64\n[INFO]  Verifying binary download\n[INFO]  Installing k3s to /usr/local/bin/k3s\n[INFO]  Finding available k3s-selinux versions\n[INFO]  Creating /usr/local/bin/kubectl symlink to k3s\n[INFO]  Creating /usr/local/bin/crictl symlink to k3s\n[INFO]  Creating /usr/local/bin/ctr symlink to k3s\n[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh\n[INFO]  Creating uninstall script /usr/local/bin/k3s-agent-uninstall.sh\n[INFO]  env: Creating environment file /etc/systemd/system/k3s-agent.service.env\n[INFO]  systemd: Creating service file /etc/systemd/system/k3s-agent.service\n[INFO]  systemd: Enabling k3s-agent unit\n[INFO]  systemd: Starting k3s-agent", "stdout_lines": ["[INFO]  Using v1.28.5+k3s1 as release", "[INFO]  Downloading hash https://github.com/k3s-io/k3s/releases/download/v1.28.5+k3s1/sha256sum-arm64.txt", "[INFO]  Downloading binary https://github.com/k3s-io/k3s/releases/download/v1.28.5+k3s1/k3s-arm64", "[INFO]  Verifying binary download", "[INFO]  Installing k3s to /usr/local/bin/k3s", "[INFO]  Finding available k3s-selinux versions", "[INFO]  Creating /usr/local/bin/kubectl symlink to k3s", "[INFO]  Creating /usr/local/bin/crictl symlink to k3s", "[INFO]  Creating /usr/local/bin/ctr symlink to k3s", "[INFO]  Creating killall script /usr/local/bin/k3s-killall.sh", "[INFO]  Creating uninstall script /usr/local/bin/k3s-agent-uninstall.sh", "[INFO]  env: Creating environment file /etc/systemd/system/k3s-agent.service.env", "[INFO]  systemd: Creating service file /etc/systemd/system/k3s-agent.service", "[INFO]  systemd: Enabling k3s-agent unit", "[INFO]  systemd: Starting k3s-agent"]}
 2026-02-21 13:11:00,881 p=17876 u=achim.reckeweg n=ansible ERROR| [ERROR]: User interrupted execution
 
+2026-04-07 15:15:31,134 p=22345 u=achim.reckeweg n=ansible INFO| PLAY [Prepare new worker node] ********************************************************************************************************************************************************************************************************
+2026-04-07 15:15:31,147 p=22345 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************************************************************************************************************
+2026-04-07 15:15:31,973 p=22345 u=achim.reckeweg n=ansible ERROR| [ERROR]: Task failed: Missing sudo password
+
+2026-04-07 15:15:31,973 p=22345 u=achim.reckeweg n=ansible INFO| fatal: [worker06]: FAILED! => {"changed": false, "msg": "Task failed: Missing sudo password"}
+2026-04-07 15:15:31,974 p=22345 u=achim.reckeweg n=ansible INFO| PLAY RECAP ****************************************************************************************************************************************************************************************************************************
+2026-04-07 15:15:31,974 p=22345 u=achim.reckeweg n=ansible INFO| worker06                   : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+2026-04-07 15:26:41,602 p=22525 u=achim.reckeweg n=ansible INFO| PLAY [Prepare new worker node] ********************************************************************************************************************************************************************************************************
+2026-04-07 15:26:41,617 p=22525 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************************************************************************************************************
+2026-04-07 15:26:43,230 p=22525 u=achim.reckeweg n=ansible INFO| ok: [worker06]
+2026-04-07 15:26:43,236 p=22525 u=achim.reckeweg n=ansible INFO| TASK [System aktualisieren] ***********************************************************************************************************************************************************************************************************
+2026-04-07 15:26:48,517 p=22525 u=achim.reckeweg n=ansible INFO| ok: [worker06]
+2026-04-07 15:26:48,523 p=22525 u=achim.reckeweg n=ansible INFO| TASK [Benötigte Pakete installieren] **************************************************************************************************************************************************************************************************
+2026-04-07 15:26:49,514 p=22525 u=achim.reckeweg n=ansible ERROR| [ERROR]: Task failed: Module failed: No package matching 'linux-modules-extra-raspi' is available
+Origin: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks/add-worker.yml:18:7
+
+16         cache_valid_time: 3600
+17
+18     - name: Benötigte Pakete installieren
+         ^ column 7
+
+
+2026-04-07 15:26:49,515 p=22525 u=achim.reckeweg n=ansible INFO| fatal: [worker06]: FAILED! => {"changed": false, "msg": "No package matching 'linux-modules-extra-raspi' is available"}
+2026-04-07 15:26:49,515 p=22525 u=achim.reckeweg n=ansible INFO| PLAY RECAP ****************************************************************************************************************************************************************************************************************************
+2026-04-07 15:26:49,515 p=22525 u=achim.reckeweg n=ansible INFO| worker06                   : ok=2    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+2026-04-07 15:29:41,195 p=22595 u=achim.reckeweg n=ansible INFO| worker05 | CHANGED | rc=0 >>
+ii  bsdextrautils                        2.41-5                               arm64        extra utilities from 4.4BSD-Lite
+ii  cryptsetup                           2:2.7.5-2                            arm64        disk encryption support - startup scripts
+ii  cryptsetup-bin                       2:2.7.5-2                            arm64        disk encryption support - command line tools
+ii  dmsetup                              2:1.02.205-2                         arm64        Linux Kernel Device Mapper userspace library
+ii  icoutils                             0.32.3-6                             arm64        Create and extract MS Windows icons and cursors
+ii  libcdparanoia0:arm64                 3.10.2+debian-14+b1                  arm64        audio extraction tool for sampling CDs (library)
+ii  libcryptsetup12:arm64                2:2.7.5-2                            arm64        disk encryption support - shared library
+ii  librsvg2-common:arm64                2.60.0+dfsg-1                        arm64        SAX-based renderer library for SVG files (extra runtime)
+ii  nfs-common                           1:2.8.3-1                            arm64        NFS support files common to client and server
+ii  open-iscsi                           2.1.11-1+deb13u2                     arm64        iSCSI initiator tools
+ii  qemu-block-extra                     1:10.0.8+ds-0+deb13u1+b1             arm64        extra block backend modules for qemu-system and qemu-utils
+ii  util-linux-extra                     2.41-5                               arm64        interactive login tools
+
+2026-04-07 15:30:40,120 p=22647 u=achim.reckeweg n=ansible INFO| PLAY [Prepare new worker node] ********************************************************************************************************************************************************************************************************
+2026-04-07 15:30:40,130 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] ****************************************************************************************************************************************************************************************************************
+2026-04-07 15:30:41,703 p=22647 u=achim.reckeweg n=ansible INFO| ok: [worker06]
+2026-04-07 15:30:41,709 p=22647 u=achim.reckeweg n=ansible INFO| TASK [System aktualisieren] ***********************************************************************************************************************************************************************************************************
+2026-04-07 15:30:44,656 p=22647 u=achim.reckeweg n=ansible INFO| ok: [worker06]
+2026-04-07 15:30:44,663 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Benötigte Pakete installieren] **************************************************************************************************************************************************************************************************
+2026-04-07 15:30:46,181 p=22647 u=achim.reckeweg n=ansible INFO| ok: [worker06]
+2026-04-07 15:30:46,187 p=22647 u=achim.reckeweg n=ansible INFO| TASK [open-iscsi aktivieren (für Longhorn)] *******************************************************************************************************************************************************************************************
+2026-04-07 15:30:47,236 p=22647 u=achim.reckeweg n=ansible INFO| ok: [worker06]
+2026-04-07 15:30:47,242 p=22647 u=achim.reckeweg n=ansible INFO| TASK [cgroup memory in cmdline.txt aktivieren (Raspberry Pi)] *************************************************************************************************************************************************************************
+2026-04-07 15:30:47,753 p=22647 u=achim.reckeweg n=ansible WARNING| [WARNING]: Module remote_tmp /root/.ansible/tmp did not exist and was created with a mode of 0700, this may cause issues when running as another user. To avoid this, create the remote_tmp dir with the correct permissions manually
+
+2026-04-07 15:30:47,753 p=22647 u=achim.reckeweg n=ansible INFO| changed: [worker06]
+2026-04-07 15:30:47,761 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Reboot wenn cgroup geändert] ****************************************************************************************************************************************************************************************************
+2026-04-07 15:31:17,558 p=22647 u=achim.reckeweg n=ansible INFO| changed: [worker06]
+2026-04-07 15:31:17,566 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Hardware-Watchdog aktivieren] ***************************************************************************************************************************************************************************************************
+2026-04-07 15:31:17,894 p=22647 u=achim.reckeweg n=ansible INFO| changed: [worker06]
+2026-04-07 15:31:17,900 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Persistentes journald Logging einrichten] ***************************************************************************************************************************************************************************************
+2026-04-07 15:31:18,412 p=22647 u=achim.reckeweg n=ansible INFO| changed: [worker06]
+2026-04-07 15:31:18,417 p=22647 u=achim.reckeweg n=ansible INFO| PLAY [Longhorn Storage vorbereiten] ***************************************************************************************************************************************************************************************************
+2026-04-07 15:31:18,423 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Mount-Verzeichnis erstellen] ****************************************************************************************************************************************************************************************************
+2026-04-07 15:31:18,755 p=22647 u=achim.reckeweg n=ansible INFO| changed: [worker06]
+2026-04-07 15:31:18,761 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Longhorn Partition mounten] *****************************************************************************************************************************************************************************************************
+2026-04-07 15:31:19,366 p=22647 u=achim.reckeweg n=ansible WARNING| [WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+
+2026-04-07 15:31:19,367 p=22647 u=achim.reckeweg n=ansible INFO| [DEPRECATION WARNING]: Importing 'to_bytes' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+
+2026-04-07 15:31:19,367 p=22647 u=achim.reckeweg n=ansible INFO| [DEPRECATION WARNING]: Importing 'to_native' from 'ansible.module_utils._text' is deprecated. This feature will be removed from ansible-core version 2.24. Use ansible.module_utils.common.text.converters instead.
+
+2026-04-07 15:31:19,367 p=22647 u=achim.reckeweg n=ansible INFO| [DEPRECATION WARNING]: Passing `warnings` to `exit_json` or `fail_json` is deprecated. This feature will be removed from ansible-core version 2.23. Use `AnsibleModule.warn` instead.
+
+2026-04-07 15:31:19,367 p=22647 u=achim.reckeweg n=ansible INFO| changed: [worker06]
+2026-04-07 15:31:19,373 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Mount verifizieren] *************************************************************************************************************************************************************************************************************
+2026-04-07 15:31:19,898 p=22647 u=achim.reckeweg n=ansible INFO| ok: [worker06]
+2026-04-07 15:31:19,904 p=22647 u=achim.reckeweg n=ansible INFO| PLAY [k3s Agent installieren] *********************************************************************************************************************************************************************************************************
+2026-04-07 15:31:19,911 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Node-Token vom ersten Master holen] *********************************************************************************************************************************************************************************************
+2026-04-07 15:31:20,842 p=22647 u=achim.reckeweg n=ansible INFO| ok: [worker06 -> master01(192.168.20.31)]
+2026-04-07 15:31:20,849 p=22647 u=achim.reckeweg n=ansible INFO| TASK [k3s Agent installieren] *********************************************************************************************************************************************************************************************************
+2026-04-07 15:31:32,268 p=22647 u=achim.reckeweg n=ansible INFO| changed: [worker06]
+2026-04-07 15:31:32,275 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Warten bis Node im Cluster erscheint] *******************************************************************************************************************************************************************************************
+2026-04-07 15:31:32,703 p=22647 u=achim.reckeweg n=ansible INFO| ok: [worker06 -> master01(192.168.20.31)]
+2026-04-07 15:31:32,711 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Erfolg melden] ******************************************************************************************************************************************************************************************************************
+2026-04-07 15:31:32,747 p=22647 u=achim.reckeweg n=ansible INFO| ok: [worker06] => {
+    "msg": "k3s-06a (worker06) ist erfolgreich dem Cluster beigetreten!"
+}
+2026-04-07 15:31:32,751 p=22647 u=achim.reckeweg n=ansible INFO| PLAY [Node Labels setzen] *************************************************************************************************************************************************************************************************************
+2026-04-07 15:31:32,757 p=22647 u=achim.reckeweg n=ansible INFO| TASK [Worker- und Arch-Labels setzen] *************************************************************************************************************************************************************************************************
+2026-04-07 15:31:33,198 p=22647 u=achim.reckeweg n=ansible INFO| changed: [worker06 -> master01(192.168.20.31)]
+2026-04-07 15:31:33,200 p=22647 u=achim.reckeweg n=ansible INFO| PLAY RECAP ****************************************************************************************************************************************************************************************************************************
+2026-04-07 15:31:33,200 p=22647 u=achim.reckeweg n=ansible INFO| worker06                   : ok=16   changed=8    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+2026-04-14 19:09:54,602 p=21523 u=achim.reckeweg n=ansible WARNING| [WARNING]: Could not match supplied host pattern, ignoring: gmkt-03x
+
+2026-04-14 19:09:54,604 p=21523 u=achim.reckeweg n=ansible ERROR| [ERROR]: Specified inventory, host pattern and/or --limit leaves us with no hosts to target.
+
+2026-04-14 19:21:58,390 p=23132 u=achim.reckeweg n=ansible INFO| PLAY [NetworkManager auf Master Nodes einrichten] ****************************************************************************************************************************************************
+2026-04-14 19:21:58,497 p=23132 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] *******************************************************************************************************************************************************************************
+2026-04-14 19:22:00,848 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-04-14 19:22:00,862 p=23132 u=achim.reckeweg n=ansible INFO| TASK [Aktuelle VLAN-IP anzeigen] *********************************************************************************************************************************************************************
+2026-04-14 19:22:01,481 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-04-14 19:22:01,495 p=23132 u=achim.reckeweg n=ansible INFO| TASK [VLAN-Status vor Migration anzeigen] ************************************************************************************************************************************************************
+2026-04-14 19:22:01,752 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": "master03: 5: enp1s0.20@enp1s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000\n    inet 192.168.20.33/24 brd 192.168.20.255 scope global enp1s0.20\n       valid_lft forever preferred_lft forever"
+}
+2026-04-14 19:22:01,764 p=23132 u=achim.reckeweg n=ansible INFO| TASK [NetworkManager und vlan-Paket installieren] ****************************************************************************************************************************************************
+2026-04-14 19:22:04,510 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-04-14 19:22:04,523 p=23132 u=achim.reckeweg n=ansible INFO| TASK [8021q Modul laden] *****************************************************************************************************************************************************************************
+2026-04-14 19:22:05,158 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-04-14 19:22:05,171 p=23132 u=achim.reckeweg n=ansible INFO| TASK [8021q beim Boot laden] *************************************************************************************************************************************************************************
+2026-04-14 19:22:05,823 p=23132 u=achim.reckeweg n=ansible WARNING| [WARNING]: Module remote_tmp /root/.ansible/tmp did not exist and was created with a mode of 0700, this may cause issues when running as another user. To avoid this, create the remote_tmp dir with the correct permissions manually
+
+2026-04-14 19:22:05,823 p=23132 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-04-14 19:22:05,846 p=23132 u=achim.reckeweg n=ansible INFO| TASK [Backup von /etc/network/interfaces erstellen] **************************************************************************************************************************************************
+2026-04-14 19:22:06,640 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-04-14 19:22:06,651 p=23132 u=achim.reckeweg n=ansible INFO| TASK [Backup von /etc/network/interfaces.d/ erstellen] ***********************************************************************************************************************************************
+2026-04-14 19:22:07,390 p=23132 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-04-14 19:22:07,402 p=23132 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für Parent-Interface prüfen] *****************************************************************************************************************************************************
+2026-04-14 19:22:07,771 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-04-14 19:22:07,781 p=23132 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für Parent-Interface anlegen] ****************************************************************************************************************************************************
+2026-04-14 19:22:08,131 p=23132 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-04-14 19:22:08,141 p=23132 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für VLAN prüfen] *****************************************************************************************************************************************************************
+2026-04-14 19:22:08,499 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-04-14 19:22:08,512 p=23132 u=achim.reckeweg n=ansible INFO| TASK [VLAN-IP aus host_vars ableiten] ****************************************************************************************************************************************************************
+2026-04-14 19:22:08,580 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-04-14 19:22:08,591 p=23132 u=achim.reckeweg n=ansible INFO| TASK [Geplante VLAN-IP zur Kontrolle anzeigen] *******************************************************************************************************************************************************
+2026-04-14 19:22:08,668 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03] => {
+    "msg": "master03: Management 192.168.11.33 → VLAN 192.168.20.33/24"
+}
+2026-04-14 19:22:08,678 p=23132 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für VLAN anlegen] ****************************************************************************************************************************************************************
+2026-04-14 19:22:09,027 p=23132 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-04-14 19:22:09,037 p=23132 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für VLAN aktualisieren (falls bereits vorhanden)] ********************************************************************************************************************************
+2026-04-14 19:22:09,376 p=23132 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-04-14 19:22:09,386 p=23132 u=achim.reckeweg n=ansible INFO| TASK [VLAN-Interface-Datei aus interfaces.d entfernen] ***********************************************************************************************************************************************
+2026-04-14 19:22:10,039 p=23132 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-04-14 19:22:10,052 p=23132 u=achim.reckeweg n=ansible INFO| TASK [/etc/network/interfaces auf NM-Stub reduzieren] ************************************************************************************************************************************************
+2026-04-14 19:22:11,141 p=23132 u=achim.reckeweg n=ansible INFO| changed: [master03]
+2026-04-14 19:22:11,153 p=23132 u=achim.reckeweg n=ansible INFO| TASK [NetworkManager aktivieren und starten] *********************************************************************************************************************************************************
+2026-04-14 19:22:12,237 p=23132 u=achim.reckeweg n=ansible INFO| ok: [master03]
+2026-04-14 19:22:12,261 p=23132 u=achim.reckeweg n=ansible INFO| TASK [Node neu starten] ******************************************************************************************************************************************************************************
+2026-04-14 19:24:25,273 p=23132 u=achim.reckeweg n=ansible ERROR| [ERROR]: Task failed: Action failed: Timed out waiting for last boot time check (timeout=120)
+Origin: /Users/achim.reckeweg/git/seri-infrastructure-complete/ansible/playbooks/setup-networkmanager-masters.yml:160:7
+
+158     # ── Reboot ────────────────────────────────────────────────────────────────
+159
+160     - name: Node neu starten
+          ^ column 7
+
+
+2026-04-14 19:24:25,275 p=23132 u=achim.reckeweg n=ansible INFO| fatal: [master03]: FAILED! => {"changed": false, "elapsed": 131, "msg": "Timed out waiting for last boot time check (timeout=120)", "rebooted": true}
+2026-04-14 19:24:25,276 p=23132 u=achim.reckeweg n=ansible INFO| PLAY RECAP *******************************************************************************************************************************************************************************************
+2026-04-14 19:24:25,276 p=23132 u=achim.reckeweg n=ansible INFO| master03                   : ok=18   changed=7    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+2026-04-14 19:28:44,428 p=24082 u=achim.reckeweg n=ansible INFO| PLAY [NetworkManager auf Master Nodes einrichten] ****************************************************************************************************************************************************
+2026-04-14 19:28:44,449 p=24082 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] *******************************************************************************************************************************************************************************
+2026-04-14 19:28:47,662 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:28:47,673 p=24082 u=achim.reckeweg n=ansible INFO| TASK [Aktuelle VLAN-IP anzeigen] *********************************************************************************************************************************************************************
+2026-04-14 19:28:48,210 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:28:48,220 p=24082 u=achim.reckeweg n=ansible INFO| TASK [VLAN-Status vor Migration anzeigen] ************************************************************************************************************************************************************
+2026-04-14 19:28:48,308 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "master02: 5: enp1s0.20@enp1s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000\n    inet 192.168.20.32/24 brd 192.168.20.255 scope global enp1s0.20\n       valid_lft forever preferred_lft forever"
+}
+2026-04-14 19:28:48,317 p=24082 u=achim.reckeweg n=ansible INFO| TASK [NetworkManager und vlan-Paket installieren] ****************************************************************************************************************************************************
+2026-04-14 19:28:50,590 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:28:50,601 p=24082 u=achim.reckeweg n=ansible INFO| TASK [8021q Modul laden] *****************************************************************************************************************************************************************************
+2026-04-14 19:28:51,179 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:28:51,189 p=24082 u=achim.reckeweg n=ansible INFO| TASK [8021q beim Boot laden] *************************************************************************************************************************************************************************
+2026-04-14 19:28:51,873 p=24082 u=achim.reckeweg n=ansible WARNING| [WARNING]: Module remote_tmp /root/.ansible/tmp did not exist and was created with a mode of 0700, this may cause issues when running as another user. To avoid this, create the remote_tmp dir with the correct permissions manually
+
+2026-04-14 19:28:51,874 p=24082 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-04-14 19:28:51,885 p=24082 u=achim.reckeweg n=ansible INFO| TASK [Backup von /etc/network/interfaces erstellen] **************************************************************************************************************************************************
+2026-04-14 19:28:52,571 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:28:52,587 p=24082 u=achim.reckeweg n=ansible INFO| TASK [Backup von /etc/network/interfaces.d/ erstellen] ***********************************************************************************************************************************************
+2026-04-14 19:28:53,350 p=24082 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-04-14 19:28:53,360 p=24082 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für Parent-Interface prüfen] *****************************************************************************************************************************************************
+2026-04-14 19:28:53,708 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:28:53,722 p=24082 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für Parent-Interface anlegen] ****************************************************************************************************************************************************
+2026-04-14 19:28:54,065 p=24082 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-04-14 19:28:54,075 p=24082 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für VLAN prüfen] *****************************************************************************************************************************************************************
+2026-04-14 19:28:54,395 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:28:54,406 p=24082 u=achim.reckeweg n=ansible INFO| TASK [VLAN-IP aus host_vars ableiten] ****************************************************************************************************************************************************************
+2026-04-14 19:28:54,469 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:28:54,480 p=24082 u=achim.reckeweg n=ansible INFO| TASK [Geplante VLAN-IP zur Kontrolle anzeigen] *******************************************************************************************************************************************************
+2026-04-14 19:28:54,545 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "master02: Management 192.168.11.32 → VLAN 192.168.20.32/24"
+}
+2026-04-14 19:28:54,555 p=24082 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für VLAN anlegen] ****************************************************************************************************************************************************************
+2026-04-14 19:28:54,879 p=24082 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-04-14 19:28:54,889 p=24082 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für VLAN aktualisieren (falls bereits vorhanden)] ********************************************************************************************************************************
+2026-04-14 19:28:55,224 p=24082 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-04-14 19:28:55,233 p=24082 u=achim.reckeweg n=ansible INFO| TASK [VLAN-Interface-Datei aus interfaces.d entfernen] ***********************************************************************************************************************************************
+2026-04-14 19:28:55,786 p=24082 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-04-14 19:28:55,796 p=24082 u=achim.reckeweg n=ansible INFO| TASK [/etc/network/interfaces auf NM-Stub reduzieren] ************************************************************************************************************************************************
+2026-04-14 19:28:56,781 p=24082 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-04-14 19:28:56,791 p=24082 u=achim.reckeweg n=ansible INFO| TASK [NetworkManager aktivieren und starten] *********************************************************************************************************************************************************
+2026-04-14 19:28:57,830 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:28:57,842 p=24082 u=achim.reckeweg n=ansible INFO| TASK [Node neu starten] ******************************************************************************************************************************************************************************
+2026-04-14 19:31:30,930 p=24082 u=achim.reckeweg n=ansible INFO| changed: [master02]
+2026-04-14 19:31:30,950 p=24082 u=achim.reckeweg n=ansible INFO| TASK [Warten bis Node wieder erreichbar] *************************************************************************************************************************************************************
+2026-04-14 19:31:46,998 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:31:47,009 p=24082 u=achim.reckeweg n=ansible INFO| TASK [VLAN-Interface nach Reboot prüfen] *************************************************************************************************************************************************************
+2026-04-14 19:31:47,361 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:31:47,373 p=24082 u=achim.reckeweg n=ansible INFO| TASK [VLAN-Status nach Migration anzeigen] ***********************************************************************************************************************************************************
+2026-04-14 19:31:47,439 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": "master02 nach Reboot: 5: enp1s0.20@enp1s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000\n    inet 192.168.20.32/24 brd 192.168.20.255 scope global noprefixroute enp1s0.20\n       valid_lft forever preferred_lft forever"
+}
+2026-04-14 19:31:47,452 p=24082 u=achim.reckeweg n=ansible INFO| TASK [Aktive NM-Verbindungen anzeigen] ***************************************************************************************************************************************************************
+2026-04-14 19:31:47,796 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02]
+2026-04-14 19:31:47,808 p=24082 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindungen anzeigen] **********************************************************************************************************************************************************************
+2026-04-14 19:31:47,876 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02] => {
+    "msg": [
+        "NAME        UUID                                  TYPE      DEVICE    ",
+        "management  cc4781ac-e178-47dd-ac7c-b8f2a19f4ef9  ethernet  enp1s0    ",
+        "vlan20      7511b820-1318-4dc2-aa8b-504d8d8e5759  vlan      enp1s0.20 ",
+        "cni0        858566c4-b0fb-443f-aca0-25fcc3796488  bridge    cni0      ",
+        "lo          ccb3730d-3315-4cb1-946a-e6f8414b0dca  loopback  lo        "
+    ]
+}
+2026-04-14 19:31:47,887 p=24082 u=achim.reckeweg n=ansible INFO| TASK [Cluster-Node-Status prüfen] ********************************************************************************************************************************************************************
+2026-04-14 19:31:48,873 p=24082 u=achim.reckeweg n=ansible INFO| ok: [master02 -> master01(192.168.11.31)]
+2026-04-14 19:31:48,875 p=24082 u=achim.reckeweg n=ansible INFO| PLAY RECAP *******************************************************************************************************************************************************************************************
+2026-04-14 19:31:48,875 p=24082 u=achim.reckeweg n=ansible INFO| master02                   : ok=25   changed=8    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+2026-04-14 19:40:33,072 p=26014 u=achim.reckeweg n=ansible INFO| PLAY [NetworkManager auf Master Nodes einrichten] ****************************************************************************************************************************************************
+2026-04-14 19:40:33,093 p=26014 u=achim.reckeweg n=ansible INFO| TASK [Gathering Facts] *******************************************************************************************************************************************************************************
+2026-04-14 19:40:35,144 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:40:35,154 p=26014 u=achim.reckeweg n=ansible INFO| TASK [Aktuelle VLAN-IP anzeigen] *********************************************************************************************************************************************************************
+2026-04-14 19:40:35,676 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:40:35,685 p=26014 u=achim.reckeweg n=ansible INFO| TASK [VLAN-Status vor Migration anzeigen] ************************************************************************************************************************************************************
+2026-04-14 19:40:35,834 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "master01: 5: enp1s0.20@enp1s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000\n    inet 192.168.20.31/24 brd 192.168.20.255 scope global enp1s0.20\n       valid_lft forever preferred_lft forever\n    inet 192.168.20.50/32 brd 192.168.20.50 scope global enp1s0.20\n       valid_lft forever preferred_lft forever"
+}
+2026-04-14 19:40:35,842 p=26014 u=achim.reckeweg n=ansible INFO| TASK [NetworkManager und vlan-Paket installieren] ****************************************************************************************************************************************************
+2026-04-14 19:40:38,391 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:40:38,400 p=26014 u=achim.reckeweg n=ansible INFO| TASK [8021q Modul laden] *****************************************************************************************************************************************************************************
+2026-04-14 19:40:38,929 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:40:38,938 p=26014 u=achim.reckeweg n=ansible INFO| TASK [8021q beim Boot laden] *************************************************************************************************************************************************************************
+2026-04-14 19:40:39,466 p=26014 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-04-14 19:40:39,477 p=26014 u=achim.reckeweg n=ansible INFO| TASK [Backup von /etc/network/interfaces erstellen] **************************************************************************************************************************************************
+2026-04-14 19:40:40,090 p=26014 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-04-14 19:40:40,099 p=26014 u=achim.reckeweg n=ansible INFO| TASK [Backup von /etc/network/interfaces.d/ erstellen] ***********************************************************************************************************************************************
+2026-04-14 19:40:40,616 p=26014 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-04-14 19:40:40,625 p=26014 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für Parent-Interface prüfen] *****************************************************************************************************************************************************
+2026-04-14 19:40:40,926 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:40:40,934 p=26014 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für Parent-Interface anlegen] ****************************************************************************************************************************************************
+2026-04-14 19:40:41,258 p=26014 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-04-14 19:40:41,267 p=26014 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für VLAN prüfen] *****************************************************************************************************************************************************************
+2026-04-14 19:40:41,572 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:40:41,582 p=26014 u=achim.reckeweg n=ansible INFO| TASK [VLAN-IP aus host_vars ableiten] ****************************************************************************************************************************************************************
+2026-04-14 19:40:41,638 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:40:41,646 p=26014 u=achim.reckeweg n=ansible INFO| TASK [Geplante VLAN-IP zur Kontrolle anzeigen] *******************************************************************************************************************************************************
+2026-04-14 19:40:41,705 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "master01: Management 192.168.11.31 → VLAN 192.168.20.31/24"
+}
+2026-04-14 19:40:41,714 p=26014 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für VLAN anlegen] ****************************************************************************************************************************************************************
+2026-04-14 19:40:42,020 p=26014 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-04-14 19:40:42,028 p=26014 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindung für VLAN aktualisieren (falls bereits vorhanden)] ********************************************************************************************************************************
+2026-04-14 19:40:42,335 p=26014 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-04-14 19:40:42,344 p=26014 u=achim.reckeweg n=ansible INFO| TASK [VLAN-Interface-Datei aus interfaces.d entfernen] ***********************************************************************************************************************************************
+2026-04-14 19:40:42,915 p=26014 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-04-14 19:40:42,924 p=26014 u=achim.reckeweg n=ansible INFO| TASK [/etc/network/interfaces auf NM-Stub reduzieren] ************************************************************************************************************************************************
+2026-04-14 19:40:43,848 p=26014 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-04-14 19:40:43,856 p=26014 u=achim.reckeweg n=ansible INFO| TASK [NetworkManager aktivieren und starten] *********************************************************************************************************************************************************
+2026-04-14 19:40:44,847 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:40:44,862 p=26014 u=achim.reckeweg n=ansible INFO| TASK [Node neu starten] ******************************************************************************************************************************************************************************
+2026-04-14 19:43:17,540 p=26014 u=achim.reckeweg n=ansible INFO| changed: [master01]
+2026-04-14 19:43:17,555 p=26014 u=achim.reckeweg n=ansible INFO| TASK [Warten bis Node wieder erreichbar] *************************************************************************************************************************************************************
+2026-04-14 19:43:33,289 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:43:33,298 p=26014 u=achim.reckeweg n=ansible INFO| TASK [VLAN-Interface nach Reboot prüfen] *************************************************************************************************************************************************************
+2026-04-14 19:43:33,597 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:43:33,606 p=26014 u=achim.reckeweg n=ansible INFO| TASK [VLAN-Status nach Migration anzeigen] ***********************************************************************************************************************************************************
+2026-04-14 19:43:33,664 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": "master01 nach Reboot: 5: enp1s0.20@enp1s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000\n    inet 192.168.20.31/24 brd 192.168.20.255 scope global noprefixroute enp1s0.20\n       valid_lft forever preferred_lft forever"
+}
+2026-04-14 19:43:33,673 p=26014 u=achim.reckeweg n=ansible INFO| TASK [Aktive NM-Verbindungen anzeigen] ***************************************************************************************************************************************************************
+2026-04-14 19:43:34,017 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:43:34,030 p=26014 u=achim.reckeweg n=ansible INFO| TASK [NM-Verbindungen anzeigen] **********************************************************************************************************************************************************************
+2026-04-14 19:43:34,094 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01] => {
+    "msg": [
+        "NAME        UUID                                  TYPE      DEVICE    ",
+        "management  dcade40b-5ad6-4a8c-bf81-801f23136b6f  ethernet  enp1s0    ",
+        "vlan20      e19a9160-8911-44a6-bfac-8b56f53e84f0  vlan      enp1s0.20 ",
+        "cni0        16c5b3c9-fbcd-4dd4-8c24-2c301c62950a  bridge    cni0      ",
+        "lo          b4e8adf9-0936-498a-b741-3a1b269df416  loopback  lo        "
+    ]
+}
+2026-04-14 19:43:34,105 p=26014 u=achim.reckeweg n=ansible INFO| TASK [Cluster-Node-Status prüfen] ********************************************************************************************************************************************************************
+2026-04-14 19:43:34,496 p=26014 u=achim.reckeweg n=ansible INFO| ok: [master01]
+2026-04-14 19:43:34,498 p=26014 u=achim.reckeweg n=ansible INFO| PLAY RECAP *******************************************************************************************************************************************************************************************
+2026-04-14 19:43:34,498 p=26014 u=achim.reckeweg n=ansible INFO| master01                   : ok=25   changed=9    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   

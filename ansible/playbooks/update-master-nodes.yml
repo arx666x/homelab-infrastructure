@@ -24,12 +24,12 @@
 #
 # Ausführung:
 #   ansible-playbook update-master-nodes.yml -e k3s_version=v1.29.15+k3s1
-#   ansible-playbook update-master-nodes.yml -e k3s_version=v1.29.15+k3s1 --limit gmkt-01x
+#   ansible-playbook update-master-nodes.yml -e k3s_version=v1.29.15+k3s1 --limit master01
 #   ansible-playbook update-master-nodes.yml -e k3s_version=v1.29.15+k3s1 -e skip_os_update=true
 #   ansible-playbook update-master-nodes.yml -e k3s_version=v1.29.15+k3s1 -e etcd_snapshot=false
 
 - name: Koordiniertes k3s-Upgrade der Master-Nodes
-  hosts: k3s_masters
+  hosts: master
   serial: 1                          # Immer nur einen Master gleichzeitig!
   max_fail_percentage: 0             # Bei Fehler sofort abbrechen
   gather_facts: true
@@ -38,7 +38,7 @@
     k3s_version: ""                  # PFLICHT: -e k3s_version=v1.29.15+k3s1
     skip_os_update: false            # OS-Update überspringen: -e skip_os_update=true
     etcd_snapshot: true              # etcd-Snapshot vor erstem Master: -e etcd_snapshot=false
-    k8s_delegate: gmkt-01x          # Kubernetes-Calls über diesen Master
+    k8s_delegate: master01          # Kubernetes-Calls über diesen Master
     kubectl_bin: /usr/local/bin/kubectl
     k3s_bin: /usr/local/bin/k3s
     node_ready_timeout: 300          # Sekunden warten bis Node wieder Ready
@@ -62,7 +62,9 @@
 
     - name: "[ PRE ] Node-Name ermitteln"
       set_fact:
-        k8s_node_name: "{{ inventory_hostname }}"
+        # inventory_hostname = master01 (Ansible-Name)
+        # hostname           = gmkt-01x (Kubernetes-Node-Name aus hosts.ini)
+        k8s_node_name: "{{ hostvars[inventory_hostname]['hostname'] }}"
 
     - name: "[ PRE ] Aktuelle k3s-Version ermitteln"
       command: "{{ k3s_bin }} --version"
@@ -119,7 +121,7 @@
           member list 2>/dev/null || echo "etcd-check nicht verfügbar"
       register: etcd_members
       changed_when: false
-      when: inventory_hostname == k8s_delegate
+      when: inventory_hostname == k8s_delegate   # master01 = gmkt-01x
 
     - name: "[ PRE ] etcd-Status anzeigen"
       debug:
@@ -139,7 +141,7 @@
       register: etcd_snapshot_result
       when:
         - etcd_snapshot | bool
-        - inventory_hostname == k8s_delegate
+        - inventory_hostname == k8s_delegate   # nur auf master01 = gmkt-01x
         - k3s_installed_ver != k3s_version
       changed_when: true
 

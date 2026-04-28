@@ -25,7 +25,7 @@
 #
 # Ausführung:
 #   ansible-playbook update-pi-nodes.yml
-#   ansible-playbook update-pi-nodes.yml --limit k3s-01a        # Einzelner Node
+#   ansible-playbook update-pi-nodes.yml --limit worker01   # Einzelner Node
 #   ansible-playbook update-pi-nodes.yml -e eeprom_update=true
 #   ansible-playbook update-pi-nodes.yml -e skip_longhorn=true  # Ohne Longhorn-Drain
 #   ansible-playbook update-pi-nodes.yml -e k3s_version=v1.32.3+k3s1   # Mit k3s-Update
@@ -34,7 +34,7 @@
 #     -e eeprom_update=true        # Alles auf einmal
 
 - name: Koordiniertes Update der Raspberry Pi k3s Worker-Nodes
-  hosts: pi_workers
+  hosts: worker
   serial: 1                          # Immer nur einen Node gleichzeitig
   max_fail_percentage: 0             # Bei Fehler sofort abbrechen
   gather_facts: true
@@ -48,7 +48,7 @@
     longhorn_wait_timeout: 600       # Sekunden warten auf Longhorn (10 min)
     node_ready_timeout: 300          # Sekunden warten bis Node wieder Ready (5 min)
     drain_timeout: 300               # Sekunden für kubectl drain
-    k8s_delegate: gmkt-01x          # Kubernetes-Calls über diesen Master-Node
+    k8s_delegate: master01          # Kubernetes-Calls über diesen Master-Node
     kubectl_bin: /usr/local/bin/kubectl
 
   tasks:
@@ -59,7 +59,9 @@
 
     - name: "[ PRE ] Node-Name ermitteln"
       set_fact:
-        k8s_node_name: "{{ inventory_hostname }}"
+        # inventory_hostname = worker01 (Ansible-Name)
+        # hostname           = k3s-01a  (Kubernetes-Node-Name aus hosts.ini)
+        k8s_node_name: "{{ hostvars[inventory_hostname]['hostname'] }}"
 
     - name: "[ PRE ] Kubernetes Node Status prüfen"
       delegate_to: "{{ k8s_delegate }}"
