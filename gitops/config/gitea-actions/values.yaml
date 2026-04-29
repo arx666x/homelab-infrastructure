@@ -2,8 +2,6 @@ enabled: true
 existingSecret: gitea-actions-secret
 existingSecretKey: token
 giteaRootURL: https://gitea.reckeweg.io
-global:
-  storageClass: longhorn
 statefulset:
   replicas: 1
   timezone: Europe/Berlin
