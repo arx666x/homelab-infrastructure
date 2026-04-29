@@ -72,7 +72,7 @@
 
     - name: "[ PRE ] Aktuellen Kernel und OS anzeigen"
       debug:
-        msg: "{{ inventory_hostname }}: {{ ansible_kernel }} / {{ ansible_distribution }} {{ ansible_distribution_version }}"
+        msg: "{{ inventory_hostname }}: {{ ansible_facts['kernel'] }} / {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
 
     - name: "[ PRE ] Aktuelle k3s-Version ermitteln"
       command: k3s --version
@@ -124,10 +124,9 @@
     - name: "[ LONGHORN ] Warten bis alle Replicas evakuiert sind"
       delegate_to: "{{ k8s_delegate }}"
       shell: |
-        {{ kubectl_bin }} \
-          -n {{ longhorn_namespace }} get replicas \
-          -o jsonpath='{.items[?(@.spec.nodeID=="{{ k8s_node_name }}")].metadata.name}' \
-          | tr ' ' '\n' | grep -c . || echo 0
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} get replicas.longhorn.io \
+          -o jsonpath='{range .items[?(@.spec.nodeID=="{{ k8s_node_name }}")]}{.metadata.name}{"\n"}{end}' \
+          | grep -v '^[[:space:]]*$' | wc -l | tr -d ' '
       register: replica_count
       until: replica_count.stdout | int == 0
       retries: "{{ (longhorn_wait_timeout / 10) | int }}"
@@ -222,18 +221,10 @@
     # K3S AGENT UPDATE (optional, vor Reboot)
     # -------------------------------------------------------------------------
     #
-    # Läuft VOR dem Reboot, damit nach dem Neustart direkt die neue Version
-    # aktiv ist. Das offizielle k3s-Installscript ist idempotent:
-    # es überschreibt nur das Binary und den Systemd-Service, berührt aber
-    # weder kubeconfig noch Cluster-State.
-    #
-    # Reihenfolge:
-    #   1. Zielversion gegen installierte Version prüfen (kein Download wenn gleich)
-    #   2. k3s-Binary via Installscript ersetzen
-    #   3. k3s-agent stoppen (Reboot startet ihn wieder)
-    #
-    # Der Node ist zu diesem Zeitpunkt bereits ge-drainet und cordoniert,
-    # d.h. es laufen keine Workload-Pods mehr.
+    # WICHTIG: Das Install-Script überschreibt die k3s-agent.service Unit-File.
+    # Da Worker KEINE config.yaml haben, stecken alle Parameter in der Unit-File.
+    # Daher: Unit-File sichern → Binary direkt laden → Unit-File wiederherstellen.
+    # Das + im Versionstring muss URL-encoded werden: v1.30.11+k3s1 → %2B
 
     - name: "[ K3S ] Installiertes k3s-Binary-Version ermitteln"
       command: k3s --version
@@ -244,7 +235,6 @@
 
     - name: "[ K3S ] Versions-Fact setzen"
       set_fact:
-        # Extrahiert z.B. "v1.31.4+k3s1" aus "k3s version v1.31.4+k3s1 (abc1234)"
         k3s_installed_ver: >-
           {{ k3s_installed_raw.stdout
              | regex_search('v[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+') | default('unknown') }}
@@ -257,6 +247,16 @@
           {% if k3s_installed_ver == k3s_version %}→ bereits aktuell, überspringe Update{% else %}→ Update wird durchgeführt{% endif %}
       when: k3s_version != ''
 
+    - name: "[ K3S ] Unit-File sichern (vor Binary-Download)"
+      become: true
+      copy:
+        src: /etc/systemd/system/k3s-agent.service
+        dest: "/etc/systemd/system/k3s-agent.service.bak-{{ k3s_installed_ver }}"
+        remote_src: true
+      when:
+        - k3s_version != ''
+        - k3s_installed_ver != k3s_version
+
     - name: "[ K3S ] k3s-agent stoppen (vor Update)"
       become: true
       systemd:
@@ -266,22 +266,50 @@
         - k3s_version != ''
         - k3s_installed_ver != k3s_version
 
-    - name: "[ K3S ] k3s Binary via Installscript aktualisieren"
+    - name: "[ K3S ] Binary direkt herunterladen (ohne Install-Script)"
       become: true
       shell: |
-        curl -sfL https://get.k3s.io | \
-          INSTALL_K3S_VERSION="{{ k3s_version }}" \
-          INSTALL_K3S_SKIP_START=true \
-          sh -s - agent
+        ARCH=$(uname -m)
+        case ${ARCH} in
+          x86_64)  K3S_BIN="k3s" ;;
+          aarch64) K3S_BIN="k3s-arm64" ;;
+          armv7l)  K3S_BIN="k3s-armhf" ;;
+          *)       echo "Unbekannte Architektur: ${ARCH}"; exit 1 ;;
+        esac
+        VERSION_URL=$(echo "{{ k3s_version }}" | sed 's/+/%2B/g')
+        curl -sfL \
+          "https://github.com/k3s-io/k3s/releases/download/${VERSION_URL}/${K3S_BIN}" \
+          -o /usr/local/bin/k3s.new
+        chmod 755 /usr/local/bin/k3s.new
+        mv /usr/local/bin/k3s.new /usr/local/bin/k3s
+        echo "k3s Binary ersetzt: $(k3s --version | head -1)"
       register: k3s_install_result
       when:
         - k3s_version != ''
         - k3s_installed_ver != k3s_version
       changed_when: true
 
-    - name: "[ K3S ] Installscript-Ausgabe anzeigen"
+    - name: "[ K3S ] Download-Ergebnis anzeigen"
       debug:
         msg: "{{ k3s_install_result.stdout_lines | default([]) }}"
+      when:
+        - k3s_version != ''
+        - k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] Unit-File aus Backup wiederherstellen"
+      become: true
+      copy:
+        src: "/etc/systemd/system/k3s-agent.service.bak-{{ k3s_installed_ver }}"
+        dest: /etc/systemd/system/k3s-agent.service
+        remote_src: true
+      when:
+        - k3s_version != ''
+        - k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] systemd daemon-reload nach Unit-File Wiederherstellung"
+      become: true
+      systemd:
+        daemon_reload: true
       when:
         - k3s_version != ''
         - k3s_installed_ver != k3s_version
@@ -414,19 +442,38 @@
       when: not skip_longhorn
       changed_when: false
 
+    - name: "[ LONGHORN ] Aktuelle Replica-Anzahl auf Node prüfen"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} get replicas.longhorn.io \
+          -o jsonpath='{range .items[?(@.spec.nodeID=="{{ k8s_node_name }}")]}{.metadata.name}{"\n"}{end}' \
+          | grep -v '^[[:space:]]*$' | wc -l | tr -d ' '
+      register: current_replicas
+      changed_when: false
+      when: not skip_longhorn
+
+    - name: "[ LONGHORN ] Replica-Status anzeigen"
+      debug:
+        msg: >
+          Replicas auf {{ k8s_node_name }}: {{ current_replicas.stdout | int }}
+          {% if current_replicas.stdout | int == 0 %}→ keine Replicas erwartet, überspringe Wartezeit{% endif %}
+      when: not skip_longhorn
+
     - name: "[ LONGHORN ] Warten bis Replicas wieder aufgebaut werden (max. 10 min)"
       delegate_to: "{{ k8s_delegate }}"
       shell: |
         {{ kubectl_bin }} -n {{ longhorn_namespace }} get replicas.longhorn.io \
           -o jsonpath='{range .items[?(@.spec.nodeID=="{{ k8s_node_name }}")]}{.metadata.name}{"\n"}{end}' \
-          | grep -c . || echo 0
+          | grep -v '^[[:space:]]*$' | wc -l | tr -d ' '
       register: new_replicas
       until: new_replicas.stdout | int > 0
       retries: 60
       delay: 10
-      when: not skip_longhorn
+      when:
+        - not skip_longhorn
+        - current_replicas.stdout | int > 0   # Nur warten wenn vor dem Update Replicas da waren
       changed_when: false
-      ignore_errors: true  # Nicht blockieren falls Longhorn lange braucht
+      ignore_errors: true
 
     - name: "[ DONE ] Node abgeschlossen"
       debug:
@@ -434,4 +481,4 @@
           ✓ {{ inventory_hostname }} erfolgreich aktualisiert.
           Kernel: {{ new_kernel.stdout }}.
           k3s: {{ k3s_post_reboot_ver.stdout_lines[0] | default('nicht aktualisiert') }}.
-          Longhorn Replicas: {{ new_replicas.stdout | default('nicht geprüft') }}.
+          Longhorn Replicas: {{ new_replicas.stdout | default(current_replicas.stdout) | default('nicht geprüft') }}.
