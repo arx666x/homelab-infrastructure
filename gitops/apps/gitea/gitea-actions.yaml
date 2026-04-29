@@ -36,15 +36,6 @@ spec:
             extraEnvs:
               - name: DOCKER_IPTABLES_LEGACY
                 value: "1"
-          actRunner:
-            config: |
-              log:
-                level: info
-              cache:
-                enabled: false
-              container:
-                require_docker: true
-                docker_timeout: 300s
   destination:
     server: https://kubernetes.default.svc
     namespace: gitea
