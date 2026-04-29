@@ -7,35 +7,17 @@ metadata:
     argocd.argoproj.io/sync-wave: "3"
 spec:
   project: default
-  source:
-    chart: actions
-    repoURL: https://dl.gitea.com/charts/
-    targetRevision: 0.1.0
-    helm:
-      releaseName: gitea-actions
-      valuesObject:
-        enabled: true
-        existingSecret: gitea-actions-secret
-        existingSecretKey: token
-        giteaRootURL: https://gitea.reckeweg.io
-        global:
-          storageClass: longhorn
-        statefulset:
-          replicas: 1
-          timezone: Europe/Berlin
-          persistence:
-            size: 1Gi
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
-          dind:
-            extraEnvs:
-              - name: DOCKER_IPTABLES_LEGACY
-                value: "1"
+  sources:
+    - chart: actions
+      repoURL: https://dl.gitea.com/charts/
+      targetRevision: 0.1.0
+      helm:
+        releaseName: gitea-actions
+        valueFiles:
+          - $values/gitops/config/gitea-actions/values.yaml
+    - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
+      targetRevision: main
+      ref: values
   destination:
     server: https://kubernetes.default.svc
     namespace: gitea

@@ -1,0 +1,22 @@
+enabled: true
+existingSecret: gitea-actions-secret
+existingSecretKey: token
+giteaRootURL: https://gitea.reckeweg.io
+global:
+  storageClass: longhorn
+statefulset:
+  replicas: 1
+  timezone: Europe/Berlin
+  persistence:
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  dind:
+    extraEnvs:
+      - name: DOCKER_IPTABLES_LEGACY
+        value: "1"
