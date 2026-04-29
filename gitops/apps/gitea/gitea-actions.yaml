@@ -13,21 +13,18 @@ spec:
     targetRevision: 0.1.0
     helm:
       releaseName: gitea-actions
-      values: |
+      valuesObject:
         enabled: true
-
         existingSecret: gitea-actions-secret
         existingSecretKey: token
-
         giteaRootURL: https://gitea.reckeweg.io
-
+        global:
+          storageClass: longhorn
         statefulset:
           replicas: 1
           timezone: Europe/Berlin
-
           persistence:
             size: 1Gi
-
           resources:
             requests:
               cpu: 100m
@@ -35,7 +32,10 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
-
+          dind:
+            extraEnvs:
+              - name: DOCKER_IPTABLES_LEGACY
+                value: "1"
           actRunner:
             config: |
               log:
@@ -45,25 +45,15 @@ spec:
               container:
                 require_docker: true
                 docker_timeout: 300s
-
-          dind:
-            extraEnvs:
-              - name: "DOCKER_IPTABLES_LEGACY"
-                value: "1"
-
-        global:
-          storageClass: longhorn
-
   destination:
     server: https://kubernetes.default.svc
     namespace: gitea
-
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=false   # gitea namespace existiert bereits
+      - CreateNamespace=false
     retry:
       limit: 5
       backoff:
