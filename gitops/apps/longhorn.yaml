@@ -68,3 +68,14 @@ spec:
       kind: ValidatingWebhookConfiguration
       jsonPointers:
         - /webhooks
+    - group: apps
+      kind: DaemonSet
+      jsonPointers:
+        - /spec/template/spec/containers/0/resources
+        - /spec/template/spec/initContainers/0/resources
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/spec/containers/0/resources
+        - /spec/template/spec/initContainers/0/resources
+
