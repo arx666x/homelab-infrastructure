@@ -27,3 +27,10 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+  ignoreDifferences:
+    - group: ""
+      kind: Service
+      name: gitea-ssh
+      namespace: gitea
+      jsonPointers:
+        - /spec/ports/0/nodePort
