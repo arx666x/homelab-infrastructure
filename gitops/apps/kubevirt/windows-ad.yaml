@@ -45,6 +45,12 @@ spec:
       jsonPointers:
         - /spec/duration
         - /spec/renewBefore
+    - group: ""
+      kind: Service
+      name: windows-ad-lb
+      namespace: windows-ad
+      jqPathExpressions:
+        - .spec.ports[].nodePort
   retry:
     limit: 5
     backoff:
