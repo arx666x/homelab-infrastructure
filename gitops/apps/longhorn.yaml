@@ -70,19 +70,12 @@ spec:
         - /webhooks
     - group: apps
       kind: DaemonSet
-      jsonPointers:
-        - /spec/template/spec/containers/0/resources
-        - /spec/template/spec/initContainers/0/resources
+      jqPathExpressions:
+        - .spec.template.spec.containers[].resources
+        - .spec.template.spec.initContainers[].resources
     - group: apps
       kind: Deployment
-      jsonPointers:
-        - /spec/template/spec/containers/0/resources
-        - /spec/template/spec/initContainers/0/resources
-   - group: apps
-      kind: DaemonSet
-      jsonPointers:
-        - /spec/template/spec/containers/0/resources
-        - /spec/template/spec/initContainers/0/resources
-        - /spec/template/spec/initContainers/1/resources
-        - /spec/template/spec/initContainers/2/resources 
+      jqPathExpressions:
+        - .spec.template.spec.containers[].resources
+        - .spec.template.spec.initContainers[].resources
 
