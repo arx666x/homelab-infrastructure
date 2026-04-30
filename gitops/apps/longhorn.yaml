@@ -78,4 +78,11 @@ spec:
       jsonPointers:
         - /spec/template/spec/containers/0/resources
         - /spec/template/spec/initContainers/0/resources
+   - group: apps
+      kind: DaemonSet
+      jsonPointers:
+        - /spec/template/spec/containers/0/resources
+        - /spec/template/spec/initContainers/0/resources
+        - /spec/template/spec/initContainers/1/resources
+        - /spec/template/spec/initContainers/2/resources 
 
