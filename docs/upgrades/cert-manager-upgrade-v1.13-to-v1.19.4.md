@@ -15,16 +15,22 @@
 |---|---|
 | **Aktuelle Version** | v1.13.3 |
 | **Zielversion** | v1.19.4 |
-| **Upgrade-Strategie** | Git-Commit → ArgoCD Auto-Sync |
+| **Upgrade-Strategie** | Minor-by-Minor via Git-Commit → ArgoCD Auto-Sync |
 | **ArgoCD Application** | `argocd/cert-manager` |
-| **ClusterIssuer** | `letsencrypt-prod` (Cloudflare DNS-01), `selfsigned-issuer`, `ca-issuer` |
-| **Downtime** | Kurze Unterbrechung der Zertifikatserneuerung während Rollout (~1–2 min) |
+| **ClusterIssuers** | `letsencrypt-prod` (Cloudflare DNS-01), `selfsigned-issuer`, `ca-issuer` |
+| **Downtime** | Kurze Unterbrechung der Zertifikatserneuerung pro Schritt (~1–2 min) |
 
 > **Hinweis zur Installationshistorie:**  
-> cert-manager wurde initial via `deploy-direct.sh` (kubectl apply) gebootstrapt.  
-> ArgoCD hat die Installation danach übernommen und managed sie seitdem als Helm-Release.  
-> `deploy-direct.sh` dient ausschließlich als Disaster-Recovery-Bootstrap — ArgoCD  
-> (`selfHeal: true`) würde manuelle `kubectl apply`-Eingriffe sofort überschreiben.
+> cert-manager wurde initial via `deploy-direct.sh` (kubectl apply, Static Manifests) gebootstrapt.  
+> ArgoCD managed die Installation seitdem als Helm-Release (`charts.jetstack.io`).  
+> `deploy-direct.sh` dient ausschließlich als Disaster-Recovery-Bootstrap —  
+> ArgoCD (`selfHeal: true`) überschreibt manuelle `kubectl`-Eingriffe im laufenden Betrieb.
+
+> **Warum Minor-by-Minor?**  
+> cert-manager empfiehlt ausdrücklich, immer einen Minor-Schritt auf einmal zu upgraden —  
+> unabhängig von der Install-Methode (Static Manifests oder Helm/ArgoCD).  
+> CRD-Migrationen und Breaking Changes zwischen Minor-Versionen können sonst  
+> zu inkonsistenten Zuständen führen.
 
 ### Warum v1.19.4?
 
@@ -35,26 +41,42 @@
 
 ---
 
+## Upgrade-Pfad
+
+```
+v1.13.3 → v1.14.7 → v1.15.5 → v1.16.5 → v1.17.4 → v1.18.6 → v1.19.4
+```
+
+Jeder Schritt = ein Git-Commit + ArgoCD-Sync + Validierung.
+
+---
+
 ## Wichtige Breaking Changes je Minor-Version
 
+### 1.14
+- Keine Breaking Changes für diese Installation.
+
 ### 1.15
-- CRDs werden bei Deinstallation **nicht mehr gelöscht** (Schutzfunktion). Positiver Nebeneffekt für ArgoCD-managed Installs.
+- CRDs werden bei Deinstallation nicht mehr gelöscht (Schutzfunktion). Positiv für ArgoCD-managed Installs.
+
+### 1.16
+- Helm Schema Validation eingeführt — ungültige Helm Values werden rejected. Die aktuellen Values (`installCRDs: true`) sind valide, kein Handlungsbedarf.
 
 ### 1.17
-- RSA-Hashing: ab 3072-bit-Keys automatisch SHA-384, ab 4096-bit SHA-512. Die interne Root-CA (`seri-root-ca`, RSA 4096) wird beim nächsten Renewal mit SHA-512 neu ausgestellt — das ist gewollt und korrekt.
+- RSA-Hashing: ab 3072-bit automatisch SHA-384, ab 4096-bit SHA-512. Die interne Root-CA (`seri-root-ca`, RSA 4096) wird beim nächsten Renewal mit SHA-512 neu ausgestellt — gewollt und korrekt.
 
 ### 1.18
-- ACME HTTP-01 Ingress `pathType` von `ImplementationSpecific` auf `Exact` geändert. **Nicht relevant** — Traefik + DNS-01 (Cloudflare).
+- ACME HTTP-01 Ingress `pathType` → `Exact`. **Nicht relevant** — Traefik + DNS-01 (Cloudflare).
 
 ### 1.19
-- **ACHTUNG:** v1.19.0 hat einen Bug der unnötige Certificate-Renewals auslöst — direkt auf v1.19.4, niemals auf .0 stoppen. ArgoCD `targetRevision: v1.19.4` stellt das sicher.
-- **Breaking (Metrics):** Prometheus-Label `path` entfernt aus `certmanager_acme_client_request_count` und `certmanager_acme_client_request_duration_seconds`, ersetzt durch `action`. Grafana-Dashboards und Alerting-Regeln prüfen.
+- **ACHTUNG:** v1.19.0 hat einen Bug der unnötige Certificate-Renewals auslöst — immer direkt auf den letzten Patch (v1.19.4), niemals auf .0 stoppen.
+- **Breaking (Metrics):** Prometheus-Label `path` entfernt aus `certmanager_acme_client_request_count` und `certmanager_acme_client_request_duration_seconds`, ersetzt durch `action`. Grafana-Dashboards nach Schritt 6 prüfen.
 
 ---
 
 ## Vorbereitung
 
-### Aktuelle Version und ArgoCD-Status prüfen
+### Aktuellen Zustand prüfen
 
 ```bash
 kubectl -n cert-manager get deployment cert-manager \
@@ -62,10 +84,10 @@ kubectl -n cert-manager get deployment cert-manager \
 # Erwartet: quay.io/jetstack/cert-manager-controller:v1.13.3
 
 kubectl -n argocd get application cert-manager
-# STATUS sollte: Synced / Healthy sein
+# Erwartet: Synced / Healthy
 ```
 
-### Backup aller cert-manager Ressourcen
+### Backup
 
 ```bash
 kubectl get -o yaml \
@@ -73,54 +95,142 @@ kubectl get -o yaml \
   --all-namespaces > cert-manager-backup-$(date +%Y%m%d).yaml
 
 wc -l cert-manager-backup-$(date +%Y%m%d).yaml
+
+# Cloudflare Secret sichern
+kubectl -n cert-manager get secret cloudflare-api-token -o yaml > cloudflare-api-token-backup.yaml
 ```
 
 ---
 
-## Upgrade: Ein Git-Commit
-
-Da ArgoCD `automated` mit `selfHeal: true` konfiguriert ist, reicht eine einzige Änderung in Git.
-
-### 1. targetRevision aktualisieren
+## Hilfsfunktionen
 
 ```bash
-# In gitops/apps/cert-manager.yaml
-# targetRevision: v1.13.3  →  targetRevision: v1.19.4
+# Warten bis ArgoCD Synced + Healthy
+wait_argocd() {
+  local VERSION=$1
+  echo "==> Warte auf ArgoCD Sync für cert-manager ${VERSION}..."
+  kubectl -n argocd wait application cert-manager \
+    --for=jsonpath='{.status.sync.status}'=Synced --timeout=5m
+  kubectl -n argocd wait application cert-manager \
+    --for=jsonpath='{.status.health.status}'=Healthy --timeout=5m
+  echo "==> ArgoCD: Synced + Healthy"
+}
 
-# macOS-kompatibel:
-sed -i '' 's/targetRevision: v1.13.3/targetRevision: v1.19.4/' gitops/apps/cert-manager.yaml
+# Pods und ClusterIssuers prüfen
+validate() {
+  echo "--- Pods ---"
+  kubectl -n cert-manager get pods
+  echo "--- Image ---"
+  kubectl -n cert-manager get deployment cert-manager \
+    -o jsonpath='{.spec.template.spec.containers[0].image}'
+  echo ""
+  echo "--- ClusterIssuers ---"
+  kubectl get clusterissuers -o wide
+  echo "--- Certificates ---"
+  kubectl get certificates --all-namespaces \
+    -o custom-columns='NAMESPACE:.metadata.namespace,NAME:.metadata.name,READY:.status.conditions[0].status,EXPIRY:.status.notAfter'
+}
+```
 
-# Änderung prüfen:
+---
+
+## Schritt 1: v1.13.3 → v1.14.7
+
+```bash
+sed -i '' 's/targetRevision: v1.13.3/targetRevision: v1.14.7/' gitops/apps/cert-manager.yaml
 grep targetRevision gitops/apps/cert-manager.yaml
-```
 
-### 2. Commit und Push
-
-```bash
 git add gitops/apps/cert-manager.yaml
-git commit -m "chore: upgrade cert-manager v1.13.3 → v1.19.4 (CVE-2026-24051, CVE-2025-68121)"
+git commit -m "chore: upgrade cert-manager v1.13.3 → v1.14.7"
 git push
-```
 
-### 3. ArgoCD Sync beobachten
-
-ArgoCD erkennt die Änderung und startet den Helm-Upgrade automatisch (Auto-Sync).
-Optional manuell triggern falls nicht innerhalb von ~3 Minuten:
-
-```bash
-# Manueller Sync (optional)
-argocd app sync cert-manager
-
-# Sync-Status beobachten
-kubectl -n argocd get application cert-manager -w
-
-# Oder über ArgoCD CLI
-argocd app get cert-manager
+wait_argocd v1.14.7
+validate
 ```
 
 ---
 
-## Post-Upgrade-Validierung
+## Schritt 2: v1.14.7 → v1.15.5
+
+```bash
+sed -i '' 's/targetRevision: v1.14.7/targetRevision: v1.15.5/' gitops/apps/cert-manager.yaml
+grep targetRevision gitops/apps/cert-manager.yaml
+
+git add gitops/apps/cert-manager.yaml
+git commit -m "chore: upgrade cert-manager v1.14.7 → v1.15.5"
+git push
+
+wait_argocd v1.15.5
+validate
+```
+
+---
+
+## Schritt 3: v1.15.5 → v1.16.5
+
+```bash
+sed -i '' 's/targetRevision: v1.15.5/targetRevision: v1.16.5/' gitops/apps/cert-manager.yaml
+grep targetRevision gitops/apps/cert-manager.yaml
+
+git add gitops/apps/cert-manager.yaml
+git commit -m "chore: upgrade cert-manager v1.15.5 → v1.16.5"
+git push
+
+wait_argocd v1.16.5
+validate
+```
+
+---
+
+## Schritt 4: v1.16.5 → v1.17.4
+
+```bash
+sed -i '' 's/targetRevision: v1.16.5/targetRevision: v1.17.4/' gitops/apps/cert-manager.yaml
+grep targetRevision gitops/apps/cert-manager.yaml
+
+git add gitops/apps/cert-manager.yaml
+git commit -m "chore: upgrade cert-manager v1.16.5 → v1.17.4"
+git push
+
+wait_argocd v1.17.4
+validate
+```
+
+---
+
+## Schritt 5: v1.17.4 → v1.18.6
+
+```bash
+sed -i '' 's/targetRevision: v1.17.4/targetRevision: v1.18.6/' gitops/apps/cert-manager.yaml
+grep targetRevision gitops/apps/cert-manager.yaml
+
+git add gitops/apps/cert-manager.yaml
+git commit -m "chore: upgrade cert-manager v1.17.4 → v1.18.6"
+git push
+
+wait_argocd v1.18.6
+validate
+```
+
+---
+
+## Schritt 6: v1.18.6 → v1.19.4 (Ziel)
+
+```bash
+sed -i '' 's/targetRevision: v1.18.6/targetRevision: v1.19.4/' gitops/apps/cert-manager.yaml
+grep targetRevision gitops/apps/cert-manager.yaml
+
+git add gitops/apps/cert-manager.yaml
+git commit -m "chore: upgrade cert-manager v1.18.6 → v1.19.4 (CVE-2026-24051, CVE-2025-68121)"
+git push
+
+wait_argocd v1.19.4
+validate
+```
+
+---
+
+## Post-Upgrade-Validierung (nach Schritt 6)
 
 ### Image-Version bestätigen
 
@@ -134,22 +244,15 @@ kubectl -n cert-manager get deployment cert-manager-webhook \
 # Erwartet: quay.io/jetstack/cert-manager-webhook:v1.19.4
 ```
 
-### Alle Pods Running
-
-```bash
-kubectl -n cert-manager get pods
-# Alle 3 Pods: 1/1 Running
-```
-
-### ArgoCD Application Synced/Healthy
+### ArgoCD Application final prüfen
 
 ```bash
 kubectl -n argocd get application cert-manager
-# SYNC STATUS: Synced
+# SYNC STATUS:   Synced
 # HEALTH STATUS: Healthy
 ```
 
-### ClusterIssuers bereit
+### Alle ClusterIssuers Ready
 
 ```bash
 kubectl get clusterissuers -o wide
@@ -158,22 +261,14 @@ kubectl get clusterissuers -o wide
 # ca-issuer:         READY = True
 ```
 
-### Zertifikatsstatus aller Namespaces
-
-```bash
-kubectl get certificates --all-namespaces \
-  -o custom-columns='NAMESPACE:.metadata.namespace,NAME:.metadata.name,READY:.status.conditions[0].status,REASON:.status.conditions[0].reason,EXPIRY:.status.notAfter'
-# Alle READY = True
-```
-
-### Auf fehlerhafte CertificateRequests prüfen
+### Fehlerhafte CertificateRequests prüfen
 
 ```bash
 kubectl get certificaterequests --all-namespaces | grep -v "Approved\|NAME"
 # Leer = alles in Ordnung
 ```
 
-### Controller-Logs auf Fehler prüfen
+### Controller-Logs
 
 ```bash
 kubectl -n cert-manager logs deployment/cert-manager --since=15m | grep -iE "error|failed|panic"
@@ -182,8 +277,7 @@ kubectl -n cert-manager logs deployment/cert-manager-webhook --since=15m | grep 
 
 ### Grafana: Metrics-Label prüfen
 
-Das Label `path` wurde in cert-manager 1.19 aus den ACME-Metrics entfernt und durch `action` ersetzt.
-In Grafana folgende Queries prüfen und ggf. anpassen:
+Label `path` wurde durch `action` ersetzt. Folgende Queries in Grafana prüfen:
 
 - `certmanager_acme_client_request_count` — Label `path` → `action`
 - `certmanager_acme_client_request_duration_seconds` — Label `path` → `action`
@@ -192,34 +286,28 @@ In Grafana folgende Queries prüfen und ggf. anpassen:
 
 ## deploy-direct.sh aktualisieren
 
-Das Script dient als Disaster-Recovery-Bootstrap. Version ebenfalls aktualisieren
-damit Bootstrap und ArgoCD-Zielzustand konsistent bleiben:
+Nach erfolgreichem Upgrade die Bootstrap-Version konsistent halten:
 
 ```bash
 sed -i '' 's|cert-manager/releases/download/v1.13.3|cert-manager/releases/download/v1.19.4|' deploy-direct.sh
-
-# Prüfen:
-grep cert-manager deploy-direct.sh | grep download
+grep "releases/download" deploy-direct.sh
 ```
 
-> **Wichtig:** Das Script deployed cert-manager initial via `kubectl apply` (Static Manifests).
-> Das ist für den Bootstrap-Fall korrekt und intentional — ArgoCD übernimmt danach
-> automatisch die Verwaltung als Helm-Release und bringt den Cluster in den GitOps-Zielzustand.
-> Ein manueller `kubectl apply`-Eingriff im laufenden Betrieb würde von ArgoCD (`selfHeal: true`)
-> innerhalb weniger Minuten überschrieben.
+> **Hinweis:** `deploy-direct.sh` deployed cert-manager als Bootstrap via Static Manifests.  
+> ArgoCD übernimmt nach dem ersten Sync die Verwaltung als Helm-Release.  
+> Die Version im Script und `gitops/apps/cert-manager.yaml` sollten immer übereinstimmen.
 
 ---
 
 ## Rollback
 
-Falls nach dem Upgrade Probleme auftreten:
+Im Fehlerfall auf die letzte funktionierende Version zurückkehren — Beispiel Rollback von Schritt 3:
 
 ```bash
-# In gitops/apps/cert-manager.yaml zurücksetzen
-sed -i '' 's/targetRevision: v1.19.4/targetRevision: v1.13.3/' gitops/apps/cert-manager.yaml
+sed -i '' 's/targetRevision: v1.16.5/targetRevision: v1.15.5/' gitops/apps/cert-manager.yaml
 
 git add gitops/apps/cert-manager.yaml
-git commit -m "revert: cert-manager zurück auf v1.13.3"
+git commit -m "revert: cert-manager zurück auf v1.15.5"
 git push
 ```
 
@@ -229,8 +317,8 @@ ArgoCD syncronisiert automatisch auf die vorherige Version zurück.
 
 ## Referenzen
 
-- [cert-manager Release Notes 1.19](https://cert-manager.io/docs/releases/release-notes/release-notes-1.19/)
 - [cert-manager Upgrade Guide](https://cert-manager.io/docs/installation/upgrade/)
+- [cert-manager Release Notes 1.19](https://cert-manager.io/docs/releases/release-notes/release-notes-1.19/)
 - [cert-manager GitHub Releases](https://github.com/cert-manager/cert-manager/releases)
 - [CVE-2025-68121](https://www.cve.org/CVERecord?id=CVE-2025-68121)
 - [CVE-2026-24051](https://www.cve.org/CVERecord?id=CVE-2026-24051)
