@@ -60,6 +60,7 @@ spec:
       jsonPointers:
         - /spec/conversion/webhook/clientConfig/caBundle
         - /status
+        - /spec/preserveUnknownFields    # <-- neu
     - group: admissionregistration.k8s.io
       kind: MutatingWebhookConfiguration
       jsonPointers:
