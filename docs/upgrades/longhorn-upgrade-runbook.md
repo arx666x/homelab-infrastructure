@@ -3,7 +3,8 @@
 **Cluster:** homelab-infrastructure (seri-k8s)  
 **Methode:** ArgoCD / GitOps (`gitops/apps/longhorn.yaml`)  
 **Zielversion:** 1.7.3 (stable branch)  
-**Upgrade-Pfad:** `1.5.3 → 1.6.x → 1.7.3` (zwei Hops, Minor-Version für Minor-Version)
+**Upgrade-Pfad:** `1.5.3 → 1.6.2 → 1.7.3` (zwei Hops, Minor-Version für Minor-Version)  
+**Durchgeführt am:** 2026-04-30
 
 ---
 
@@ -15,7 +16,7 @@
 Der Upgrade-Pfad erfordert aber einen Zwischenstopp bei **1.6.x** (Longhorn erlaubt keine Überbrückung
 zweier Minor-Versionen — der interne `upgradeVersionCheck` blockiert das).
 
-Empfohlener Zwischenstopp: **1.6.2** (letzter gut getesteter Patch von 1.6.x).
+Zwischenstopp: **1.6.2** (letzter gut getesteter Patch von 1.6.x).
 
 ### Was ändert sich relevant?
 
@@ -32,8 +33,19 @@ Empfohlener Zwischenstopp: **1.6.2** (letzter gut getesteter Patch von 1.6.x).
 > ⚠️ **Wichtig zu `preUpgradeChecker.jobEnabled: false`**  
 > Diese Einstellung war in der bestehenden Config aktiv gesetzt. Das bedeutet, der automatische  
 > Pre-Upgrade-Check läuft **nicht**. Für dieses Upgrade muss der Checker manuell ersetzt werden  
-> (Pre-Flight Checks von Hand durchführen, s. unten). Für 1.6+ wäre es sinnvoll, diese Option  
-> wieder auf `true` zu setzen oder ganz zu entfernen.
+> (Pre-Flight Checks von Hand durchführen, s. unten). Für 1.6+ diese Option entfernen.
+
+### Hinweis: Helm kennt den Release nicht
+
+Longhorn wurde via ArgoCD mit `ServerSideApply` installiert — Helm hat keinen eigenen
+Release-State. Die folgenden Kommandos liefern daher keine nützlichen Ergebnisse:
+
+```bash
+helm list -n longhorn-system      # → leer
+helm history longhorn -n longhorn-system  # → Error: release not found
+```
+
+Den Versions-Check stattdessen über die Pod-Images machen (s. Validierung).
 
 ---
 
@@ -52,19 +64,18 @@ kubectl get volumes.longhorn.io -n longhorn-system -o json | \
 
 # 3. Alle Longhorn-Pods laufen
 kubectl get pods -n longhorn-system | grep -v Running | grep -v Completed
+# Erwartung: leere Ausgabe
 
-# 4. Engine-Check (relevant für Hop 1 → 1.7.0 workaround war für ältere engines)
-# Engine-Namen im alten Format prüfen (relevant wenn Volumes aus pre-1.5.2 existieren)
-[ $(kubectl -n longhorn-system get engines.longhorn.io -o name | \
-  grep -E '\-e\-[a-z0-9]{8}$' | wc -l) -gt 0 ] \
-  && echo "HOLD: alte Engine-Namen gefunden!" \
-  || echo "OK: Engine-Namen kompatibel"
+# 4. Engine-Format prüfen (altes Format -e-xxxxxxxx wäre ein HOLD für 1.7.x)
+kubectl -n longhorn-system get engines.longhorn.io -o name
+# Erwartung: Format pvc-<uuid>-e-0 (neues Format) → Safe
+# HOLD wenn: Format pvc-<uuid>-e-<8-char-random> (altes Format aus pre-1.5.2)
 
 # 5. Aktuellen State der Settings sichern
 kubectl get settings.longhorn.io -n longhorn-system -o yaml > \
   longhorn-settings-backup-$(date +%Y%m%d).yaml
 
-# 6. System-Backup triggern (manuell, vor dem Upgrade)
+# 6. System-Backup triggern
 kubectl apply -f - <<YAML
 apiVersion: longhorn.io/v1beta2
 kind: SystemBackup
@@ -75,125 +86,133 @@ spec:
   volumeBackupPolicy: if-not-present
 YAML
 
-# Warten bis SystemBackup completed
+# 7. Warten bis SystemBackup completed
 kubectl get systembackup -n longhorn-system -w
+# Erwartung: STATE=Ready
 ```
+
+> **Praxis-Erfahrung:** Das Engine-Format lässt sich nicht zuverlässig per Regex in einem
+> One-Liner prüfen (macOS sed/grep Unterschiede). Einfach `kubectl get engines.longhorn.io -o name`
+> ausgeben und visuell prüfen ob alle Engines auf `-e-0` enden.
 
 ---
 
 ## Hop 1: 1.5.3 → 1.6.2
 
-### 1.1 ArgoCD Auto-Sync temporär deaktivieren
-
-Im Longhorn ArgoCD-App den Auto-Sync deaktivieren, damit der Upgrade kontrolliert läuft:
+### 1.1 ArgoCD Auto-Sync deaktivieren
 
 ```bash
-# Option A: über ArgoCD UI → App longhorn → Disable Auto-Sync
-# Option B: kubectl patch
 kubectl patch application longhorn -n argocd \
   --type=json \
   -p='[{"op":"remove","path":"/spec/syncPolicy/automated"}]'
+# Prüfen: App wird in ArgoCD UI als "OutOfSync" ohne Auto-Sync angezeigt
 ```
 
-### 1.2 `gitops/apps/longhorn.yaml` anpassen
-
-```yaml
-# Änderung: targetRevision und values
-    targetRevision: "1.6.2"
-    helm:
-      releaseName: longhorn
-      values: |
-        defaultSettings:
-          backupTarget: "nfs://192.168.11.55:/volume1/longhorn-backup"
-          defaultDataPath: "/mnt/longhorn"
-          defaultReplicaCount: 3
-          guaranteedInstanceManagerCpu: 12
-        
-        persistence:
-          defaultClass: true
-          defaultClassReplicaCount: 3
-          reclaimPolicy: Delete
-        
-        # preUpgradeChecker wieder aktivieren ab 1.6.x
-        # preUpgradeChecker:
-        #   jobEnabled: false   ← ENTFERNEN oder auf true lassen
-        
-        ingress:
-          enabled: true
-          ingressClassName: traefik
-          host: longhorn.reckeweg.io
-          tls: true
-          tlsSecret: longhorn-tls
-          annotations:
-            cert-manager.io/cluster-issuer: letsencrypt-prod
-            traefik.ingress.kubernetes.io/router.entrypoints: websecure
-```
-
-> Die Zeile `preUpgradeChecker.jobEnabled: false` entfernen oder auskommentieren.  
-> Ab 1.6.0 ist der Pre-Upgrade-Checker sinnvoll aktiv zu lassen.
-
-### 1.3 Sync auslösen und beobachten
+### 1.2 `gitops/apps/longhorn.yaml` anpassen (macOS sed)
 
 ```bash
-# Commit & Push nach Gitea
+# targetRevision erhöhen
+sed -i '' 's/targetRevision: "1.5.3"/targetRevision: "1.6.2"/' gitops/apps/longhorn.yaml
+
+# preUpgradeChecker entfernen
+sed -i '' '/preUpgradeChecker:/,/jobEnabled: false/d' gitops/apps/longhorn.yaml
+
+# Prüfen — Erwartung: nur noch targetRevision: "1.6.2", keine preUpgradeChecker-Zeilen
+grep -n "targetRevision\|preUpgradeChecker\|jobEnabled" gitops/apps/longhorn.yaml
+```
+
+```bash
 git add gitops/apps/longhorn.yaml
-git commit -m "chore: longhorn upgrade 1.5.3 → 1.6.2"
+git commit -m "chore: longhorn upgrade hop1 1.5.3 → 1.6.2, remove preUpgradeChecker"
 git push
-
-# ArgoCD manuell syncen
-argocd app sync longhorn --prune
-
-# Pods beobachten
-kubectl get pods -n longhorn-system -w
-
-# Rollout des DaemonSets beobachten
-kubectl rollout status daemonset/longhorn-manager -n longhorn-system
 ```
 
-### 1.4 Engine-Upgrade über Longhorn UI
+### 1.3 Sync auslösen und Rollout beobachten
 
-Nach erfolgreichem Longhorn Manager Upgrade **müssen** alle Volume-Engines auf die neue
-Version aktualisiert werden:
-
-```
-Longhorn UI → https://longhorn.reckeweg.io
-→ Node → Engine Image Upgrade
-→ "Upgrade" für alle Volumes wählen
-→ oder: Volume-Liste → alle auswählen → "Upgrade Engine"
-```
-
-Alternativ per kubectl (bulk upgrade):
+ArgoCD UI → App `longhorn` → **Sync** (keine zusätzlichen Optionen nötig).
 
 ```bash
-# Aktuelle Engine-Image-Version ermitteln
-NEW_EI=$(kubectl -n longhorn-system get engineimage \
-  -o jsonpath='{.items[?(@.status.default==true)].metadata.name}')
-echo "New default engine image: $NEW_EI"
+# DaemonSet Rollout verfolgen
+kubectl rollout status daemonset/longhorn-manager -n longhorn-system
+# Erwartung: "daemon set "longhorn-manager" successfully rolled out"
 
-# Alle Volumes auf neues Engine Image upgraden
-for vol in $(kubectl -n longhorn-system get volumes.longhorn.io -o name); do
-  kubectl -n longhorn-system patch $vol \
-    --type=merge \
-    -p "{\"spec\":{\"engineImage\":\"${NEW_EI}\"}}"
-done
+# Alle Manager-Pods auf neuer Version?
+kubectl get pods -n longhorn-system -l app=longhorn-manager \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+# Erwartung: alle Pods zeigen longhornio/longhorn-manager:v1.6.2
+
+# Pre/Post-Upgrade Jobs prüfen
+kubectl get jobs -n longhorn-system
+# Erwartung: longhorn-pre-upgrade und longhorn-post-upgrade mit STATUS=Complete
+```
+
+### 1.4 Engine-Upgrade
+
+Nach erfolgreichem Manager-Rollout muss das Engine Image auf alle Volumes angewendet werden.
+
+```bash
+# Verfügbare Engine Images prüfen
+kubectl get engineimage -n longhorn-system
+# Erwartung: neues ei-xxxxxxxx für v1.6.2 mit STATE=deployed, REFCOUNT=0
+#            altes ei-xxxxxxxx für v1.5.3 mit REFCOUNT=60 (12 Volumes × 5 Replicas)
+```
+
+**Im Longhorn UI** (`https://longhorn.reckeweg.io`):
+```
+Volume-Tab → alle Volumes auswählen → "Upgrade Engine" → v1.6.2 wählen → Bestätigen
+```
+
+> ⚠️ **Praxis-Erfahrung:** Das UI-Upgrade kann einzelne Volumes überspringen, besonders
+> aktiv beschriebene Volumes (Postgres, Prometheus). Immer nachprüfen!
+
+```bash
+# Fortschritt beobachten
+kubectl get engineimage -n longhorn-system -w
+# Ziel: v1.5.3 REFCOUNT=0, v1.6.2 REFCOUNT=60
+
+# Welche Engines hängen noch auf der alten Version?
+kubectl get engines.longhorn.io -n longhorn-system \
+  -o custom-columns="NAME:.metadata.name,IMAGE:.spec.engineImage,CURRENT:.status.currentImage" \
+  | grep "v1.5.3"
+
+# Details für hängende Engines (spec.engineImage="" bedeutet: Upgrade nicht beauftragt)
+kubectl get engines.longhorn.io -n longhorn-system -o json | \
+  jq -r '.items[] | select(.status.currentImage | contains("v1.5.3")) |
+  {name: .metadata.name, specImage: .spec.engineImage, currentImage: .status.currentImage}'
+```
+
+> **Praxis-Erfahrung:** Wenn `specImage: ""` — das Upgrade wurde für diese Volumes gar nicht
+> beauftragt. Im UI nochmals explizit für diese Volumes triggern. Alternativ per kubectl:
+
+```bash
+# Neues default Engine Image ermitteln
+NEW_EI=$(kubectl -n longhorn-system get engineimage \
+  -o jsonpath='{.items[?(@.status.default==true)].spec.image}')
+echo "Target: $NEW_EI"
+
+# Einzelne Engine manuell patchen
+kubectl -n longhorn-system patch engines.longhorn.io <engine-name> \
+  --type=merge -p "{\"spec\":{\"engineImage\":\"${NEW_EI}\"}}"
 ```
 
 ### 1.5 Validierung nach Hop 1
 
 ```bash
-# Helm-Version prüfen
-helm list -n longhorn-system
+# Manager-Version bestätigen
+kubectl get pods -n longhorn-system -l app=longhorn-manager \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 
-# Alle Volumes wieder healthy?
+# Alle Volumes healthy?
 kubectl get volumes.longhorn.io -n longhorn-system \
   -o custom-columns="NAME:.metadata.name,STATE:.status.state,ROBUSTNESS:.status.robustness"
+# Erwartung: alle attached/healthy
 
-# Engine Images: nur noch die neue Version aktiv?
+# Engine Images: v1.5.3 auf REFCOUNT=0?
 kubectl get engineimage -n longhorn-system
 ```
 
-> ✅ Wenn alle Volumes `healthy` und das Engine-Image upgraded ist → weiter mit Hop 2.  
-> ⏳ Empfehlung: 1–2 Stunden warten und Backup-Jobs prüfen bevor Hop 2 gestartet wird.
+> ✅ Wenn alle Volumes `healthy` und v1.5.3 auf `REFCOUNT: 0` → Hop 1 abgeschlossen.  
+> ⏳ Empfehlung: 1–2 Stunden warten und einen Backup-Job abwarten bevor Hop 2 gestartet wird.
 
 ---
 
@@ -201,63 +220,94 @@ kubectl get engineimage -n longhorn-system
 
 ### Pre-Flight Checks wiederholen (s. oben)
 
-Besonders:
+Engine-Format nochmals prüfen:
 ```bash
-# Nochmal Engine-Namen-Check
-[ $(kubectl -n longhorn-system get engines.longhorn.io -o name | \
-  grep -E '\-e\-[a-z0-9]{8}$' | wc -l) -gt 0 ] \
-  && echo "HOLD: alte Engine-Namen gefunden!" \
-  || echo "OK: Safe to upgrade to 1.7.x"
+kubectl -n longhorn-system get engines.longhorn.io -o name
+# Erwartung: alle enden auf -e-0 → Safe to upgrade to 1.7.x
 ```
 
 ### 2.1 `gitops/apps/longhorn.yaml` anpassen
 
-```yaml
-    targetRevision: "1.7.3"
-```
-
-Der Rest der Values bleibt unverändert.
-
-### 2.2 Sync auslösen
-
 ```bash
+sed -i '' 's/targetRevision: "1.6.2"/targetRevision: "1.7.3"/' gitops/apps/longhorn.yaml
+
+grep -n "targetRevision" gitops/apps/longhorn.yaml
+# Erwartung: targetRevision: "1.7.3"
+
 git add gitops/apps/longhorn.yaml
-git commit -m "chore: longhorn upgrade 1.6.2 → 1.7.3"
+git commit -m "chore: longhorn upgrade hop2 1.6.2 → 1.7.3"
 git push
-
-argocd app sync longhorn --prune
-kubectl rollout status daemonset/longhorn-manager -n longhorn-system
 ```
 
-### 2.3 Engine-Upgrade über Longhorn UI (erneut)
+### 2.2 Sync auslösen und Rollout beobachten
 
-Gleicher Prozess wie in Schritt 1.4.
-
-### 2.4 Validierung nach Hop 2
+ArgoCD UI → App `longhorn` → **Sync**.
 
 ```bash
-# Version prüfen
-helm list -n longhorn-system
-kubectl -n longhorn-system get pods -l app=longhorn-manager \
-  -o jsonpath='{.items[0].spec.containers[0].image}'
+kubectl rollout status daemonset/longhorn-manager -n longhorn-system
+
+kubectl get pods -n longhorn-system -l app=longhorn-manager \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+# Erwartung: alle Pods zeigen longhornio/longhorn-manager:v1.7.3
+```
+
+### 2.3 Engine Image abwarten
+
+Das neue Engine Image v1.7.3 wird lazy deployed und erscheint erst nach 1–2 Minuten:
+
+```bash
+kubectl get engineimage -n longhorn-system -w
+# Erst STATE=deploying, dann STATE=deployed
+# Erst wenn deployed → Engine-Upgrade im UI starten
+```
+
+### 2.4 Engine-Upgrade (wie Hop 1)
+
+```bash
+# Fortschritt beobachten
+kubectl get engineimage -n longhorn-system -w
+# Ziel: v1.6.2 REFCOUNT=0, v1.7.3 REFCOUNT=60
+```
+
+Bei hängenden Volumes wieder:
+```bash
+kubectl get engines.longhorn.io -n longhorn-system \
+  -o custom-columns="NAME:.metadata.name,IMAGE:.spec.engineImage,CURRENT:.status.currentImage" \
+  | grep "v1.6.2"
+
+kubectl get engines.longhorn.io -n longhorn-system -o json | \
+  jq -r '.items[] | select(.status.currentImage | contains("v1.6.2")) |
+  {name: .metadata.name, specImage: .spec.engineImage, currentImage: .status.currentImage}'
+```
+
+### 2.5 Abschlussvalidierung
+
+```bash
+# Manager-Version
+kubectl get pods -n longhorn-system -l app=longhorn-manager \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 
 # Alle Volumes healthy
 kubectl get volumes.longhorn.io -n longhorn-system \
   -o custom-columns="NAME:.metadata.name,STATE:.status.state,ROBUSTNESS:.status.robustness"
 
-# Backup-Target erreichbar?
-kubectl -n longhorn-system get setting backup-target
+# Engine Images finaler State
+kubectl get engineimage -n longhorn-system
+# Erwartung:
+# v1.5.3  REFCOUNT=0
+# v1.6.2  REFCOUNT=0
+# v1.7.3  REFCOUNT=60
 
 # RecurringJobs laufen?
 kubectl get recurringjob -n longhorn-system
+
+# SystemBackups vorhanden?
+kubectl get systembackup -n longhorn-system
 ```
 
-### 2.5 Longhorn CLI (neu in 1.7.0)
-
-Ab 1.7.0 gibt es eine neue Longhorn CLI, die das alte Environment-Check-Script ablöst:
+### 2.6 Longhorn CLI (neu in 1.7.0)
 
 ```bash
-# Longhorn CLI pod ephemeral starten
 kubectl run longhorn-cli --rm -it \
   --image=longhornio/longhorn-cli:v1.7.3 \
   --restart=Never \
@@ -270,7 +320,6 @@ kubectl run longhorn-cli --rm -it \
 ## Auto-Sync wieder aktivieren
 
 ```bash
-# Nach erfolgreichem Upgrade und Validierung
 kubectl patch application longhorn -n argocd \
   --type=merge \
   -p='{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
@@ -278,40 +327,60 @@ kubectl patch application longhorn -n argocd \
 
 ---
 
+## ArgoCD OutOfSync nach Upgrade
+
+Nach dem Upgrade zeigt ArgoCD `resources: {}` Drift für Longhorn DaemonSet und Deployments.
+Das ist harmlos — Longhorn schreibt diese Felder zur Laufzeit zurück.
+
+Fix: `ignoreDifferences` in `gitops/apps/longhorn.yaml` ergänzen:
+
+```yaml
+  ignoreDifferences:
+    # ... bestehende Einträge ...
+    - group: apps
+      kind: DaemonSet
+      jqPathExpressions:
+        - .spec.template.spec.containers[].resources
+        - .spec.template.spec.initContainers[].resources
+    - group: apps
+      kind: Deployment
+      jqPathExpressions:
+        - .spec.template.spec.containers[].resources
+        - .spec.template.spec.initContainers[].resources
+```
+
+> **Hinweis:** `jqPathExpressions` mit `[]` deckt alle Container-Indizes ab — besser als
+> `jsonPointers` mit hartkodiertem Index (`/0`, `/1`, ...).
+
+---
+
 ## Rollback-Strategie
 
-> ⚠️ Longhorn unterstützt **kein offizielles Downgrade**. Wenn Engine-Datenstrukturen  
+> ⚠️ Longhorn unterstützt **kein offizielles Downgrade**. Wenn Engine-Datenstrukturen
 > bereits migriert wurden, ist ein Rollback nicht möglich.
 
-**Vor dem Upgrade-Hop 1:**
-- `kubectl get settings.longhorn.io -n longhorn-system -o yaml` gesichert
-- SystemBackup erstellt
-- Helm kann theoretisch zurückgerollt werden (`helm rollback longhorn -n longhorn-system`),  
-  **aber nur wenn Volumes noch nicht auf neues Engine Image upgraded wurden**
-
-Im Worst-Case: Restore aus NFS-Backup (`nfs://192.168.11.55:/volume1/longhorn-backup`).
+- Settings-Backup vorhanden: `longhorn-settings-backup-<datum>.yaml`
+- SystemBackup vorhanden: `pre-upgrade-<datum>` (STATE=Ready bestätigt)
+- Im Worst-Case: Restore aus NFS-Backup (`nfs://192.168.11.55:/volume1/longhorn-backup`)
 
 ---
 
 ## Notes zu den bestehenden Backup-Jobs
 
-Die bestehenden RecurringJob CRs (`daily-incremental-backup`, `weekly-full-backup`) und der
-`longhorn-system-backup` CronJob sind mit `apiVersion: longhorn.io/v1beta2` deklariert und
-sind damit **kompatibel mit 1.6.x und 1.7.x** — keine Änderungen erforderlich.
-
-Der `serviceAccountName: longhorn-service-account` im CronJob muss weiterhin vorhanden sein —
-in 1.7.x wurde daran nichts geändert.
+Die RecurringJob CRs (`daily-incremental-backup`, `weekly-full-backup`) und der
+`longhorn-system-backup` CronJob sind mit `apiVersion: longhorn.io/v1beta2` deklariert —
+kompatibel mit 1.6.x und 1.7.x, keine Änderungen erforderlich.
 
 ---
 
-## Zeitplan-Empfehlung
+## Zeitplan (tatsächlich benötigt: 2026-04-30)
 
-| Schritt | Dauer (geschätzt) |
-|---------|-------------------|
+| Schritt | Dauer |
+|---------|-------|
 | Pre-Flight + SystemBackup | 15 min |
-| Hop 1 (1.5.3 → 1.6.2) inkl. Engine-Upgrade | 30–45 min |
-| Beobachtungsphase nach Hop 1 | 1–2h (Backup-Job abwarten) |
-| Pre-Flight Hop 2 | 10 min |
-| Hop 2 (1.6.2 → 1.7.3) inkl. Engine-Upgrade | 30–45 min |
-| Abschlussvalidierung | 15 min |
-| **Gesamt** | **~3–4h** |
+| Hop 1 (1.5.3 → 1.6.2) Rollout | 15 min |
+| Engine-Upgrade Hop 1 (inkl. Debug hängender Volumes) | 75 min |
+| Hop 2 (1.6.2 → 1.7.3) Rollout | 15 min |
+| Engine-Upgrade Hop 2 | 20 min |
+| ArgoCD ignoreDifferences bereinigen | 15 min |
+| **Gesamt** | **~2.5h** |
