@@ -1,9 +1,10 @@
-# cert-manager Upgrade Runbook: v1.13.x → v1.19.4
+# cert-manager Upgrade Runbook: v1.13.3 → v1.19.4
 
 **Datum:** 2026-05-01  
 **Autor:** Achim Reckeweg  
 **Cluster:** reckeweg.io homelab k3s  
-**Komponente:** cert-manager (Helm, Namespace `cert-manager`)  
+**Namespace:** `cert-manager`  
+**Install-Methode:** ArgoCD GitOps (Helm Chart via `charts.jetstack.io`)  
 **Zielversion:** v1.19.4  
 
 ---
@@ -12,271 +13,217 @@
 
 | | |
 |---|---|
-| **Aktuelle Version** | v1.13.x |
+| **Aktuelle Version** | v1.13.3 |
 | **Zielversion** | v1.19.4 |
-| **Upgrade-Strategie** | Minor-by-Minor (1.13 → 1.14 → 1.15 → 1.16 → 1.17 → 1.18 → 1.19.4) |
-| **Helm OCI Registry** | `oci://quay.io/jetstack/charts/cert-manager` |
+| **Upgrade-Strategie** | Git-Commit → ArgoCD Auto-Sync |
+| **ArgoCD Application** | `argocd/cert-manager` |
+| **ClusterIssuer** | `letsencrypt-prod` (Cloudflare DNS-01), `selfsigned-issuer`, `ca-issuer` |
 | **Downtime** | Kurze Unterbrechung der Zertifikatserneuerung während Rollout (~1–2 min) |
+
+> **Hinweis zur Installationshistorie:**  
+> cert-manager wurde initial via `deploy-direct.sh` (kubectl apply) gebootstrapt.  
+> ArgoCD hat die Installation danach übernommen und managed sie seitdem als Helm-Release.  
+> `deploy-direct.sh` dient ausschließlich als Disaster-Recovery-Bootstrap — ArgoCD  
+> (`selfHeal: true`) würde manuelle `kubectl apply`-Eingriffe sofort überschreiben.
 
 ### Warum v1.19.4?
 
-- **CVE-2026-24051** – Go-Vulnerability (behoben in Go v1.25.7)
-- **CVE-2025-68121** – Go-Vulnerability (behoben in Go v1.25.7)
-- **GO-2026-4394** – OpenTelemetry SDK Vulnerability (otel SDK auf v1.40.0)
-- Moderate-Severity DoS-Fix im cert-manager Controller (GHSA-gx3x-vq4p-mhhv)
+- **CVE-2026-24051** – Go v1.25.7
+- **CVE-2025-68121** – Go v1.25.7
+- **GO-2026-4394** – OpenTelemetry SDK v1.40.0
+- Moderate DoS-Fix im Controller (GHSA-gx3x-vq4p-mhhv)
 
 ---
 
 ## Wichtige Breaking Changes je Minor-Version
 
-### 1.14
-- Keine breaking changes für Standardinstallationen.
-
 ### 1.15
-- **CRDs werden bei `helm uninstall` nicht mehr gelöscht** (Schutzfunktion). Ab dieser Version ist kein explizites CRD-Backup mehr zwingend nötig, aber weiterhin empfohlen.
-- `AdditionalCertificateOutputFormats` Feature Gate promoted zu GA.
-
-### 1.16
-- Keine breaking changes für Standardinstallationen.
+- CRDs werden bei Deinstallation **nicht mehr gelöscht** (Schutzfunktion). Positiver Nebeneffekt für ArgoCD-managed Installs.
 
 ### 1.17
-- **Neues LTS-Release** (ersetzt 1.12 LTS).
-- RSA-Hashing: Ab 3072-bit-Keys wird automatisch SHA-384 statt SHA-256 verwendet; ab 4096-bit SHA-512. Bestehende Zertifikate werden beim nächsten Renewal automatisch aktualisiert.
+- RSA-Hashing: ab 3072-bit-Keys automatisch SHA-384, ab 4096-bit SHA-512. Die interne Root-CA (`seri-root-ca`, RSA 4096) wird beim nächsten Renewal mit SHA-512 neu ausgestellt — das ist gewollt und korrekt.
 
 ### 1.18
-- **ACME HTTP-01 Ingress pathType** wurde von `ImplementationSpecific` auf `Exact` geändert. Relevant nur, wenn ingress-nginx `< v1.12.6` oder `< v1.13.2` verwendet wird (homelab: prüfen).
-- `ValidateCAA` Feature Gate entfernt (war deprecated, war kein Problem wenn nicht gesetzt).
+- ACME HTTP-01 Ingress `pathType` von `ImplementationSpecific` auf `Exact` geändert. **Nicht relevant** — Traefik + DNS-01 (Cloudflare).
 
 ### 1.19
-- **ACHTUNG:** v1.19.0 enthält einen Bug, der unnötige Certificate-Renewals auslöst. → Direkt auf **v1.19.4** upgraden, niemals auf v1.19.0 stoppen.
-- CRD-based API defaults für `Certificate.Spec.IssuerRef` und `CertificateRequest.Spec.IssuerRef` wurden in 1.19.0 eingeführt und in 1.19.1 wieder zurückgenommen (unnötige Renewals). In v1.19.4 ist dies stabil.
-- **Breaking (Metrics):** Label `path` aus `certmanager_acme_client_request_count` und `certmanager_acme_client_request_duration_seconds` entfernt, ersetzt durch `action`. → Grafana-Dashboards und Alerting-Regeln prüfen/anpassen.
+- **ACHTUNG:** v1.19.0 hat einen Bug der unnötige Certificate-Renewals auslöst — direkt auf v1.19.4, niemals auf .0 stoppen. ArgoCD `targetRevision: v1.19.4` stellt das sicher.
+- **Breaking (Metrics):** Prometheus-Label `path` entfernt aus `certmanager_acme_client_request_count` und `certmanager_acme_client_request_duration_seconds`, ersetzt durch `action`. Grafana-Dashboards und Alerting-Regeln prüfen.
 
 ---
 
-## Voraussetzungen
+## Vorbereitung
+
+### Aktuelle Version und ArgoCD-Status prüfen
 
 ```bash
-# Kontext prüfen
-kubectl config current-context
-kubectl cluster-info
+kubectl -n cert-manager get deployment cert-manager \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+# Erwartet: quay.io/jetstack/cert-manager-controller:v1.13.3
 
-# Aktuelle Version prüfen
-helm list -n cert-manager
-kubectl -n cert-manager get pods
+kubectl -n argocd get application cert-manager
+# STATUS sollte: Synced / Healthy sein
 ```
 
----
-
-## Phase 1: Backup
+### Backup aller cert-manager Ressourcen
 
 ```bash
-# Alle cert-manager CRs sichern
 kubectl get -o yaml \
   clusterissuers,issuers,certificates,certificaterequests,orders,challenges \
   --all-namespaces > cert-manager-backup-$(date +%Y%m%d).yaml
 
-# Backup verifizieren
 wc -l cert-manager-backup-$(date +%Y%m%d).yaml
 ```
 
 ---
 
-## Phase 2: Ingress-nginx-Version prüfen (wegen 1.18 pathType-Change)
+## Upgrade: Ein Git-Commit
+
+Da ArgoCD `automated` mit `selfHeal: true` konfiguriert ist, reicht eine einzige Änderung in Git.
+
+### 1. targetRevision aktualisieren
 
 ```bash
-kubectl -n ingress-nginx get deployment ingress-nginx-controller \
-  -o jsonpath='{.spec.template.spec.containers[0].image}'
+# In gitops/apps/cert-manager.yaml
+# targetRevision: v1.13.3  →  targetRevision: v1.19.4
+
+# macOS-kompatibel:
+sed -i '' 's/targetRevision: v1.13.3/targetRevision: v1.19.4/' gitops/apps/cert-manager.yaml
+
+# Änderung prüfen:
+grep targetRevision gitops/apps/cert-manager.yaml
 ```
 
-> Wenn ingress-nginx `< v1.12.6` oder `< v1.13.2`: sicherstellen, dass `strict-validate-path-type: false` gesetzt ist, bevor auf 1.18 upgegraded wird. Im homelab-Cluster mit Traefik nicht relevant.
-
----
-
-## Phase 3: Schrittweises Upgrade (Minor-by-Minor)
-
-> **Wichtig:** Zwischen jedem Schritt prüfen ob alle Pods `Running` sind und keine Failed-CertificateRequests vorliegen.
-
-### Helm Release Name ermitteln
+### 2. Commit und Push
 
 ```bash
-RELEASE=$(helm list -n cert-manager -q | grep cert-manager | head -1)
-echo "Release: $RELEASE"
-# Erwartet: cert-manager
+git add gitops/apps/cert-manager.yaml
+git commit -m "chore: upgrade cert-manager v1.13.3 → v1.19.4 (CVE-2026-24051, CVE-2025-68121)"
+git push
 ```
 
-### 3.1 Upgrade auf v1.14.x (latest patch)
+### 3. ArgoCD Sync beobachten
+
+ArgoCD erkennt die Änderung und startet den Helm-Upgrade automatisch (Auto-Sync).
+Optional manuell triggern falls nicht innerhalb von ~3 Minuten:
 
 ```bash
-helm upgrade --reset-then-reuse-values \
-  --version v1.14.7 \
-  "${RELEASE}" \
-  oci://quay.io/jetstack/charts/cert-manager \
-  -n cert-manager
+# Manueller Sync (optional)
+argocd app sync cert-manager
 
-kubectl -n cert-manager rollout status deployment/cert-manager
-kubectl -n cert-manager rollout status deployment/cert-manager-cainjector
-kubectl -n cert-manager rollout status deployment/cert-manager-webhook
-kubectl -n cert-manager get pods
-```
+# Sync-Status beobachten
+kubectl -n argocd get application cert-manager -w
 
-### 3.2 Upgrade auf v1.15.x
-
-```bash
-helm upgrade --reset-then-reuse-values \
-  --version v1.15.5 \
-  "${RELEASE}" \
-  oci://quay.io/jetstack/charts/cert-manager \
-  -n cert-manager
-
-kubectl -n cert-manager rollout status deployment/cert-manager
-kubectl -n cert-manager rollout status deployment/cert-manager-cainjector
-kubectl -n cert-manager rollout status deployment/cert-manager-webhook
-kubectl -n cert-manager get pods
-```
-
-### 3.3 Upgrade auf v1.16.x
-
-```bash
-helm upgrade --reset-then-reuse-values \
-  --version v1.16.5 \
-  "${RELEASE}" \
-  oci://quay.io/jetstack/charts/cert-manager \
-  -n cert-manager
-
-kubectl -n cert-manager rollout status deployment/cert-manager
-kubectl -n cert-manager rollout status deployment/cert-manager-webhook
-kubectl -n cert-manager get pods
-```
-
-### 3.4 Upgrade auf v1.17.x
-
-```bash
-helm upgrade --reset-then-reuse-values \
-  --version v1.17.4 \
-  "${RELEASE}" \
-  oci://quay.io/jetstack/charts/cert-manager \
-  -n cert-manager
-
-kubectl -n cert-manager rollout status deployment/cert-manager
-kubectl -n cert-manager rollout status deployment/cert-manager-webhook
-kubectl -n cert-manager get pods
-```
-
-### 3.5 Upgrade auf v1.18.x
-
-```bash
-helm upgrade --reset-then-reuse-values \
-  --version v1.18.6 \
-  "${RELEASE}" \
-  oci://quay.io/jetstack/charts/cert-manager \
-  -n cert-manager
-
-kubectl -n cert-manager rollout status deployment/cert-manager
-kubectl -n cert-manager rollout status deployment/cert-manager-webhook
-kubectl -n cert-manager get pods
-```
-
-### 3.6 Upgrade auf v1.19.4 (Zielversion)
-
-```bash
-helm upgrade --reset-then-reuse-values \
-  --version v1.19.4 \
-  "${RELEASE}" \
-  oci://quay.io/jetstack/charts/cert-manager \
-  -n cert-manager
-
-kubectl -n cert-manager rollout status deployment/cert-manager
-kubectl -n cert-manager rollout status deployment/cert-manager-cainjector
-kubectl -n cert-manager rollout status deployment/cert-manager-webhook
-kubectl -n cert-manager get pods
+# Oder über ArgoCD CLI
+argocd app get cert-manager
 ```
 
 ---
 
-## Phase 4: Post-Upgrade-Validierung
+## Post-Upgrade-Validierung
 
-### Version verifizieren
+### Image-Version bestätigen
 
 ```bash
-helm list -n cert-manager
-kubectl -n cert-manager get pods -o wide
-
-# Image-Version prüfen
 kubectl -n cert-manager get deployment cert-manager \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
 # Erwartet: quay.io/jetstack/cert-manager-controller:v1.19.4
+
+kubectl -n cert-manager get deployment cert-manager-webhook \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+# Erwartet: quay.io/jetstack/cert-manager-webhook:v1.19.4
 ```
 
-### Zertifikatsstatus prüfen
+### Alle Pods Running
 
 ```bash
-# Alle Certificates im Cluster
-kubectl get certificates --all-namespaces
-
-# Auf READY=True prüfen — alle sollten True sein
-kubectl get certificates --all-namespaces \
-  -o custom-columns='NAMESPACE:.metadata.namespace,NAME:.metadata.name,READY:.status.conditions[0].status,REASON:.status.conditions[0].reason'
-
-# Etwaige Failed CertificateRequests
-kubectl get certificaterequests --all-namespaces | grep -v Approved
+kubectl -n cert-manager get pods
+# Alle 3 Pods: 1/1 Running
 ```
 
-### ClusterIssuers prüfen
+### ArgoCD Application Synced/Healthy
+
+```bash
+kubectl -n argocd get application cert-manager
+# SYNC STATUS: Synced
+# HEALTH STATUS: Healthy
+```
+
+### ClusterIssuers bereit
 
 ```bash
 kubectl get clusterissuers -o wide
-# READY sollte True sein
+# letsencrypt-prod:  READY = True
+# selfsigned-issuer: READY = True
+# ca-issuer:         READY = True
 ```
 
-### Cert-Manager Controller Logs auf Fehler prüfen
+### Zertifikatsstatus aller Namespaces
 
 ```bash
-kubectl -n cert-manager logs deployment/cert-manager --since=10m | grep -i error
-kubectl -n cert-manager logs deployment/cert-manager-webhook --since=10m | grep -i error
+kubectl get certificates --all-namespaces \
+  -o custom-columns='NAMESPACE:.metadata.namespace,NAME:.metadata.name,READY:.status.conditions[0].status,REASON:.status.conditions[0].reason,EXPIRY:.status.notAfter'
+# Alle READY = True
 ```
 
-### Metrics-Label-Check (Prometheus/Grafana)
+### Auf fehlerhafte CertificateRequests prüfen
 
 ```bash
-# Prüfen ob das alte 'path' Label noch in Queries verwendet wird
-# In Grafana: certmanager_acme_client_request_count und
-# certmanager_acme_client_request_duration_seconds
-# Das Label 'path' wurde durch 'action' ersetzt
+kubectl get certificaterequests --all-namespaces | grep -v "Approved\|NAME"
+# Leer = alles in Ordnung
 ```
+
+### Controller-Logs auf Fehler prüfen
+
+```bash
+kubectl -n cert-manager logs deployment/cert-manager --since=15m | grep -iE "error|failed|panic"
+kubectl -n cert-manager logs deployment/cert-manager-webhook --since=15m | grep -iE "error|failed|panic"
+```
+
+### Grafana: Metrics-Label prüfen
+
+Das Label `path` wurde in cert-manager 1.19 aus den ACME-Metrics entfernt und durch `action` ersetzt.
+In Grafana folgende Queries prüfen und ggf. anpassen:
+
+- `certmanager_acme_client_request_count` — Label `path` → `action`
+- `certmanager_acme_client_request_duration_seconds` — Label `path` → `action`
 
 ---
 
-## Phase 5: Kustomize-Overlay anpassen (falls version gepinnt)
+## deploy-direct.sh aktualisieren
 
-Falls die Helm-Chart-Version in den Kustomize-Overlays oder ArgoCD-Applications gepinnt ist:
+Das Script dient als Disaster-Recovery-Bootstrap. Version ebenfalls aktualisieren
+damit Bootstrap und ArgoCD-Zielzustand konsistent bleiben:
 
 ```bash
-# In gitops/apps/ nach cert-manager suchen
-grep -r "cert-manager" gitops/apps/ --include="*.yaml" | grep "targetRevision\|version"
+sed -i '' 's|cert-manager/releases/download/v1.13.3|cert-manager/releases/download/v1.19.4|' deploy-direct.sh
 
-# Version auf v1.19.4 aktualisieren und committen
+# Prüfen:
+grep cert-manager deploy-direct.sh | grep download
 ```
+
+> **Wichtig:** Das Script deployed cert-manager initial via `kubectl apply` (Static Manifests).
+> Das ist für den Bootstrap-Fall korrekt und intentional — ArgoCD übernimmt danach
+> automatisch die Verwaltung als Helm-Release und bringt den Cluster in den GitOps-Zielzustand.
+> Ein manueller `kubectl apply`-Eingriff im laufenden Betrieb würde von ArgoCD (`selfHeal: true`)
+> innerhalb weniger Minuten überschrieben.
 
 ---
 
-## Rollback-Prozedur
+## Rollback
 
-Im Fehlerfall auf die vorherige Version zurollen:
+Falls nach dem Upgrade Probleme auftreten:
 
 ```bash
-# Helm History anzeigen
-helm history cert-manager -n cert-manager
+# In gitops/apps/cert-manager.yaml zurücksetzen
+sed -i '' 's/targetRevision: v1.19.4/targetRevision: v1.13.3/' gitops/apps/cert-manager.yaml
 
-# Rollback auf vorige Revision
-helm rollback cert-manager -n cert-manager
-
-# Status prüfen
-kubectl -n cert-manager get pods
-kubectl get certificates --all-namespaces
+git add gitops/apps/cert-manager.yaml
+git commit -m "revert: cert-manager zurück auf v1.13.3"
+git push
 ```
 
-> **Hinweis:** Ein Rollback über mehrere Minor-Versionen kann CRD-Inkompatibilitäten erzeugen. Im Zweifel Backup aus Phase 1 verwenden.
+ArgoCD syncronisiert automatisch auf die vorherige Version zurück.
 
 ---
 

@@ -33,8 +33,14 @@ EOF
 echo "✓ MetalLB deployed"
 
 # 2. cert-manager
+# NOTE: Dieses Script deployed cert-manager als Bootstrap via Static Manifests.
+#       Im Normalbetrieb wird cert-manager von ArgoCD als Helm-Release verwaltet
+#       (gitops/apps/cert-manager.yaml, charts.jetstack.io).
+#       ArgoCD übernimmt nach dem ersten ArgoCD-Sync automatisch die Kontrolle.
+#       Ein manueller kubectl-Eingriff im laufenden Betrieb wird von ArgoCD
+#       (selfHeal: true) innerhalb weniger Minuten überschrieben.
 echo "2/5 cert-manager..."
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.4/cert-manager.yaml
 echo "Waiting for cert-manager..."
 sleep 90
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cert-manager -n cert-manager --timeout=300s 2>/dev/null || sleep 30
@@ -58,7 +64,7 @@ spec:
             key: api-token
 EOF
 
-echo "✓ cert-manager deployed"
+echo "✓ cert-manager deployed (Bootstrap v1.19.4 - ArgoCD übernimmt nach erstem Sync)"
 
 # 3. Traefik
 echo "3/5 Traefik..."
