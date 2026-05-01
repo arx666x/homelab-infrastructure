@@ -10,7 +10,7 @@ spec:
   source:
     chart: traefik
     repoURL: https://traefik.github.io/charts
-    targetRevision: 26.0.0
+    targetRevision: 39.0.0
     helm:
       releaseName: traefik
       values: |
@@ -18,25 +18,28 @@ spec:
           type: LoadBalancer
           annotations:
             metallb.universe.tf/address-pool: default-pool
-        
+
         ports:
           web:
             port: 80
-            redirectTo:
-              port: websecure
+            redirections:
+              entryPoint:
+                to: websecure
+                scheme: https
           websecure:
             port: 443
-            tls:
-              enabled: true
-        
+
         ingressClass:
           enabled: true
           isDefaultClass: true
-  
+
+        core:
+          defaultRuleSyntax: v2
+
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik
-  
+
   syncPolicy:
     automated:
       prune: true
@@ -48,3 +51,4 @@ spec:
       backoff:
         duration: 5s
         maxDuration: 2m
+
