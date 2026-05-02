@@ -1,0 +1,441 @@
+---
+# ============================================================
+# homelab-version-checker v2
+# Prüft wöchentlich:
+#   1. Helm Releases  (alle Namespaces)
+#   2. GitHub-basierte Komponenten: k3s, ArgoCD, KubeVirt, CDI, Gitea Runner
+#   3. Docker Hub Images: Guacamole webapp + guacd
+#
+# Credentials: alertmanager-credentials Secret (gmail-password)
+# Zeitplan: Montags 07:00 Uhr Europe/Berlin
+# ============================================================
+
+# ------------------------------------------------------------
+# 1. ServiceAccount
+# ------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: homelab-version-checker
+  namespace: monitoring
+
+---
+# ------------------------------------------------------------
+# 2. ClusterRole
+#    - Helm Releases lesen (als Secrets gespeichert)
+#    - Node-Info lesen (k3s Version)
+#    - Deployments lesen (ArgoCD, Gitea Runner Image-Tags)
+#    - Custom Resources lesen (KubeVirt CR, CDI CR)
+# ------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: homelab-version-checker
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "namespaces", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+  - apiGroups: ["kubevirt.io"]
+    resources: ["kubevirts"]
+    verbs: ["get", "list"]
+  - apiGroups: ["cdi.kubevirt.io"]
+    resources: ["cdis"]
+    verbs: ["get", "list"]
+
+---
+# ------------------------------------------------------------
+# 3. ClusterRoleBinding
+# ------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: homelab-version-checker
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: homelab-version-checker
+subjects:
+  - kind: ServiceAccount
+    name: homelab-version-checker
+    namespace: monitoring
+
+---
+# ------------------------------------------------------------
+# 4. ConfigMap – Python-Script v2
+#    (Inhalt wird vom CronJob als /scripts/check-versions.py gemountet)
+# ------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homelab-version-checker-script
+  namespace: monitoring
+data:
+  check-versions.py: |
+    #!/usr/bin/env python3
+    """
+    Homelab Version Checker v2
+    1. Helm releases  (all namespaces)
+    2. GitHub-release components: k3s, ArgoCD, KubeVirt, CDI, Gitea Runner
+    3. Docker Hub images: Guacamole webapp + guacd
+    """
+    import subprocess, json, smtplib, sys, os, re
+    import urllib.request, yaml, gzip
+    from datetime import datetime
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    SMTP_HOST      = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT      = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_FROM      = os.getenv("SMTP_FROM", "achim.reckeweg@gmail.com")
+    SMTP_TO        = os.getenv("SMTP_TO",   "achim.reckeweg@gmail.com")
+    GMAIL_PWD_FILE = os.getenv("GMAIL_PWD_FILE",
+        "/etc/alertmanager/secrets/alertmanager-credentials/gmail-password")
+
+    HELM_REPOS = {
+        "kube-prometheus-stack": "https://prometheus-community.github.io/helm-charts",
+        "argo-cd":               "https://argoproj.github.io/argo-helm",
+        "argocd":                "https://argoproj.github.io/argo-helm",
+        "longhorn":              "https://charts.longhorn.io",
+        "traefik":               "https://traefik.github.io/charts",
+        "cert-manager":          "https://charts.jetstack.io",
+        "sealed-secrets":        "https://bitnami-labs.github.io/sealed-secrets",
+        "metallb":               "https://metallb.github.io/metallb",
+        "gitea":                 "https://dl.gitea.io/charts/",
+        "headlamp":              "https://headlamp-k8s.github.io/headlamp/",
+        "home-assistant":        "https://pajikos.github.io/home-assistant-helm-chart/",
+        "mysql":                 "https://charts.bitnami.com/bitnami",
+        "wordpress":             "https://charts.bitnami.com/bitnami",
+        "redis":                 "https://charts.bitnami.com/bitnami",
+        "valkey":                "https://charts.bitnami.com/bitnami",
+        "postgresql":            "https://charts.bitnami.com/bitnami",
+        "loki":                  "https://grafana.github.io/helm-charts",
+        "loki-stack":            "https://grafana.github.io/helm-charts",
+        "metrics-server":        "https://kubernetes-sigs.github.io/metrics-server/",
+        "system-upgrade-controller": "https://rancher.github.io/charts",
+    }
+
+    GITHUB_COMPONENTS = {
+        "k3s":          {"repo": "k3s-io/k3s",                               "get_version": "k3s_node_version",               "label": "k3s (Cluster)"},
+        "argocd":       {"repo": "argoproj/argo-cd",                          "get_version": "argocd_deployment_version",       "label": "ArgoCD (nicht via ArgoCD verwaltet)"},
+        "kubevirt":     {"repo": "kubevirt/kubevirt",                         "get_version": "kubevirt_cr_version",             "label": "KubeVirt"},
+        "cdi":          {"repo": "kubevirt/containerized-data-importer",      "get_version": "cdi_cr_version",                  "label": "CDI (Containerized Data Importer)"},
+        "gitea-runner": {"repo": "go-gitea/act_runner",                       "get_version": "gitea_runner_deployment_version", "label": "Gitea Actions Runner"},
+    }
+
+    DOCKERHUB_IMAGES = {
+        "guacamole": {"image": "guacamole/guacamole", "label": "Guacamole (webapp)",     "namespace": "guacamole", "deployment": "guacamole", "container": "guacamole"},
+        "guacd":     {"image": "guacamole/guacd",     "label": "Guacamole (guacd daemon)","namespace": "guacamole", "deployment": "guacd",     "container": "guacd"},
+    }
+
+    def run(cmd, silent=False):
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0 and not silent:
+            print(f"[WARN] {' '.join(cmd)}: {r.stderr.strip()}", file=sys.stderr)
+        return r.stdout.strip() or None
+
+    def http_get(url, timeout=15):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "homelab-version-checker/2.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read()
+                if raw[:2] == b'\x1f\x8b': raw = gzip.decompress(raw)
+                return raw.decode("utf-8")
+        except Exception as e:
+            print(f"[WARN] GET {url}: {e}", file=sys.stderr)
+            return None
+
+    def semver_key(v):
+        v = re.sub(r'\+.*$', '', str(v).lstrip('v'))
+        parts = re.split(r'[.\-]', v)
+        nums = []
+        for p in parts[:3]:
+            try: nums.append(int(p))
+            except: nums.append(0)
+        while len(nums) < 3: nums.append(0)
+        return nums
+
+    def compare(inst, latest):
+        if not inst or not latest or inst in ("unknown","—","-"): return "unknown"
+        i, l = semver_key(inst), semver_key(latest)
+        return "outdated" if i < l else ("up-to-date" if i == l else "newer")
+
+    _helm_cache = {}
+    def helm_fetch_index(repo_url):
+        if repo_url not in _helm_cache:
+            raw = http_get(repo_url.rstrip("/")+"/index.yaml")
+            _helm_cache[repo_url] = yaml.safe_load(raw) if raw else None
+        return _helm_cache[repo_url]
+
+    def helm_latest_stable(chart_name, repo_url):
+        index = helm_fetch_index(repo_url)
+        if not index: return None, None
+        entries = index.get("entries",{}).get(chart_name,[])
+        stable = [e for e in entries if not re.search(r'(alpha|beta|rc|dev|pre|snapshot)',e.get("version",""),re.I)]
+        if not stable: stable = entries
+        if not stable: return None, None
+        stable.sort(key=lambda e: semver_key(e.get("version","0")), reverse=True)
+        b = stable[0]
+        return b.get("version"), b.get("appVersion","-")
+
+    def get_helm_releases():
+        out = run(["helm","list","--all-namespaces","--output","json"])
+        if not out: return []
+        result = []
+        for r in json.loads(out):
+            m = re.match(r'^(.+?)-(\d+\.\d+.*)$', r.get("chart",""))
+            chart_name, chart_ver = (m.group(1), m.group(2)) if m else (r.get("chart",""), "unknown")
+            result.append({"release": r.get("name"), "namespace": r.get("namespace"),
+                           "chart_name": chart_name, "chart_version": chart_ver,
+                           "app_version": r.get("app_version","-"), "status": r.get("status","-")})
+        return result
+
+    def github_latest_release(repo):
+        raw = http_get(f"https://api.github.com/repos/{repo}/releases?per_page=20")
+        if not raw: return None
+        for rel in json.loads(raw):
+            if rel.get("prerelease") or rel.get("draft"): continue
+            tag = rel.get("tag_name","")
+            if re.search(r'(alpha|beta|rc|dev)', tag, re.I): continue
+            return tag
+        return None
+
+    def k3s_node_version():
+        return run(["kubectl","get","nodes","-o","jsonpath={.items[0].status.nodeInfo.kubeletVersion}"], silent=True)
+
+    def argocd_deployment_version():
+        out = run(["kubectl","get","deployment","argocd-server","-n","argocd",
+                   "-o","jsonpath={.spec.template.spec.containers[0].image}"], silent=True)
+        if out:
+            m = re.search(r':v?([\d.]+)$', out)
+            if m: return "v"+m.group(1)
+        return None
+
+    def kubevirt_cr_version():
+        return run(["kubectl","get","kubevirt","-A",
+                    "-o","jsonpath={.items[0].status.observedKubeVirtVersion}"], silent=True)
+
+    def cdi_cr_version():
+        out = run(["kubectl","get","cdi","-A",
+                   "-o","jsonpath={.items[0].status.observedVersion}"], silent=True)
+        return ("v"+out.lstrip("v")) if out else None
+
+    def gitea_runner_deployment_version():
+        out = run(["kubectl","get","deployments","-A","-o",
+                   "jsonpath={range .items[*]}{.metadata.name}{'\\t'}{.spec.template.spec.containers[0].image}{'\\n'}{end}"], silent=True)
+        if out:
+            for line in out.splitlines():
+                parts = line.split("\t")
+                if len(parts)==2 and any(k in parts[0].lower() for k in ("act","runner","gitea-action")):
+                    m = re.search(r':v?([\d.]+)', parts[1])
+                    if m: return "v"+m.group(1)
+        return None
+
+    EXTRACTORS = {
+        "k3s_node_version":               k3s_node_version,
+        "argocd_deployment_version":      argocd_deployment_version,
+        "kubevirt_cr_version":            kubevirt_cr_version,
+        "cdi_cr_version":                 cdi_cr_version,
+        "gitea_runner_deployment_version":gitea_runner_deployment_version,
+    }
+
+    def dockerhub_latest(image):
+        raw = http_get(f"https://hub.docker.com/v2/repositories/{image}/tags?page_size=50&ordering=last_updated")
+        if not raw: return None
+        candidates = [t["name"] for t in json.loads(raw).get("results",[]) if re.match(r'^\d+\.\d+\.\d+$', t.get("name",""))]
+        if not candidates: return None
+        candidates.sort(key=semver_key, reverse=True)
+        return candidates[0]
+
+    def get_deployed_tag(namespace, deployment, container):
+        out = run(["kubectl","get","deployment",deployment,"-n",namespace,
+                   "-o",f"jsonpath={{.spec.template.spec.containers[?(@.name=='{container}')].image}}"], silent=True)
+        if out:
+            parts = out.rsplit(":",1)
+            return parts[1] if len(parts)==2 else None
+        return None
+
+    def row_html(label, source, installed, latest, extra, state):
+        cls   = {"outdated":"outdated","up-to-date":"ok","newer":"newer"}.get(state,"unknown")
+        badge = {"outdated":"&#9888; Veraltet","up-to-date":"&#10003; Aktuell","newer":"&#8593; Neuer"}.get(state,"? Unbekannt")
+        return (f'<tr class="{cls}"><td><b>{label}</b></td><td>{source}</td>'
+                f'<td>{installed or "—"}</td><td>{latest or "—"}</td>'
+                f'<td>{extra}</td><td><span class="badge">{badge}</span></td></tr>')
+
+    def build_html(sections):
+        now = datetime.now().strftime("%d.%m.%Y %H:%M")
+        all_html = "".join(r for _,rows in sections for r in rows)
+        total    = all_html.count("<tr class=")
+        outdated = all_html.count('<tr class="outdated"')
+        unknown  = all_html.count('<tr class="unknown"')
+        color    = "#e74c3c" if outdated else "#27ae60"
+        summary  = (f"<span style='color:{color}'><b>{outdated} veraltet</b></span>"
+                    if outdated else "<span style='color:#27ae60'><b>Alle aktuell</b></span>")
+        body = ""
+        for heading, rows in sections:
+            anchor = heading.lower().replace(" ","_")
+            body += (f'<h3 id="{anchor}">{heading}</h3>'
+                     f'<table><thead><tr><th>Komponente</th><th>Quelle</th>'
+                     f'<th>Installiert</th><th>Verfügbar</th><th>Info</th><th>Stand</th></tr></thead>'
+                     f'<tbody>{"".join(rows)}</tbody></table><br>')
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{{font-family:Arial,sans-serif;font-size:14px;color:#333}}h2{{color:#2c3e50}}h3{{color:#34495e;margin-top:24px}}
+    table{{border-collapse:collapse;width:100%}}th{{background:#2c3e50;color:white;padding:8px 12px;text-align:left}}
+    td{{padding:7px 12px;border-bottom:1px solid #ddd}}tr.ok td{{background:#eafaf1}}tr.outdated td{{background:#fdedec}}
+    tr.newer td{{background:#fef9e7}}tr.unknown td{{background:#f8f9fa;color:#888}}
+    .badge{{font-weight:bold}}tr.outdated .badge{{color:#c0392b}}tr.ok .badge{{color:#27ae60}}
+    tr.newer .badge{{color:#e67e22}}tr.unknown .badge{{color:#95a5a6}}
+    .footer{{margin-top:20px;font-size:12px;color:#aaa}}
+    </style></head><body>
+    <h2>&#128202; Homelab Versions-Report</h2>
+    <div>Stand: <b>{now}</b> &nbsp;|&nbsp; Gesamt: <b>{total}</b> &nbsp;|&nbsp; {summary}
+    {f" &nbsp;|&nbsp; <span style='color:#888'>{unknown} unbekannt</span>" if unknown else ""}
+    </div>{body}
+    <div class="footer">homelab-version-checker v2 &middot; k3s reckeweg.io</div>
+    </body></html>"""
+        return html, outdated
+
+    def send_mail(html, outdated):
+        pw = open(GMAIL_PWD_FILE).read().strip()
+        icon = "🔴" if outdated else "✅"
+        subject = f"[Homelab] {icon} Versions-Report: {outdated} veraltet"
+        msg = MIMEMultipart("alternative")
+        msg["Subject"], msg["From"], msg["To"] = subject, SMTP_FROM, SMTP_TO
+        msg.attach(MIMEText(html,"html","utf-8"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+            s.ehlo(); s.starttls(); s.login(SMTP_FROM, pw)
+            s.sendmail(SMTP_FROM, [SMTP_TO], msg.as_string())
+        print(f"[OK] Sent: {subject}")
+
+    def main():
+        sections = []
+
+        print("[1/3] Helm releases...")
+        helm_rows = []
+        for r in get_helm_releases():
+            repo_url = HELM_REPOS.get(r["chart_name"])
+            latest_ver, latest_app = helm_latest_stable(r["chart_name"], repo_url) if repo_url else (None, None)
+            if not repo_url: print(f"  [?] Unbekanntes Chart: {r['chart_name']}")
+            state = compare(r["chart_version"], latest_ver)
+            extra = f"App: {r['app_version']} | NS: {r['namespace']} | {r['status']}"
+            helm_rows.append(row_html(r["release"],"Helm",r["chart_version"],latest_ver,extra,state))
+            print(f"  {'⚠✓↑?'[['outdated','up-to-date','newer','unknown'].index(state)]}  {r['release']:35s} {r['chart_version']:15s}→ {latest_ver or '?'}")
+        sections.append(("Helm Releases", helm_rows))
+
+        print("[2/3] GitHub Komponenten...")
+        gh_rows = []
+        for key, cfg in GITHUB_COMPONENTS.items():
+            installed = EXTRACTORS[cfg["get_version"]]()
+            latest    = github_latest_release(cfg["repo"])
+            inst_cmp  = re.sub(r'\+.*$', '', installed) if installed else None
+            state     = compare(inst_cmp, latest)
+            gh_rows.append(row_html(cfg["label"],"GitHub Releases",installed or "—",latest,cfg["repo"],state))
+            print(f"  {'⚠✓↑?'[['outdated','up-to-date','newer','unknown'].index(state)]}  {cfg['label']:40s} {str(installed):20s}→ {latest or '?'}")
+        sections.append(("System-Komponenten (GitHub)", gh_rows))
+
+        print("[3/3] Docker Hub Images...")
+        dh_rows = []
+        for key, cfg in DOCKERHUB_IMAGES.items():
+            installed = get_deployed_tag(cfg["namespace"], cfg["deployment"], cfg["container"])
+            latest    = dockerhub_latest(cfg["image"])
+            state     = compare(installed, latest)
+            dh_rows.append(row_html(cfg["label"],"Docker Hub",installed or "—",latest,cfg["image"],state))
+            print(f"  {'⚠✓↑?'[['outdated','up-to-date','newer','unknown'].index(state)]}  {cfg['label']:40s} {str(installed):15s}→ {latest or '?'}")
+        sections.append(("Container Images (Docker Hub)", dh_rows))
+
+        html, outdated = build_html(sections)
+        send_mail(html, outdated)
+
+    if __name__ == "__main__":
+        main()
+
+---
+# ------------------------------------------------------------
+# 5. CronJob – jeden Montag 07:00 Uhr Europe/Berlin
+# ------------------------------------------------------------
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: homelab-version-checker
+  namespace: monitoring
+  labels:
+    app: homelab-version-checker
+spec:
+  schedule: "0 5 * * 1"        # 05:00 UTC = 07:00 CEST / 06:00 CET
+  timeZone: "Europe/Berlin"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          serviceAccountName: homelab-version-checker
+          restartPolicy: OnFailure
+
+          initContainers:
+            - name: copy-helm
+              image: alpine/helm:3.14.4
+              command:
+                - sh
+                - -c
+                - |
+                  cp /usr/bin/helm /shared/helm && chmod +x /shared/helm
+                  echo "helm copied."
+                  # kubectl als statisches Binary herunterladen (passt zur k3s-Version im Cluster)
+                  KUBECTL_VERSION=$(wget -qO- https://dl.k8s.io/release/stable.txt)
+                  wget -qO /shared/kubectl \
+                    "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/arm64/kubectl"
+                  chmod +x /shared/kubectl
+                  echo "kubectl ${KUBECTL_VERSION} downloaded."
+              volumeMounts:
+                - name: shared-bin
+                  mountPath: /shared
+
+          containers:
+            - name: checker
+              image: python:3.12-slim
+              command:
+                - sh
+                - -c
+                - |
+                  pip install --quiet pyyaml && \
+                  python /scripts/check-versions.py
+              env:
+                - name: PATH
+                  value: "/shared:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                - name: SMTP_FROM
+                  value: "achim.reckeweg@gmail.com"
+                - name: SMTP_TO
+                  value: "achim.reckeweg@gmail.com"
+                - name: GMAIL_PWD_FILE
+                  value: "/etc/alertmanager/secrets/alertmanager-credentials/gmail-password"
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                - name: shared-bin
+                  mountPath: /shared
+                - name: alertmanager-credentials
+                  mountPath: /etc/alertmanager/secrets/alertmanager-credentials
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+
+          volumes:
+            - name: script
+              configMap:
+                name: homelab-version-checker-script
+                defaultMode: 0755
+            - name: shared-bin
+              emptyDir: {}
+            - name: alertmanager-credentials
+              secret:
+                secretName: alertmanager-credentials
