@@ -1,0 +1,278 @@
+---
+# ssh-watchdog.yml
+# Deploys a systemd-based SSH watchdog to all k3s nodes (Pi + GMKTec).
+#
+# The watchdog periodically checks if SSH is responsive on localhost.
+# After a configurable number of consecutive failures it triggers a reboot.
+#
+# Also ensures:
+#   - Persistent journald logging is active on all nodes
+#   - watchdog.service is disabled (conflicts with systemd's built-in RuntimeWatchdogSec)
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini playbooks/ssh-watchdog.yml
+#   ansible-playbook -i inventory/hosts.ini playbooks/ssh-watchdog.yml --tags remove
+
+- name: Deploy SSH watchdog to all k3s nodes
+  hosts: k3s_cluster
+  become: true
+  gather_facts: false
+
+  vars:
+    watchdog_check_interval_sec: 120    # how often to run the check (seconds)
+    watchdog_failure_threshold: 3       # consecutive failures before reboot
+    watchdog_connect_timeout_sec: 10    # ssh ConnectTimeout per attempt
+    watchdog_script_path: /usr/local/bin/ssh-watchdog.sh
+    watchdog_state_dir: /var/lib/ssh-watchdog
+
+  tasks:
+
+    # -------------------------------------------------------------------------
+    # Fix: Persistent journal
+    # -------------------------------------------------------------------------
+
+    - name: Ensure /var/log/journal directory exists (activates persistent logging)
+      ansible.builtin.file:
+        path: /var/log/journal
+        state: directory
+        owner: root
+        group: systemd-journal
+        mode: "2755"
+      tags: [install, journal]
+      notify: Restart journald
+
+    - name: Ensure journald.conf.d directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags: [install, journal]
+
+    - name: Ensure journald Storage=persistent is configured
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/persistent.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Journal]
+          Storage=persistent
+      tags: [install, journal]
+      notify: Restart journald
+
+    # -------------------------------------------------------------------------
+    # Fix: Disable conflicting watchdog.service
+    # systemd holds /dev/watchdog via RuntimeWatchdogSec - the watchdog daemon
+    # cannot open the device and logs "errno = 16 = Device or resource busy".
+    # -------------------------------------------------------------------------
+
+    - name: Check if watchdog.service exists
+      ansible.builtin.stat:
+        path: /lib/systemd/system/watchdog.service
+      register: watchdog_service_file
+      tags: [install, watchdog]
+
+    - name: Stop and disable watchdog.service (conflicts with systemd RuntimeWatchdogSec)
+      ansible.builtin.systemd:
+        name: watchdog.service
+        enabled: false
+        state: stopped
+      when: watchdog_service_file.stat.exists
+      ignore_errors: true
+      tags: [install, watchdog]
+
+    # -------------------------------------------------------------------------
+    # SSH Watchdog: Script + Service + Timer
+    # -------------------------------------------------------------------------
+
+    - name: Create watchdog state directory
+      ansible.builtin.file:
+        path: "{{ watchdog_state_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      tags: [install, watchdog]
+
+    - name: Deploy watchdog script
+      ansible.builtin.copy:
+        dest: "{{ watchdog_script_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # ssh-watchdog.sh
+          # Checks SSH responsiveness on localhost via ssh-keyscan.
+          # Reboots the node after {{ watchdog_failure_threshold }} consecutive failures.
+
+          THRESHOLD={{ watchdog_failure_threshold }}
+          CONNECT_TIMEOUT={{ watchdog_connect_timeout_sec }}
+          STATE_FILE={{ watchdog_state_dir }}/fail_count
+          LOG_TAG="ssh-watchdog"
+
+          # Read current failure count (default 0)
+          FAIL_COUNT=0
+          if [[ -f "$STATE_FILE" ]]; then
+            FAIL_COUNT=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
+          fi
+
+          # Check SSH responsiveness via ssh-keyscan.
+          # Performs a full TCP + SSH handshake up to host key exchange
+          # without requiring a login or any credentials on this node.
+          # Fails if sshd is unresponsive, hung, or not accepting connections.
+          ssh-keyscan -T "${CONNECT_TIMEOUT}" -p 22 127.0.0.1 2>/dev/null | grep -q "ssh-"
+
+          SSH_RC=$?
+
+          if [[ $SSH_RC -eq 0 ]]; then
+            # SSH is healthy - reset counter
+            if [[ "$FAIL_COUNT" -gt 0 ]]; then
+              logger -t "$LOG_TAG" "SSH recovered after ${FAIL_COUNT} failure(s). Resetting counter."
+            fi
+            echo 0 > "$STATE_FILE"
+            exit 0
+          fi
+
+          # SSH failed - increment counter
+          FAIL_COUNT=$(( FAIL_COUNT + 1 ))
+          echo "$FAIL_COUNT" > "$STATE_FILE"
+          logger -t "$LOG_TAG" "WARNING: SSH check failed (attempt ${FAIL_COUNT}/${THRESHOLD}, rc=${SSH_RC})"
+
+          if [[ "$FAIL_COUNT" -ge "$THRESHOLD" ]]; then
+            logger -t "$LOG_TAG" "CRITICAL: SSH unresponsive for ${THRESHOLD} consecutive checks. Initiating reboot."
+            echo 0 > "$STATE_FILE"
+            /bin/systemctl reboot
+          fi
+      tags: [install, watchdog]
+      notify: Restart ssh-watchdog timer
+
+    - name: Deploy watchdog systemd service unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ssh-watchdog.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=SSH Watchdog - single check run
+          After=network.target ssh.service
+
+          [Service]
+          Type=oneshot
+          ExecStart={{ watchdog_script_path }}
+          StandardOutput=journal
+          StandardError=journal
+      tags: [install, watchdog]
+      notify: Reload systemd
+
+    - name: Deploy watchdog systemd timer unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ssh-watchdog.timer
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=SSH Watchdog Timer
+          Requires=ssh-watchdog.service
+
+          [Timer]
+          OnBootSec=120
+          OnUnitActiveSec={{ watchdog_check_interval_sec }}s
+          AccuracySec=10
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+      tags: [install, watchdog]
+      notify: Reload systemd
+
+    - name: Force systemd reload before enabling timer
+      ansible.builtin.systemd:
+        daemon_reload: true
+      tags: [install, watchdog]
+
+    - name: Enable and start watchdog timer
+      ansible.builtin.systemd:
+        name: ssh-watchdog.timer
+        enabled: true
+        state: started
+      tags: [install, watchdog]
+
+    - name: Verify timer is active
+      ansible.builtin.command: systemctl status ssh-watchdog.timer
+      register: timer_status
+      changed_when: false
+      tags: [install, watchdog]
+
+    - name: Show timer status
+      ansible.builtin.debug:
+        msg: "{{ timer_status.stdout_lines }}"
+      tags: [install, watchdog]
+
+    # -------------------------------------------------------------------------
+    # Worker node label
+    # Ensures all nodes in the [worker] group have the worker role label.
+    # -------------------------------------------------------------------------
+
+    - name: Set worker role label on worker nodes
+      ansible.builtin.command: >
+        kubectl label node {{ hostvars[inventory_hostname].hostname }}
+        node-role.kubernetes.io/worker=worker
+        --overwrite
+      delegate_to: localhost
+      become: false
+      when: inventory_hostname in groups['worker']
+      tags: [install, label]
+
+    # -------------------------------------------------------------------------
+    # Remove (--tags remove)
+    # -------------------------------------------------------------------------
+
+    - name: Stop and disable ssh-watchdog timer
+      ansible.builtin.systemd:
+        name: ssh-watchdog.timer
+        enabled: false
+        state: stopped
+      ignore_errors: true
+      tags: [never, remove]
+
+    - name: Remove watchdog files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/ssh-watchdog.service
+        - /etc/systemd/system/ssh-watchdog.timer
+        - "{{ watchdog_script_path }}"
+        - "{{ watchdog_state_dir }}"
+      tags: [never, remove]
+
+    - name: Reload systemd after removal
+      ansible.builtin.systemd:
+        daemon_reload: true
+      tags: [never, remove]
+
+  # ---------------------------------------------------------------------------
+  # Handlers
+  # ---------------------------------------------------------------------------
+
+  handlers:
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
+
+    - name: Restart ssh-watchdog timer
+      ansible.builtin.systemd:
+        name: ssh-watchdog.timer
+        state: restarted
+      ignore_errors: true
