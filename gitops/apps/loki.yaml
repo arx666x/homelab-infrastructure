@@ -55,6 +55,10 @@ spec:
 
         grafana:
           enabled: false
+          sidecar:
+            datasources:
+              enabled: true
+              defaultDatasourceEnabled: false
 
   destination:
     server: https://kubernetes.default.svc
