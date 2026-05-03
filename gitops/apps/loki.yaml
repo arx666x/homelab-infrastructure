@@ -59,6 +59,18 @@ spec:
             datasources:
               enabled: true
               defaultDatasourceEnabled: false
+          # Explicitly set isDefault: false to avoid conflict with Prometheus default datasource
+          datasources:
+            loki-stack-datasource.yaml:
+              apiVersion: 1
+              datasources:
+                - name: Loki
+                  type: loki
+                  access: proxy
+                  url: "http://loki-stack:3100"
+                  version: 1
+                  isDefault: false
+                  jsonData: {}
 
   destination:
     server: https://kubernetes.default.svc
