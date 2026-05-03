@@ -253,7 +253,7 @@ data:
                     entries = index["entries"][key]
                     break
         stable = [e for e in entries
-                  if not re.search(r'(alpha|beta|rc|dev|pre|snapshot)', e.get("version", ""), re.I)]
+                  if not re.search(r'(alpha|beta|rc|dev|pre|snapshot|\.ea[\.\d]|-ea[\.\d])', e.get("version", ""), re.I)]
         if not stable:
             stable = entries
         if not stable:
@@ -278,7 +278,7 @@ data:
             if rel.get("prerelease") or rel.get("draft"):
                 continue
             tag = rel.get("tag_name", "")
-            if re.search(r'(alpha|beta|rc|dev)', tag, re.I):
+            if re.search(r'(alpha|beta|rc|dev|\.ea[\.\d]|-ea[\.\d])', tag, re.I):
                 continue
             return tag
         return None
@@ -537,17 +537,16 @@ spec:
           initContainers:
             - name: copy-helm
               image: alpine/helm:3.14.4
-              command:
-                - sh
-                - -c
-                - |
-                  cp /usr/bin/helm /shared/helm && chmod +x /shared/helm
-                  echo "helm copied."
-                  KUBECTL_VERSION=$(wget -qO- https://dl.k8s.io/release/stable.txt)
-                  wget -qO /shared/kubectl \
-                    "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/arm64/kubectl"
-                  chmod +x /shared/kubectl
-                  echo "kubectl ${KUBECTL_VERSION} downloaded."
+              command: ["sh", "-c", "cp /usr/bin/helm /shared/helm && chmod +x /shared/helm && echo 'helm copied.'"]
+              volumeMounts:
+                - name: shared-bin
+                  mountPath: /shared
+
+            - name: copy-kubectl
+              image: bitnami/kubectl:latest
+              command: ["sh", "-c", "cp /opt/bitnami/kubectl/bin/kubectl /shared/kubectl && chmod +x /shared/kubectl && echo 'kubectl copied.'"]
+              securityContext:
+                runAsUser: 0
               volumeMounts:
                 - name: shared-bin
                   mountPath: /shared
