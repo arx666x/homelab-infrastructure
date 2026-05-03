@@ -10,7 +10,7 @@ spec:
   source:
     chart: kube-prometheus-stack
     repoURL: https://prometheus-community.github.io/helm-charts
-    targetRevision: "62.3.0"
+    targetRevision: "67.11.0"
     helm:
       releaseName: kube-prometheus-stack
       skipCrds: false
@@ -61,6 +61,8 @@ spec:
             enabled: true
             storageClassName: longhorn
             size: 10Gi
+          deploymentStrategy:
+            type: Recreate
           
           ingress:
             enabled: true
