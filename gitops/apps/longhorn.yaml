@@ -19,8 +19,6 @@ spec:
           defaultDataPath: "/mnt/longhorn"
           defaultReplicaCount: 3
           guaranteedInstanceManagerCpu: 12
-        # Temporär für Upgrade
-        upgradeVersionCheck: false
         
         persistence:
           defaultClass: true
