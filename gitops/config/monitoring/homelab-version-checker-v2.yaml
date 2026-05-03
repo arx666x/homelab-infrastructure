@@ -534,6 +534,16 @@ spec:
           serviceAccountName: homelab-version-checker
           restartPolicy: OnFailure
 
+          # GMKTec Master-Nodes sind amd64 – bitnami/kubectl läuft nur auf amd64
+          nodeSelector:
+            kubernetes.io/arch: amd64
+
+          # Masters haben den control-plane Taint – tolerieren damit der Job dort laufen darf
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+
           initContainers:
             - name: copy-helm
               image: alpine/helm:3.14.4
