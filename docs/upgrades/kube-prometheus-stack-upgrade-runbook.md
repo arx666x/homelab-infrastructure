@@ -74,19 +74,37 @@ CRDs zuerst manuell applyed werden können, bevor ArgoCD die neue Chart-Version
 ausrollt:
 
 ```bash
-argocd app set monitoring --sync-policy none
+argocd app set kube-prometheus-stack --sync-policy none
 # Alternativ in der ArgoCD-UI: App → Details → Sync Policy → None
 ```
 
+### Grafana Deployment-Strategy auf Recreate setzen
+
+Grafana verwendet ein RWO-Longhorn-PVC. Beim Rolling Update versucht der neue
+Pod das PVC zu mounten während der alte es noch hält — das führt zu einem
+`Multi-Attach`-Fehler und der neue Pod hängt in `Init:0/1`.
+
+**Einmalig in `gitops/apps/monitoring.yaml` eintragen** (vor dem ersten Upgrade):
+
+```yaml
+grafana:
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 10Gi
+  deploymentStrategy:
+    type: Recreate   # verhindert Multi-Attach bei jedem Upgrade
+```
+
+Mit `Recreate` fährt der alte Pod erst vollständig runter bevor der neue
+startet. Kurze Grafana-Downtime (~30s) beim Upgrade, aber kein manuelles
+Eingreifen mehr nötig.
+
 ### Konflikt-Flag bereithalten
 
-Falls `kubectl apply --server-side` Konflikte meldet (bekanntes Problem beim
-Wechsel von Helm-managed CRDs zu server-side apply):
-
-```bash
-# Zusatz-Flag für alle CRD-Apply-Befehle:
---force-conflicts
-```
+`--force-conflicts` ist bereits in allen CRD-Befehlen dieses Runbooks gesetzt.
+Der `argocd-controller` ist Field Manager der CRDs — der Konflikt ist erwartet
+und mit diesem Flag sicher auflösbar.
 
 ---
 
@@ -125,7 +143,7 @@ prometheus:
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.76.0/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -143,8 +161,8 @@ git push
 ### Schritt 1.3: ArgoCD sync und verifizieren
 
 ```bash
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 
 # Verifizieren
 kubectl get pods -n monitoring
@@ -167,7 +185,9 @@ kubectl get prometheus -n monitoring kube-prometheus-stack-prometheus \
   -o jsonpath='{.spec.version}'
 
 # Laufende Prometheus-Version
-kubectl exec -n monitoring -l app.kubernetes.io/name=prometheus \
+kubectl exec -n monitoring \
+  $(kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus \
+    -o jsonpath='{.items[0].metadata.name}') \
   -- /bin/prometheus --version 2>&1 | head -1
 ```
 
@@ -202,7 +222,7 @@ kubectl get prometheusrules -n monitoring -o yaml | grep -E "apiserver_request_s
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.79.0/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -214,11 +234,13 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 62.x → 67.x (Prometheus 3.x)"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 
 # Prometheus-Version verifizieren
-kubectl exec -n monitoring -l app.kubernetes.io/name=prometheus \
+kubectl exec -n monitoring \
+  $(kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus \
+    -o jsonpath='{.items[0].metadata.name}') \
   -- /bin/prometheus --version 2>&1 | head -1
 ```
 
@@ -231,7 +253,7 @@ kubectl exec -n monitoring -l app.kubernetes.io/name=prometheus \
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.80.0/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -243,8 +265,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 67.x → 69.x"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 ```
 
 ---
@@ -256,7 +278,7 @@ argocd app wait monitoring --health --timeout 300
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.82.0/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -277,8 +299,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 69.x → 71.x"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 ```
 
 ---
@@ -321,8 +343,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 71.x → 73.x (PSP removed, K8s 1.25+)"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 ```
 
 ---
@@ -349,7 +371,7 @@ neuem Namen neu erstellt. Das ist unkritisch (kurze Lücke in Alert-Evaluation).
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.83.0/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -361,8 +383,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 73.x → 75.x"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 ```
 
 ---
@@ -377,7 +399,7 @@ argocd app wait monitoring --health --timeout 300
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.84.1/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -389,8 +411,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 75.x → 76.x (operator v0.84.1)"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 ```
 
 ---
@@ -402,7 +424,7 @@ argocd app wait monitoring --health --timeout 300
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.85.0/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -414,8 +436,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 76.x → 77.x"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 ```
 
 ---
@@ -427,7 +449,7 @@ argocd app wait monitoring --health --timeout 300
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.86.0/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -439,8 +461,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 77.x → 78.x"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 ```
 
 ---
@@ -476,8 +498,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 78.x → 79.x (Grafana random password)"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 
 # Grafana-Passwort nach dem Upgrade sichern:
 kubectl get secret -n monitoring kube-prometheus-stack-grafana \
@@ -494,7 +516,7 @@ echo  # Newline
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.87.0/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -506,8 +528,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 79.x → 80.x"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 ```
 
 ---
@@ -519,7 +541,7 @@ argocd app wait monitoring --health --timeout 300
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.88.0/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -531,8 +553,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 80.x → 81.x"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 ```
 
 ---
@@ -544,7 +566,7 @@ argocd app wait monitoring --health --timeout 300
 ```bash
 BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.89.0/example/prometheus-operator-crd"
 for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
-  kubectl apply --server-side -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
 done
 ```
 
@@ -556,8 +578,8 @@ git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 81.x → 84.5.0 (final)"
 git push
 
-argocd app sync monitoring --timeout 300
-argocd app wait monitoring --health --timeout 300
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
 ```
 
 ---
@@ -588,13 +610,20 @@ curl -s -o /dev/null -w "%{http_code}" https://grafana.reckeweg.io/api/health
 kubectl get alertmanager -n monitoring
 
 # ArgoCD-App-Status
-argocd app get monitoring
+argocd app get kube-prometheus-stack
 ```
+
+**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 84.5.0:**
+- Prometheus-Operator: `v0.90.1`
+- Prometheus: `3.11.3`
+- Grafana HTTP Status: `200`
+- Alle 10 CRDs: `Healthy`
+- ArgoCD: `Synced to 84.5.0`, `Health Status: Healthy`
 
 ### Auto-Sync wieder aktivieren (optional)
 
 ```bash
-argocd app set monitoring --sync-policy automated --self-heal --auto-prune
+argocd app set kube-prometheus-stack --sync-policy automated --self-heal --auto-prune
 ```
 
 ---
@@ -604,10 +633,15 @@ argocd app set monitoring --sync-policy automated --self-heal --auto-prune
 ### CRD-Konflikt beim apply
 
 ```
-error: Apply failed with 3 conflicts: conflicts with "helm" using apiextensions.k8s.io/v1
+error: Apply failed with 3 conflicts: conflicts with "argocd-controller" using apiextensions.k8s.io/v1
+- .metadata.annotations.controller-gen.kubebuilder.io/version
+- .metadata.annotations.operator.prometheus.io/version
+- .spec.versions
 ```
 
-→ `--force-conflicts` anhängen:
+Der `argocd-controller` ist Field Manager der CRDs — erwartet und normal.
+`--force-conflicts` ist bereits in allen CRD-Befehlen dieses Runbooks gesetzt.
+Falls doch ohne Flag ausgeführt: einfach `--force-conflicts` ergänzen:
 
 ```bash
 kubectl apply --server-side --force-conflicts -f <url>
@@ -630,12 +664,80 @@ ignoreDifferences:
       - /spec
 ```
 
+### ArgoCD sync hängt: "another operation is already in progress"
+
+Tritt auf wenn ein vorheriger Sync nicht sauber abgeschlossen wurde.
+
+```bash
+# Schritt 1: Operation terminieren
+argocd app terminate-op kube-prometheus-stack
+
+# Schritt 2: Kurz warten, dann nochmal versuchen
+sleep 10 && argocd app sync kube-prometheus-stack --timeout 300
+```
+
+Falls immer noch blockiert:
+
+```bash
+# Operation-Status direkt aus dem Kubernetes-Objekt löschen
+kubectl patch application kube-prometheus-stack -n argocd \
+  --type merge \
+  -p='{"operation": null}'
+
+# ArgoCD Application-Controller neustarten (StatefulSet, kein Deployment!)
+kubectl rollout restart statefulset -n argocd argocd-application-controller
+
+# Dann sync
+argocd app sync kube-prometheus-stack --timeout 300
+```
+
 ### Prometheus-Operator startet nicht nach CRD-Update
 
 Race Condition (Operator startet bevor CRD `Established` ist):
 
 ```bash
 kubectl rollout restart deployment -n monitoring kube-prometheus-stack-operator
+```
+
+### Grafana CrashLoopBackOff: "Only one datasource per organization can be marked as default"
+
+Tritt bei jedem Grafana-Versionssprung auf solange `loki-stack` Chart 2.10.3
+die Loki-Datasource mit `isDefault: true` deployed.
+
+**Wichtig:** Den Patch erst anwenden wenn Grafana bereits mit der neuen Version
+gestartet ist und crasht — nicht vorher.
+
+```bash
+# Schritt 1: Warten bis Grafana in CrashLoopBackOff ist
+kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana -w
+
+# Schritt 2: Loki-ConfigMap patchen
+kubectl patch configmap loki-stack -n monitoring \
+  --type merge \
+  -p='{"data":{"loki-stack-datasource.yaml":"apiVersion: 1\ndatasources:\n- name: Loki\n  type: loki\n  access: proxy\n  url: \"http://loki-stack:3100\"\n  version: 1\n  isDefault: false\n  jsonData:\n    {}"}}'
+
+# Schritt 3: Grafana neustarten
+kubectl rollout restart deployment -n monitoring kube-prometheus-stack-grafana
+```
+
+### Grafana sync-Fehler: "spec.strategy.rollingUpdate Forbidden when type is Recreate"
+
+Tritt auf wenn das Grafana-Deployment im Cluster noch `RollingUpdate` gesetzt hat,
+aber in der values.yaml bereits `Recreate` konfiguriert ist. ArgoCD kann das
+Deployment nicht patchen weil Kubernetes `rollingUpdate`-Parameter bei `Recreate`
+ablehnt.
+
+```bash
+# Strategy direkt im Cluster korrigieren
+kubectl patch deployment -n monitoring kube-prometheus-stack-grafana \
+  --type merge \
+  -p='{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+
+# Dann stuck operation clearen und sync
+kubectl patch application kube-prometheus-stack -n argocd \
+  --type merge -p='{"operation": null}'
+
+argocd app sync kube-prometheus-stack --timeout 300
 ```
 
 ### Grafana-Passwort nach 79.x unbekannt
