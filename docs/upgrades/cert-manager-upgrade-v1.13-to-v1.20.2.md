@@ -1,11 +1,11 @@
-# cert-manager Upgrade Runbook: v1.13.3 → v1.19.4
+# cert-manager Upgrade Runbook: v1.13.3 → v1.20.2
 
-**Datum:** 2026-05-01  
+**Datum:** 2026-05-03 (zuletzt aktualisiert)  
 **Autor:** Achim Reckeweg  
 **Cluster:** reckeweg.io homelab k3s  
 **Namespace:** `cert-manager`  
 **Install-Methode:** ArgoCD GitOps (Helm Chart via `charts.jetstack.io`)  
-**Zielversion:** v1.19.4  
+**Zielversion:** v1.20.2  
 
 ---
 
@@ -13,8 +13,8 @@
 
 | | |
 |---|---|
-| **Aktuelle Version** | v1.13.3 |
-| **Zielversion** | v1.19.4 |
+| **Ausgangversion** | v1.13.3 |
+| **Zielversion** | v1.20.2 |
 | **Upgrade-Strategie** | Minor-by-Minor via Git-Commit → ArgoCD Auto-Sync |
 | **ArgoCD Application** | `argocd/cert-manager` |
 | **ClusterIssuers** | `letsencrypt-prod` (Cloudflare DNS-01), `selfsigned-issuer`, `ca-issuer` |
@@ -32,19 +32,18 @@
 > CRD-Migrationen und Breaking Changes zwischen Minor-Versionen können sonst  
 > zu inkonsistenten Zuständen führen.
 
-### Warum v1.19.4?
+### Warum v1.20.2?
 
-- **CVE-2026-24051** – Go v1.25.7
-- **CVE-2025-68121** – Go v1.25.7
-- **GO-2026-4394** – OpenTelemetry SDK v1.40.0
-- Moderate DoS-Fix im Controller (GHSA-gx3x-vq4p-mhhv)
+- **Go 1.26.2** — Dependency-Updates für gemeldete Vulnerabilities
+- Fix für unnötige Certificate-Renewals wenn `kind`/`group` in `issuerRef` beim Upgrade auf 1.19.x weggelassen wurde
+- Helm-Fix: ungültiges YAML wenn `webhook.config` und `webhook.volumes` gleichzeitig definiert sind
 
 ---
 
 ## Upgrade-Pfad
 
 ```
-v1.13.3 → v1.14.7 → v1.15.5 → v1.16.5 → v1.17.4 → v1.18.6 → v1.19.4
+v1.13.3 → v1.14.7 → v1.15.5 → v1.16.5 → v1.17.4 → v1.18.6 → v1.19.4 → v1.20.2
 ```
 
 Jeder Schritt = ein Git-Commit + ArgoCD-Sync + Validierung.
@@ -70,7 +69,13 @@ Jeder Schritt = ein Git-Commit + ArgoCD-Sync + Validierung.
 
 ### 1.19
 - **ACHTUNG:** v1.19.0 hat einen Bug der unnötige Certificate-Renewals auslöst — immer direkt auf den letzten Patch (v1.19.4), niemals auf .0 stoppen.
-- **Breaking (Metrics):** Prometheus-Label `path` entfernt aus `certmanager_acme_client_request_count` und `certmanager_acme_client_request_duration_seconds`, ersetzt durch `action`. Grafana-Dashboards nach Schritt 6 prüfen.
+- **Breaking (Metrics):** Prometheus-Label `path` entfernt aus `certmanager_acme_client_request_count` und `certmanager_acme_client_request_duration_seconds`, ersetzt durch `action`. Grafana-Dashboards nach Schritt 7 prüfen.
+
+### 1.20
+- Keine Breaking Changes für diese Installation.
+- Bugfix: Certificate-Renewals die durch fehlende `kind`/`group` in `issuerRef` beim Upgrade auf 1.19.x ausgelöst wurden, sind nun vollständig behoben.
+- Direkter Schritt von v1.19.4 → v1.20.2 möglich — kein weiteres Minor-Stepping nötig.
+- Go 1.26.2 mit Dependency-Updates für gemeldete Vulnerabilities.
 
 ---
 
@@ -214,7 +219,7 @@ validate
 
 ---
 
-## Schritt 6: v1.18.6 → v1.19.4 (Ziel)
+## Schritt 6: v1.18.6 → v1.19.4
 
 ```bash
 sed -i '' 's/targetRevision: v1.18.6/targetRevision: v1.19.4/' gitops/apps/cert-manager.yaml
@@ -230,18 +235,38 @@ validate
 
 ---
 
-## Post-Upgrade-Validierung (nach Schritt 6)
+## Schritt 7: v1.19.4 → v1.20.2 (Ziel)
+
+```bash
+sed -i '' 's/targetRevision: v1.19.4/targetRevision: v1.20.2/' gitops/apps/cert-manager.yaml
+grep targetRevision gitops/apps/cert-manager.yaml
+
+git add gitops/apps/cert-manager.yaml
+git commit -m "chore: upgrade cert-manager v1.19.4 → v1.20.2 (Go 1.26.2, vulnerability fixes)"
+git push
+
+wait_argocd v1.20.2
+validate
+```
+
+---
+
+## Post-Upgrade-Validierung (nach Schritt 7)
 
 ### Image-Version bestätigen
 
 ```bash
+kubectl -n cert-manager get pods \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+# Alle Pods: ...v1.20.2
+
 kubectl -n cert-manager get deployment cert-manager \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
-# Erwartet: quay.io/jetstack/cert-manager-controller:v1.19.4
+# Erwartet: quay.io/jetstack/cert-manager-controller:v1.20.2
 
 kubectl -n cert-manager get deployment cert-manager-webhook \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
-# Erwartet: quay.io/jetstack/cert-manager-webhook:v1.19.4
+# Erwartet: quay.io/jetstack/cert-manager-webhook:v1.20.2
 ```
 
 ### ArgoCD Application final prüfen
@@ -289,7 +314,7 @@ Label `path` wurde durch `action` ersetzt. Folgende Queries in Grafana prüfen:
 Nach erfolgreichem Upgrade die Bootstrap-Version konsistent halten:
 
 ```bash
-sed -i '' 's|cert-manager/releases/download/v1.13.3|cert-manager/releases/download/v1.19.4|' deploy-direct.sh
+sed -i '' 's|cert-manager/releases/download/v1.19.4|cert-manager/releases/download/v1.20.2|' deploy-direct.sh
 grep "releases/download" deploy-direct.sh
 ```
 
@@ -301,17 +326,17 @@ grep "releases/download" deploy-direct.sh
 
 ## Rollback
 
-Im Fehlerfall auf die letzte funktionierende Version zurückkehren — Beispiel Rollback von Schritt 3:
+Im Fehlerfall auf die letzte funktionierende Version zurückkehren — Beispiel Rollback von Schritt 7:
 
 ```bash
-sed -i '' 's/targetRevision: v1.16.5/targetRevision: v1.15.5/' gitops/apps/cert-manager.yaml
+sed -i '' 's/targetRevision: v1.20.2/targetRevision: v1.19.4/' gitops/apps/cert-manager.yaml
 
 git add gitops/apps/cert-manager.yaml
-git commit -m "revert: cert-manager zurück auf v1.15.5"
+git commit -m "revert: cert-manager zurück auf v1.19.4"
 git push
 ```
 
-ArgoCD syncronisiert automatisch auf die vorherige Version zurück.
+Für frühere Schritte analog mit den jeweiligen Versionen. ArgoCD syncronisiert automatisch zurück.
 
 ---
 
@@ -319,6 +344,7 @@ ArgoCD syncronisiert automatisch auf die vorherige Version zurück.
 
 - [cert-manager Upgrade Guide](https://cert-manager.io/docs/installation/upgrade/)
 - [cert-manager Release Notes 1.19](https://cert-manager.io/docs/releases/release-notes/release-notes-1.19/)
+- [cert-manager Release Notes 1.20](https://cert-manager.io/docs/releases/release-notes/release-notes-1.20/)
 - [cert-manager GitHub Releases](https://github.com/cert-manager/cert-manager/releases)
 - [CVE-2025-68121](https://www.cve.org/CVERecord?id=CVE-2025-68121)
 - [CVE-2026-24051](https://www.cve.org/CVERecord?id=CVE-2026-24051)
