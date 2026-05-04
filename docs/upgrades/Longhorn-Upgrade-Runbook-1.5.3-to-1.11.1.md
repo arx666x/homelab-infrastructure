@@ -340,6 +340,39 @@ git commit -m "fix: re-enable upgradeVersionCheck after 1.11.1 upgrade"
 git push
 ```
 
+### ⚠️ Bekanntes Problem: ArgoCD OutOfSync nach Upgrade — CRD Webhook-Konflikt
+
+Nach dem erfolgreichen Upgrade auf 1.11.1 meldet ArgoCD einen Sync-Fehler für 5 CRDs:
+
+```
+CustomResourceDefinition "backingimages.longhorn.io" is invalid:
+  [spec.conversion.strategy: Required value,
+   spec.conversion.webhookClientConfig: Forbidden: should not be set when strategy is not set to Webhook]
+```
+
+**Ursache:** Longhorn 1.11.1 hat den Conversion Webhook abgeschafft. Die CRDs im neuen
+Helm Chart haben kein `webhookClientConfig` mehr — aber die bestehenden CRDs im Cluster
+tragen noch den alten Webhook-Eintrag aus der Vorgängerversion. ArgoCD kann sie nicht
+überschreiben weil der API-Server die Kombination ablehnt.
+
+Longhorn selbst läuft dabei korrekt (Health: Healthy) — nur ArgoCD kann nicht synchen.
+
+**Fix — CRDs manuell patchen:**
+
+```bash
+for crd in backingimages.longhorn.io backuptargets.longhorn.io engineimages.longhorn.io nodes.longhorn.io volumes.longhorn.io; do
+  kubectl patch crd $crd --type=json -p='[{"op": "remove", "path": "/spec/conversion"}]'
+done
+```
+
+Danach ArgoCD sync triggern:
+
+```bash
+argocd app sync longhorn
+```
+
+ArgoCD sollte jetzt auf `Synced` wechseln.
+
 ### Nach dem Upgrade: Volumes erholen sich selbst
 
 Nach dem Node-Delete-Workaround können Volumes kurzzeitig `degraded` oder `detached` erscheinen.
@@ -452,4 +485,5 @@ kubectl get engines.longhorn.io -n longhorn-system -o json | kubectl apply -f -
 | Hop 4: 1.8.2 → 1.9.2 | 2026-05-03 | ~45 min |
 | Hop 5: 1.9.2 → 1.10.2 | 2026-05-03 | ~90 min (inkl. Volume-Feld-Bug) |
 | Hop 6: 1.10.2 → 1.11.1 | 2026-05-03 | ~120 min (inkl. Node-Status-Bug) |
+| ArgoCD CRD Webhook-Fix | 2026-05-03 | ~5 min |
 | **Gesamt** | | **~7h** |

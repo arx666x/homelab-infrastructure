@@ -704,6 +704,35 @@ kubectl rollout restart deployment -n monitoring kube-prometheus-stack-operator
 Tritt bei jedem Grafana-Versionssprung auf solange `loki-stack` Chart 2.10.3
 die Loki-Datasource mit `isDefault: true` deployed.
 
+> ✅ **Dauerhaft gefixt am 2026-05-03:** `gitops/apps/loki.yaml` enthält jetzt einen
+> expliziten Datasource-Override mit `isDefault: false`. Dieser Abschnitt dient nur
+> noch als Fallback falls der Fix verloren geht.
+
+**Dauerhafter Fix in `gitops/apps/loki.yaml`** (bereits eingecheckt):
+
+```yaml
+grafana:
+  enabled: false
+  sidecar:
+    datasources:
+      enabled: true
+      defaultDatasourceEnabled: false
+  # Verhindert isDefault: true im Datasource ConfigMap
+  datasources:
+    loki-stack-datasource.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Loki
+          type: loki
+          access: proxy
+          url: "http://loki-stack:3100"
+          version: 1
+          isDefault: false
+          jsonData: {}
+```
+
+**Notfall-Sofortfix** (falls ArgoCD den Fix noch nicht gesynct hat):
+
 **Wichtig:** Den Patch erst anwenden wenn Grafana bereits mit der neuen Version
 gestartet ist und crasht — nicht vorher.
 
