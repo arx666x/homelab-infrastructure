@@ -1,9 +1,9 @@
-# ArgoCD Upgrade Runbook: 2.9.3 → 3.2.10
+# ArgoCD Upgrade Runbook: 2.9.3 → 3.3.9
 
 **Erstellt:** 2026-04-30  
 **Ziel-Umgebung:** seri-k8s Homelab, k3s v1.32.3+k3s1  
 **Von:** ArgoCD 2.9.3  
-**Nach:** ArgoCD 3.2.10  
+**Nach:** ArgoCD 3.3.9  
 
 ---
 
@@ -12,7 +12,7 @@
 ### Upgrade-Pfad (9 Hops, kein Minor-Skip erlaubt)
 
 ```
-2.9.3 → 2.10.x → 2.11.x → 2.12.x → 2.13.x → 2.14.x → 3.0.x → 3.1.x → 3.2.10
+2.9.3 → 2.10.x → 2.11.x → 2.12.x → 2.13.x → 2.14.x → 3.0.x → 3.1.x → 3.2.10 → 3.3.9
 ```
 
 ### Zeitaufwand-Schätzung
@@ -448,3 +448,176 @@ kubectl exec -n argocd deploy/argocd-server -- \
 - [v3.1 → 3.2 Breaking Changes](https://argo-cd.readthedocs.io/en/latest/operator-manual/upgrading/3.1-3.2/)
 - [ArgoCD Disaster Recovery](https://argo-cd.readthedocs.io/en/latest/operator-manual/disaster_recovery/)
 - [GitHub Releases](https://github.com/argoproj/argo-cd/releases)
+
+---
+
+## Phase 7: Hop 3.2.10 → 3.3.9
+
+**Durchgeführt:** 2026-05-04  
+**Status:** ✅ Erfolgreich
+
+### Breaking Changes 3.2 → 3.3
+
+- **`--server-side --force-conflicts` beim `kubectl apply` ab 3.3 Pflicht** — ArgoCD CRDs überschreiten das Limit für client-side apply. Das alte `kubectl apply` ohne diese Flags schlägt fehl.
+- **Kustomize** wird von v5.7.0 auf v5.8.1 aktualisiert — keine Breaking Changes.
+- **Cluster-Versionsformat** ändert sich leicht (vMajor.Minor.Patch statt Major.Minor) — betrifft nur ApplicationSets mit Cluster Generators, die du nicht nutzt.
+
+### Upgrade-Befehl
+
+```bash
+./scripts/upgrade-argocd-hop.sh v3.3.9
+```
+
+Das Script erledigt automatisch:
+1. `kubectl apply --server-side --force-conflicts`
+2. SSH Known Hosts wiederherstellen
+3. Rollout abwarten
+4. NodeAffinity + Resource Limits patchen (siehe unten)
+
+### Manuell (ohne Script)
+
+```bash
+kubectl apply -n argocd \
+  --server-side \
+  --force-conflicts \
+  -f "https://raw.githubusercontent.com/argoproj/argo-cd/v3.3.9/manifests/install.yaml"
+
+kubectl rollout status deployment/argocd-server              -n argocd --timeout=300s
+kubectl rollout status deployment/argocd-repo-server         -n argocd --timeout=300s
+kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout=300s
+```
+
+### Post-3.3 Verifikation
+
+```bash
+# Version bestätigen
+kubectl get deployment argocd-server -n argocd \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+# Erwartung: quay.io/argoproj/argocd:v3.3.9
+
+# Alle Apps Synced/Healthy?
+kubectl get applications -n argocd \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.sync.status}{"\t"}{.status.health.status}{"\n"}{end}'
+
+# argocd CLI aktualisieren
+curl -sSL -o /usr/local/bin/argocd \
+  "https://github.com/argoproj/argo-cd/releases/download/v3.3.9/argocd-darwin-arm64"
+chmod +x /usr/local/bin/argocd
+argocd version --client
+```
+
+---
+
+## Anhang: Application Controller — NodeAffinity & Resource Limits
+
+**Hintergrund:** Der Application Controller lief auf `k3s-03a` (Raspberry Pi 5, ARM64) und verbrauchte beim Sync über 1100m CPU = 33% des gesamten Nodes. Kein einziger ArgoCD-Pod hatte Resource-Limits gesetzt.
+
+**Lösung (2026-05-04):** NodeAffinity (preferred AMD64) + Resource Limits auf den Application Controller.
+
+### Symptome eines überlasteten Controllers
+
+- ArgoCD UI nicht erreichbar oder sehr langsam während Syncs
+- `kubectl top nodes` zeigt Pi-Node bei 30%+ CPU
+- `kubectl top pods -n argocd` zeigt application-controller bei 1000m+
+
+### Diagnose
+
+```bash
+# Auf welchem Node läuft der Controller?
+kubectl get pod argocd-application-controller-0 -n argocd \
+  -o jsonpath='Node: {.spec.nodeName}{"\n"}'
+
+# Ressourcenverbrauch
+kubectl top pods -n argocd --sort-by=cpu
+
+# Limits gesetzt?
+kubectl get statefulset argocd-application-controller -n argocd \
+  -o jsonpath='{.spec.template.spec.containers[0].resources}' | jq .
+# Leer = keine Limits → Problem
+```
+
+### Fix: NodeAffinity (preferred AMD64)
+
+```bash
+# WICHTIG: merge-patch auf spec.template.spec — NICHT auf containers[]!
+# Merge-Patch auf containers[] löscht image/command/args → CrashLoopBackOff
+kubectl patch statefulset argocd-application-controller -n argocd \
+  --type=merge -p='{
+  "spec": {"template": {"spec": {
+    "affinity": {
+      "nodeAffinity": {
+        "preferredDuringSchedulingIgnoredDuringExecution": [
+          {
+            "weight": 80,
+            "preference": {
+              "matchExpressions": [{
+                "key": "kubernetes.io/arch",
+                "operator": "In",
+                "values": ["amd64"]
+              }]
+            }
+          }
+        ]
+      }
+    }
+  }}}}'
+```
+
+### Fix: Resource Limits
+
+```bash
+# WICHTIG: json-patch "replace" auf exakten Pfad — NICHT merge-patch mit containers[]!
+kubectl patch statefulset argocd-application-controller -n argocd \
+  --type='json' -p='[{
+    "op": "replace",
+    "path": "/spec/template/spec/containers/0/resources",
+    "value": {
+      "requests": {"cpu": "250m", "memory": "512Mi"},
+      "limits":   {"cpu": "2000m", "memory": "1Gi"}
+    }
+  }]'
+```
+
+### Restart & Verifikation
+
+```bash
+kubectl rollout restart statefulset/argocd-application-controller -n argocd
+kubectl rollout status  statefulset/argocd-application-controller -n argocd --timeout=300s
+
+# Läuft er jetzt auf AMD64?
+kubectl get pod argocd-application-controller-0 -n argocd \
+  -o jsonpath='Node: {.spec.nodeName}{"\n"}'
+# Erwartung: gmkt-01x, gmkt-02x oder gmkt-03x
+
+# Ressourcenverbrauch nach einigen Minuten
+kubectl top pods -n argocd --sort-by=cpu
+# Controller sollte bei <500m CPU liegen (außer direkt nach Restart)
+```
+
+### ⚠️ Kritischer Fallstrick: CrashLoopBackOff durch falschen Patch
+
+**Problem:** Merge-Patch auf `containers[]` Array überschreibt den gesamten Container-Spec. `image`, `command` und `args` gehen verloren. tini startet ohne Argumente und crasht sofort.
+
+**Symptom:**
+```
+tini (tini version 0.19.0)
+Usage: tini [OPTIONS] PROGRAM -- [ARGS] | --version
+```
+
+**Recovery:** StatefulSet löschen und aus Manifest neu anwenden:
+```bash
+kubectl delete statefulset argocd-application-controller -n argocd
+kubectl apply -n argocd \
+  --server-side --force-conflicts \
+  -f "https://raw.githubusercontent.com/argoproj/argo-cd/v3.3.9/manifests/install.yaml"
+kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout=300s
+```
+
+Danach Affinity und Resources mit den sicheren Patch-Befehlen oben neu setzen.
+
+### Durchgeführte Upgrades
+
+| Datum | Von | Auf | Ergebnis | Besonderheiten |
+|---|---|---|---|---|
+| 2026-04-30 | 2.9.3 | 3.2.10 | ✅ | 9 Hops, Resource Tracking auf annotation migriert |
+| 2026-05-04 | 3.2.10 | 3.3.9 | ✅ | `--server-side --force-conflicts` Pflicht; NodeAffinity+Limits gesetzt |
