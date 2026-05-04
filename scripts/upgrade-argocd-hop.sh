@@ -94,7 +94,7 @@ kubectl patch statefulset argocd-application-controller -n argocd \
     "path": "/spec/template/spec/containers/0/resources",
     "value": {
       "requests": {"cpu": "250m", "memory": "512Mi"},
-      "limits":   {"cpu": "2000m", "memory": "1Gi"}
+      "limits":   {"cpu": "2000m", "memory": "2Gi"}
     }
   }]'
 
