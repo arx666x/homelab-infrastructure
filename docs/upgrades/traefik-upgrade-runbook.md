@@ -65,7 +65,44 @@ kubectl get tlsoption -A -o yaml > tlsoptions-backup.yaml
 kubectl get traefikservice -A -o yaml > traefikservices-backup.yaml
 ```
 
-### 1.3 CRD API Groups prüfen
+### 1.3 ArgoCD Repo-Verbindung prüfen
+
+> ⚠️ Vor dem Upgrade sicherstellen, dass ArgoCD das Git-Repo erfolgreich lesen kann.
+> Ein Repo-Verbindungsfehler verhindert, dass ArgoCD die neue `targetRevision` überhaupt sieht.
+
+```bash
+# Repo-Status prüfen
+argocd repo list
+
+# Erwartete Ausgabe: STATUS = Successful
+# Falls STATUS = Failed → Ursache im MESSAGE-Feld lesen
+```
+
+**Häufiger Fehler: `knownhosts: key is unknown`**
+
+Tritt auf wenn ArgoCD einen SSH-Hostkey-Typ nicht kennt oder ablehnt.
+Ab ArgoCD 2.8 wird `ssh-rsa` (SHA-1) standardmäßig abgelehnt — ed25519 ist erforderlich.
+
+```bash
+# Welche Key-Typen präsentiert Gitea?
+ssh-keyscan git.reckeweg.io 2>/dev/null
+
+# Welche Keys kennt ArgoCD?
+argocd cert list --cert-type ssh | grep reckeweg
+```
+
+Falls nur RSA vorhanden: ed25519-Hostkey in Gitea aktivieren (siehe Anhang: Gitea ed25519-Hostkey).
+Danach:
+
+```bash
+# ed25519 Key in ArgoCD eintragen
+ssh-keyscan -t ed25519 git.reckeweg.io 2>/dev/null | argocd cert add-ssh --batch
+
+# Repo erneut testen
+argocd repo get git@git.reckeweg.io:achim/homelab-infrastructure.git
+```
+
+### 1.4 CRD API Groups prüfen
 
 ```bash
 # Welche API Groups sind aktuell im Cluster?
@@ -488,6 +525,44 @@ argocd app wait traefik --health
 | Traefik startet nicht | Veraltete v2-only-Werte in values.yaml (z.B. `pilot`) | values.yaml bereinigen, `helm upgrade --dry-run` nutzen |
 | cert-manager Zertifikate funktionieren nicht | TLS-Konfiguration in Helm values geändert | websecure entrypoint TLS-Config prüfen |
 | ArgoCD zeigt OutOfSync | CRD-Version in ArgoCD-Application nicht aktualisiert | targetRevision in `gitops/apps/traefik.yaml` anpassen |
+| ArgoCD sync hat keine Wirkung, zeigt alte Version | Repo-Verbindung schlägt fehl, ArgoCD kann Commits nicht lesen | `argocd repo list` prüfen, SSH-Key-Problem beheben (siehe Anhang) |
+| `knownhosts: key is unknown` trotz eingetragenem Key | ArgoCD 2.8+ lehnt `ssh-rsa` (SHA-1) ab | ed25519-Hostkey in Gitea aktivieren und in ArgoCD eintragen |
+
+---
+
+## Anhang: Gitea ed25519-Hostkey aktivieren
+
+Falls Gitea nur einen RSA-Hostkey anbietet, muss ein ed25519-Key generiert und in der `app.ini` registriert werden.
+
+```bash
+# 1. ed25519-Key im Gitea-Pod generieren
+kubectl -n gitea exec deploy/gitea -- \
+  ssh-keygen -t ed25519 -f /data/ssh/ssh_host_ed25519_key -N ""
+
+# 2. SSH_SERVER_HOST_KEYS unter [server] in app.ini eintragen
+#    (nach START_SSH_SERVER = true)
+kubectl -n gitea exec deploy/gitea -- sed -i \
+  '/^START_SSH_SERVER = true/a SSH_SERVER_HOST_KEYS = /data/ssh/gitea.rsa, /data/ssh/ssh_host_ed25519_key' \
+  /data/gitea/conf/app.ini
+
+# 3. Prüfen — muss unter [server] stehen, nicht unter [oauth2] o.ä.
+kubectl -n gitea exec deploy/gitea -- grep -B5 "SSH_SERVER_HOST_KEYS" /data/gitea/conf/app.ini
+
+# 4. Gitea neu starten
+kubectl -n gitea rollout restart deploy/gitea
+kubectl -n gitea rollout status deploy/gitea
+
+# 5. Verifizieren
+ssh-keyscan -t ed25519 git.reckeweg.io 2>/dev/null
+
+# 6. Key in ArgoCD eintragen
+ssh-keyscan -t ed25519 git.reckeweg.io 2>/dev/null | argocd cert add-ssh --batch
+argocd cert list --cert-type ssh | grep reckeweg
+```
+
+> **Hinweis:** Der `ssh_host_ed25519_key` liegt auf dem Longhorn-PVC und überlebt Pod-Neustarts.
+> Bei einem vollständigen Gitea-Redeployment (PVC-Verlust) muss dieser Schritt wiederholt werden.
+> Langfristig: Key als Sealed Secret sichern und per `extraVolumes` in den Pod mounten.
 
 ---
 
