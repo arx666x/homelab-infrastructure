@@ -5,4 +5,3 @@ resources:
   - sealed-alertmanager-credentials.yaml
   - sealed-grafana-admin-secret.yaml
   - homelab-version-checker-v2.yaml
-  - loki-datasource-configmap.yaml
