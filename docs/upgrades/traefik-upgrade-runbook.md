@@ -1,10 +1,10 @@
-# Traefik Upgrade Runbook: Chart v26 → v39 (Proxy v2 → v3)
+# Traefik Upgrade Runbook: Chart v26 → v39.0.8 (Proxy v2 → v3)
 
-**Datum:** 2026-05-01  
+**Datum:** 2026-05-04  
 **Scope:** Homelab k3s-Cluster (`reckeweg.io`) + Colima  
 **Namespace:** `traefik`  
 **Aktuell:** Chart v26.0.0 / Traefik Proxy v2.x  
-**Ziel:** Chart v39.x / Traefik Proxy v3.6.x  
+**Ziel:** Chart v39.0.8 / Traefik Proxy v3.6.x  
 **Risiko:** 🔴 Hoch — CRD API Group wechselt, Rule Syntax ändert sich, Helm-CRD-Upgrade-Caveat
 
 ---
@@ -157,14 +157,14 @@ git push
 ```bash
 helm repo update
 helm search repo traefik/traefik
-# Ziel: v39.x anzeigen
+# Ziel: v39.0.8 anzeigen
 ```
 
 ### 3.2 Neue CRDs (traefik.io) anwenden
 
 ```bash
 # CRDs aus dem neuen Chart extrahieren und anwenden
-helm show crds traefik/traefik --version 39.0.0 | \
+helm show crds traefik/traefik --version 39.0.8 | \
   kubectl apply --server-side --force-conflicts -f -
 ```
 
@@ -238,7 +238,7 @@ ingressRoute:
 
 ```bash
 helm upgrade traefik traefik/traefik \
-  --version 39.0.0 \
+  --version 39.0.8 \
   --namespace traefik \
   --values traefik-values-v39.yaml \
   --dry-run \
@@ -249,7 +249,7 @@ helm upgrade traefik traefik/traefik \
 
 ```bash
 helm upgrade traefik traefik/traefik \
-  --version 39.0.0 \
+  --version 39.0.8 \
   --namespace traefik \
   --values traefik-values-v39.yaml \
   --wait \
@@ -336,7 +336,7 @@ core:
 
 ```bash
 helm upgrade traefik traefik/traefik \
-  --version 39.0.0 \
+  --version 39.0.8 \
   --namespace traefik \
   --values traefik-values-v39.yaml \
   --wait
@@ -423,7 +423,7 @@ spec:
   source:
     chart: traefik
     repoURL: https://traefik.github.io/charts
-    targetRevision: "39.0.0"   # ← von 26.0.0 auf 39.0.0
+    targetRevision: "39.0.8"   # ← von 26.0.0 auf 39.0.8
     helm:
       valueFiles:
         - values.yaml
