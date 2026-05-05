@@ -36,7 +36,7 @@ gitops/
 | Gitea       | 1.25.x                                 |
 | PostgreSQL  | 16-alpine (docker.io/library/postgres) |
 | Valkey      | 8.0 (bitnami/valkey)                   |
-| helm-actions| 0.0.3 (gitea/act_runner:0.2.11)        |
+| helm-actions| 0.1.0 (gitea/act_runner:0.6.1)         |
 
 ---
 
@@ -254,7 +254,7 @@ ArgoCD
   │
   └── gitea-actions  (wave 25, initial disabled)
         └── gitea ns
-              ├── StatefulSet: act-runner (gitea/act_runner:0.2.11 + DinD)
+              ├── StatefulSet: act-runner (gitea/act_runner:0.6.1 + DinD)
               └── PVC: runner-data (Longhorn 1Gi)
 ```
 
@@ -262,13 +262,8 @@ ArgoCD
 
 ## Hinweis: helm-actions Chart-Reife
 
-Das offizielle `gitea/actions` Chart ist noch sehr jung (v0.0.3, Stand 2025).
-Sollte es Probleme geben, gibt es als Alternative das Community-Chart von shoce:
-```bash
-helm repo add shoce https://shoce.github.io/helm-gitea-actions/
-helm show values shoce/helm-gitea-actions
-```
-Beide Charts unterstützen `provisioning.enabled: true` für automatisches
-Token-Holen via Gitea API - das wäre der nächste Schritt für vollständig
-GitOps-konformes Token-Management ohne manuellen Schritt.
+Das offizielle `gitea/actions` Chart ist aktuell bei v0.1.0 (Stand 2026).
+Das Image wurde von `docker.gitea.com/act_runner` auf `docker.io/gitea/act_runner` umgezogen –
+bei künftigen Updates darauf achten dass `statefulset.actRunner.registry: docker.io` und
+`statefulset.actRunner.repository: gitea/act_runner` in der values.yaml gesetzt sind.
 ```
