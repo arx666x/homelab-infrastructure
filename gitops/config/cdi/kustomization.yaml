@@ -3,6 +3,6 @@ kind: Kustomization
 
 resources:
   # CDI Operator
-  - https://github.com/kubevirt/containerized-data-importer/releases/download/v1.61.5/cdi-operator.yaml
+  - https://github.com/kubevirt/containerized-data-importer/releases/download/v1.63.1/cdi-operator.yaml
   # CDI CR
   - cdi-cr.yaml
