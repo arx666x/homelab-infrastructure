@@ -14,6 +14,10 @@ statefulset:
     limits:
       cpu: 500m
       memory: 512Mi
+  actRunner:
+    registry: docker.io
+    repository: gitea/act_runner
+    tag: "0.6.1"
   dind:
     extraEnvs:
       - name: DOCKER_IPTABLES_LEGACY
