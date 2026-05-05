@@ -1,9 +1,9 @@
-# Longhorn Upgrade Runbook: 1.5.3 → 1.11.1
+# Longhorn Upgrade Runbook: 1.5.3 → 1.11.2
 
 **Cluster:** homelab-infrastructure (seri-k8s)  
 **Methode:** ArgoCD / GitOps (`gitops/apps/longhorn.yaml`)  
-**Upgrade-Pfad:** `1.5.3 → 1.6.2 → 1.7.3 → 1.8.2 → 1.9.2 → 1.10.2 → 1.11.1` (sechs Hops)  
-**Durchgeführt:** 2026-04-30 (1.5.3→1.7.3) und 2026-05-03 (1.7.3→1.11.1)
+**Upgrade-Pfad:** `1.5.3 → 1.6.2 → 1.7.3 → 1.8.2 → 1.9.2 → 1.10.2 → 1.11.1 → 1.11.2` (sieben Hops)  
+**Durchgeführt:** 2026-04-30 (1.5.3→1.7.3) und 2026-05-03 (1.7.3→1.11.1) sowie 2026-05-05 (1.11.1→1.11.2)
 
 ---
 
