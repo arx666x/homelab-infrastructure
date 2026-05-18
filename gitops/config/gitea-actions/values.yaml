@@ -6,7 +6,7 @@ statefulset:
   replicas: 1
   timezone: Europe/Berlin
   persistence:
-    size: 20Gi
+    size: 1Gi
   resources:
     requests:
       cpu: 500m
