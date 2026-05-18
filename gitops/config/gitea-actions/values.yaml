@@ -6,14 +6,14 @@ statefulset:
   replicas: 1
   timezone: Europe/Berlin
   persistence:
-    size: 1Gi
+    size: 20Gi
   resources:
     requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
       cpu: 500m
-      memory: 512Mi
+      memory: 1Gi
+    limits:
+      cpu: 4000m
+      memory: 6Gi
   actRunner:
     registry: docker.io
     repository: gitea/act_runner
