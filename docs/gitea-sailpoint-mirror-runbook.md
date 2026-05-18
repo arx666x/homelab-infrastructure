@@ -67,7 +67,7 @@ Secrets in Gitea hinterlegen: `https://gitea.reckeweg.io/achim/<repo>/settings/a
 
 ## Gitea Actions Workflows
 
-Beide Workflows liegen identisch in jedem Repo unter `.gitea/workflows/`:
+Beide Workflows liegen in jedem Repo unter `.gitea/workflows/`:
 
 | Datei | Trigger | Funktion |
 |-------|---------|----------|
@@ -76,10 +76,46 @@ Beide Workflows liegen identisch in jedem Repo unter `.gitea/workflows/`:
 
 ### build-and-push.yml – Ablauf
 
-1. Multi-arch Build (`linux/amd64` + `linux/arm64`) via Docker Buildx + QEMU
-2. Push → `gitea.reckeweg.io/achim/<repo>:<tag>` + `:latest`
-3. Push → `ghcr.io/achim-reckeweg-sp/<repo>:<tag>` + `:latest` (im selben Build)
-4. `imagetools create` (kein Rebuild!) → `ghcr.io/arx666x/<repo>:<tag>` + `:latest`
+1. *(Optional)* Pre-build Schritte — falls das Dockerfile Pre-built Artefakte erwartet
+2. Multi-arch Build (`linux/amd64` + `linux/arm64`) via Docker Buildx + QEMU
+3. Push → `gitea.reckeweg.io/achim/<repo>:<tag>` + `:latest`
+4. Push → `ghcr.io/achim-reckeweg-sp/<repo>:<tag>` + `:latest` (im selben Build)
+5. `imagetools create` (kein Rebuild!) → `ghcr.io/arx666x/<repo>:<tag>` + `:latest`
+
+### Projekt-spezifische Variationen
+
+Der generische Workflow funktioniert für Projekte bei denen das Dockerfile alles selbst baut
+(z.B. Multi-stage Build). Für Projekte die Pre-built Artefakte benötigen, muss der Workflow
+um Build-Schritte **vor** dem Docker Build erweitert werden.
+
+**Beispiel: trakkws-quarkus** (Quarkus + Vite Dokumentation)
+
+Das Dockerfile erwartet:
+- `target/trakkws-quarkus-runner.jar` — Quarkus uber-jar (Maven Build)
+- `documentation/dist` — API-Dokumentation (Vite Build, via Maven npm-Plugin)
+
+Beide Artefakte sind gitignored und werden im CI gebaut. Da Maven nicht im Runner Image
+vorinstalliert ist, wird Maven 3.9.x explizit geladen:
+
+```yaml
+- name: Set up JDK 21
+  uses: actions/setup-java@v4
+  with:
+    java-version: '21'
+    distribution: 'temurin'
+
+- name: Install Maven
+  run: |
+    curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz \
+      | tar xz -C /opt
+    echo "/opt/apache-maven-3.9.9/bin" >> $GITHUB_PATH
+
+- name: Build JAR and documentation
+  run: mvn clean package -Pjvm -DskipTests
+```
+
+> **Hinweis:** Das Maven-Profil `-Pjvm` baut automatisch auch die Vite-Dokumentation
+> via Maven npm-Plugin (`npm-install-documentation`, `npm-build-documentation`).
 
 ### Container Pakete mit Repository verknüpfen (einmalig nach erstem Push)
 
