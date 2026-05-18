@@ -85,7 +85,7 @@ data:
     """
     
     import subprocess, json, smtplib, sys, os, re
-    import urllib.request, yaml, gzip
+    import urllib.request, gzip
     from datetime import datetime
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -229,38 +229,41 @@ data:
         return sorted(apps, key=lambda a: a["name"])
     
     # ---------------------------------------------------------------------------
-    # Helm index
+    # Helm – via helm binary (avoids loading full index.yaml into Python memory)
     # ---------------------------------------------------------------------------
-    
-    _helm_index_cache = {}
-    
-    def helm_fetch_index(repo_url):
-        if repo_url not in _helm_index_cache:
-            raw = http_get(repo_url.rstrip("/") + "/index.yaml")
-            _helm_index_cache[repo_url] = yaml.safe_load(raw) if raw else None
-        return _helm_index_cache[repo_url]
-    
-    
+
+    _helm_repos = {}  # url -> repo alias
+
+    def _helm_ensure_repo(repo_url):
+        if repo_url in _helm_repos:
+            return _helm_repos[repo_url]
+        name = f"r{len(_helm_repos)}"
+        run(["helm", "repo", "add", name, repo_url, "--force-update"], silent=True)
+        run(["helm", "repo", "update", name], silent=True)
+        _helm_repos[repo_url] = name
+        return name
+
+
     def helm_latest_stable(chart_name, repo_url):
-        index = helm_fetch_index(repo_url)
-        if not index:
+        repo_name = _helm_ensure_repo(repo_url)
+        out = run(["helm", "search", "repo", f"{repo_name}/{chart_name}",
+                   "--versions", "--output", "json"], silent=True)
+        if not out:
             return None, None
-        entries = index.get("entries", {}).get(chart_name, [])
-        if not entries:
-            # Fallback: case-insensitive suche
-            for key in index.get("entries", {}):
-                if key.lower() == chart_name.lower():
-                    entries = index["entries"][key]
-                    break
-        stable = [e for e in entries
-                  if not re.search(r'(alpha|beta|rc|dev|pre|snapshot|\.ea[\.\d]|-ea[\.\d])', e.get("version", ""), re.I)]
+        try:
+            results = json.loads(out)
+        except Exception:
+            return None, None
+        stable = [r for r in results
+                  if not re.search(r'(alpha|beta|rc|dev|pre|snapshot|\.ea[\.\d]|-ea[\.\d])',
+                                   r.get("version", ""), re.I)]
         if not stable:
-            stable = entries
+            stable = results
         if not stable:
             return None, None
-        stable.sort(key=lambda e: semver_key(e.get("version", "0")), reverse=True)
+        stable.sort(key=lambda r: semver_key(r.get("version", "0")), reverse=True)
         best = stable[0]
-        return best.get("version"), best.get("appVersion", "-")
+        return best.get("version"), best.get("app_version", "-")
     
     # ---------------------------------------------------------------------------
     # GitHub releases
@@ -572,7 +575,6 @@ spec:
                 - sh
                 - -c
                 - |
-                  pip install --quiet pyyaml && \
                   python /scripts/check-versions.py
               env:
                 - name: PATH
@@ -594,10 +596,10 @@ spec:
               resources:
                 requests:
                   cpu: 100m
-                  memory: 256Mi
+                  memory: 128Mi
                 limits:
                   cpu: 500m
-                  memory: 512Mi
+                  memory: 256Mi
 
           volumes:
             - name: script
