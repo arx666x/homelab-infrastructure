@@ -45,8 +45,8 @@
     k3s_version: ""                  # k3s-Version: -e k3s_version=v1.32.3+k3s1
                                      # Leer = kein k3s-Update
     longhorn_namespace: longhorn-system
-    longhorn_wait_timeout: 600       # Sekunden warten auf Longhorn (10 min)
-    node_ready_timeout: 300          # Sekunden warten bis Node wieder Ready (5 min)
+    longhorn_wait_timeout: 1800      # Sekunden warten auf Longhorn (30 min)
+    node_ready_timeout: 600          # Sekunden warten bis Node wieder Ready (10 min)
     drain_timeout: 300               # Sekunden für kubectl drain
     k8s_delegate: master01          # Kubernetes-Calls über diesen Master-Node
     kubectl_bin: /usr/local/bin/kubectl
@@ -192,6 +192,28 @@
       when: apt_result.stdout_lines is defined
 
     # -------------------------------------------------------------------------
+    # IPTABLES → NFT BACKEND (Kernel 6.18+ hat kein ip_tables-Modul mehr)
+    # Flannel und kube-proxy rufen /usr/sbin/iptables auf. Der RPi-Kernel 6.18
+    # enthält nur noch nf_tables; iptables-legacy schlägt fehl.
+    # update-alternatives ist persistent (überlebt Reboots).
+    # -------------------------------------------------------------------------
+
+    - name: "[ IPTABLES ] iptables-Paket sicherstellen (liefert iptables-nft)"
+      become: true
+      apt:
+        name: iptables
+        state: present
+
+    - name: "[ IPTABLES ] iptables-nft als Standard setzen"
+      become: true
+      community.general.alternatives:
+        name: "{{ item.name }}"
+        path: "{{ item.path }}"
+      loop:
+        - { name: iptables,  path: /usr/sbin/iptables-nft  }
+        - { name: ip6tables, path: /usr/sbin/ip6tables-nft }
+
+    # -------------------------------------------------------------------------
     # EEPROM UPDATE (optional)
     # -------------------------------------------------------------------------
 
@@ -302,6 +324,18 @@
         src: "/etc/systemd/system/k3s-agent.service.bak-{{ k3s_installed_ver }}"
         dest: /etc/systemd/system/k3s-agent.service
         remote_src: true
+      when:
+        - k3s_version != ''
+        - k3s_installed_ver != k3s_version
+
+    - name: "[ K3S ] kube-proxy nftables-Mode in Unit-File einfügen (Kernel 6.18+)"
+      become: true
+      lineinfile:
+        path: /etc/systemd/system/k3s-agent.service
+        regexp: "kube-proxy-arg=proxy-mode=nftables"
+        line: "    '--kube-proxy-arg=proxy-mode=nftables' \\"
+        insertafter: "flannel-iface"
+        state: present
       when:
         - k3s_version != ''
         - k3s_installed_ver != k3s_version
