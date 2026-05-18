@@ -622,6 +622,35 @@ Danach Affinity und Resources mit den sicheren Patch-Befehlen oben neu setzen.
 | 2026-04-30 | 2.9.3 | 3.2.10 | ✅ | 9 Hops, Resource Tracking auf annotation migriert |
 | 2026-05-04 | 3.2.10 | 3.3.9 | ✅ | `--server-side --force-conflicts` Pflicht; NodeAffinity+Limits gesetzt |
 | 2026-05-18 | 3.3.9 | 3.4.1 | ✅ | Kein Handlungsbedarf; CLI via brew (3.4.2) |
+| 2026-05-18 | 3.4.1 | 3.4.2 | ✅ | Patch-Release, kein Breaking Change; CLI via brew bereits aktuell |
+
+---
+
+## Phase 9: Patch-Hop 3.4.1 → 3.4.2
+
+**Durchgeführt:** 2026-05-18  
+**Status:** ✅ Erfolgreich
+
+Patch-Release — keine Breaking Changes, keine Konfigurationsänderungen erforderlich.
+
+```bash
+kubectl apply -n argocd \
+  --server-side \
+  --force-conflicts \
+  -f "https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.2/manifests/install.yaml"
+
+kubectl rollout status deployment/argocd-server              -n argocd --timeout=300s
+kubectl rollout status deployment/argocd-repo-server         -n argocd --timeout=300s
+kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout=300s
+
+# Version bestätigen
+kubectl get deployment argocd-server -n argocd \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+# Erwartung: quay.io/argoproj/argocd:v3.4.2
+
+# CLI (war bereits auf 3.4.2 via brew)
+argocd version --client
+```
 
 ---
 
