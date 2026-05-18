@@ -1,4 +1,75 @@
-# Traefik Upgrade Runbook: Chart v26 → v39.0.8 (Proxy v2 → v3)
+# Traefik Upgrade Runbook
+
+---
+
+## Upgrade v39.0.8 → v40.0.0 (Proxy v3.6.x → v3.7.0)
+
+**Datum:** 2026-05-18  
+**Scope:** Homelab k3s-Cluster (`reckeweg.io`)  
+**Namespace:** `traefik`  
+**Aktuell:** Chart v39.0.8 / Traefik Proxy v3.6.x  
+**Ziel:** Chart v40.0.0 / Traefik Proxy v3.7.0  
+**Risiko:** 🟡 Mittel — Major Chart Version, Breaking Changes in Provider-Benennung und Service-Spec-Syntax; CRDs müssen vorab manuell aktualisiert werden
+
+### Breaking Changes (v39 → v40)
+
+| Bereich | Änderung | Betrifft uns? |
+|---------|----------|---------------|
+| Provider-Rename | `kubernetesIngressNginx` → `kubernetesIngressNGINX` | Nein — nicht in Verwendung |
+| Service-Spec-Syntax | Anpassung an native Kubernetes-Service-Spec (PR #1686) | Zu prüfen |
+| Mindest-Versionen | Kubernetes v25+, Traefik Proxy v3.6+ vorausgesetzt | k3s 1.36 ✓ |
+| CRD-Update | CRDs auf v3.7 aktualisiert | Manueller Vorab-Apply erforderlich |
+
+### Durchführung
+
+**Schritt 1: CRDs vorab aktualisieren**
+
+```bash
+helm repo update
+helm show crds traefik/traefik --version 40.0.0 | \
+  kubectl apply --server-side --force-conflicts -f -
+```
+
+**Schritt 2: targetRevision in ArgoCD aktualisieren**
+
+```yaml
+# gitops/apps/traefik.yaml
+targetRevision: "40.0.0"
+```
+
+ArgoCD übernimmt den Upgrade automatisch (syncPolicy: automated). Status prüfen:
+
+```bash
+argocd app get traefik
+argocd app wait traefik --health
+```
+
+**Schritt 3: Post-Upgrade-Verifikation**
+
+```bash
+# Traefik Proxy Version prüfen (erwartet: v3.7.x)
+kubectl -n traefik get deploy traefik -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+# Logs auf Errors prüfen
+kubectl -n traefik logs deploy/traefik --tail=100 | grep -iE "error|fatal"
+
+# Smoke-Tests
+curl -s -o /dev/null -w "%{http_code}" https://gitea.reckeweg.io
+curl -s -o /dev/null -w "%{http_code}" https://argocd.reckeweg.io
+```
+
+### Checkliste v39 → v40
+
+- [x] CRDs vorab via `helm show crds | kubectl apply --server-side` aktualisiert
+- [x] `targetRevision: 40.0.0` in `gitops/apps/traefik.yaml` gesetzt und gepusht
+- [ ] ArgoCD sync erfolgreich
+- [ ] Traefik Pod läuft mit Proxy v3.7.x Image
+- [ ] Keine Error-Logs
+- [ ] Smoke-Tests alle ✅
+
+---
+
+## Upgrade v26.0.0 → v39.0.8 (Proxy v2 → v3)
 
 **Datum:** 2026-05-04  
 **Scope:** Homelab k3s-Cluster (`reckeweg.io`) + Colima  
