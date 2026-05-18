@@ -98,303 +98,211 @@ kubectl patch application gitea -n argocd --type merge \
 > sofort zurück wenn ArgoCD drift erkennt. Deshalb muss `root-infrastructure` **zuerst** deaktiviert
 > werden, bevor `gitea` deaktiviert wird.
 
-**Voraussetzung für erneuten Upgrade-Versuch:**
+**Ergebnis (2026-05-18):** `helm show chart gitea/gitea --version 12.6.0 | grep appVersion` → `appVersion: 1.26.1`
 
-Chart 12.6.0 benötigt eine Gitea-Version die `-apply-env` kennt. Vor dem nächsten Upgrade prüfen:
+Chart 12.6.0 erfordert Gitea **1.26.1**. Der Upgrade ist ein kombinierter Chart- und App-Versions-Bump.
 
-```bash
-helm show values gitea/gitea --version 12.6.0 | grep -A5 "init"
-# Oder: welche Gitea-App-Version bringt 12.6.0 als Default mit?
-helm show chart gitea/gitea --version 12.6.0 | grep appVersion
-```
-
-Wahrscheinlich muss die App-Version von 1.25.5 auf 1.26.x oder 1.27.x angehoben werden.
-Dafür muss zuerst das `-o`-Flag-Problem aus 1.26.0 untersucht werden — oder ein neueres Chart
-das beide Flags korrekt behandelt.
-
-### Änderungen Chart 12.5.x → 12.6.x
+### Änderungen Chart 12.5.3 → 12.6.0 (korrigierte Übersicht)
 
 | Bereich | Änderung | Betrifft uns? |
 |---------|----------|---------------|
-| Gitea App-Version | Chart-Default aktualisiert | **Ja** — Chart 12.6.0 nutzt `-apply-env`, fehlt in 1.25.5 |
-| Init-Container `init-app-ini` | Neues Flag `-apply-env` eingeführt | **Breaking** bei gepinntem 1.25.5-Image |
+| Gitea App-Version | 1.25.5 → 1.26.1 (Chart-Default) | **Ja** — `image.tag` muss mitgehoben werden |
+| Init-Container `init-app-ini` | `-o` Flag → `-apply-env` Flag | Fix: Chart 12.6.0 + App 1.26.1 zusammen upgraden |
+| DB-Migration | Gitea führt Migrationen automatisch beim Start aus | Zu beobachten — nach Rollback nicht mehr möglich |
 | Subchart-Versionen | Valkey/PostgreSQL-Subcharts können gebumpt sein | Irrelevant — alle Subcharts deaktiviert |
-| RBAC/ServiceAccount | Mögliche Ergänzungen | Nicht geprüft (Upgrade vor Pods-Start fehlgeschlagen) |
+
+> ⚠️ **DB-Migration ist irreversibel.** Nach erfolgreichem Start von 1.26.1 laufen automatisch
+> DB-Migrationen. Ein Rollback auf 1.25.5 wäre danach nicht mehr sicher möglich.
+> Vor dem Upgrade sicherstellen dass ein aktuelles PostgreSQL-Backup existiert.
 
 ---
 
-### Schritt 1: Catch-22 entschärfen — ArgoCD-App auf GitHub umstellen
-
-> Dieser Schritt ist **zwingend** falls die neue Version nicht sofort startet.
-> Er schützt ArgoCD davor, nach einem fehlgeschlagenen Gitea-Start einzufrieren.
+### Schritt 1: Pre-Flight-Checks
 
 ```bash
-# Aktuellen Zustand sichern
-cp gitops/apps/gitea/gitea.yaml gitops/apps/gitea/gitea.yaml.bak
-```
-
-In `gitops/apps/gitea/gitea.yaml` die values-Source temporär auf GitHub umstellen:
-
-```yaml
-# Von:
-  - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
-    targetRevision: HEAD
-    ref: values
-# Zu:
-  - repoURL: git@github.com:arx666x/homelab-infrastructure.git
-    targetRevision: HEAD
-    ref: values
-```
-
-```bash
-# Änderung in BEIDE Repos pushen:
-git add gitops/apps/gitea/gitea.yaml
-git commit -m "temp: switch gitea values source to github for upgrade safety"
-git push    # → origin pusht auf Gitea + GitHub gleichzeitig
-
-# ArgoCD manuell neu laden damit die Repo-Source sofort wechselt:
-argocd app get gitea
-# Warten bis ArgoCD auf github zeigt (oder manuell sync triggern):
-argocd app sync gitea --dry-run
-```
-
-> **Voraussetzung:** GitHub-Remote muss als `github` konfiguriert sein:
-> `git remote get-url github` → `git@github.com:arx666x/homelab-infrastructure.git`
-
----
-
-### Schritt 2: Pre-Flight-Checks
-
-```bash
-# Gitea Gesundheit
+# Pods und PVCs gesund?
 kubectl get pods -n gitea
 kubectl get pvc -n gitea
-argocd app get gitea
 
 # API erreichbar?
 curl -s https://gitea.reckeweg.io/api/v1/version | jq .version
 # → "1.25.5"
 
-# ArgoCD Repo-Verbindung prüfen
+# ArgoCD Repo-Verbindung
 argocd repo list
-# Alle Repos: STATUS = Successful
+# → STATUS = Successful
 
-# Postgres läuft?
+# PostgreSQL erreichbar?
 kubectl -n gitea exec deploy/gitea -- \
   sh -c 'PGPASSWORD=$GITEA__DATABASE__PASSWD psql -h gitea-postgresql -U gitea -c "\l"'
 
-# Laufende Jobs / offene PRs notieren (können während Downtime nicht neu gesynct werden)
-argocd app list | grep -v Synced
-```
-
-**Snapshot: aktuelle Chart-Version bestätigen**
-
-```bash
-helm list -n gitea
-# NAME   NAMESPACE  REVISION  CHART          APP VERSION
-# gitea  gitea      X         gitea-12.5.3   1.25.5
+# Keine laufenden Actions Jobs
+# https://gitea.reckeweg.io/-/admin/actions → alle Jobs abgeschlossen
 ```
 
 ---
 
-### Schritt 3: targetRevision in Gitea-App aktualisieren
+### Schritt 2: DB-Backup vor dem Upgrade
 
-> Da die values-Source in Schritt 1 auf GitHub umgestellt wurde, können wir jetzt die
-> Chart-Version ändern. Der Commit muss auf GitHub gepusht sein, bevor ArgoCD synct.
+> ⚠️ **Pflicht** — DB-Migration 1.25 → 1.26 ist nicht reversibel.
 
 ```bash
-# gitops/apps/gitea/gitea.yaml
-# targetRevision: 12.5.3  →  targetRevision: 12.6.0
+kubectl -n gitea exec gitea-postgresql-0 -- \
+  sh -c 'PGPASSWORD=$POSTGRES_PASSWORD pg_dump -U gitea gitea | gzip' \
+  > gitea-db-backup-pre-1.26.1-$(date +%Y%m%d-%H%M).sql.gz
+
+# Größe prüfen (sollte > 0 sein)
+ls -lh gitea-db-backup-pre-1.26.1-*.sql.gz
 ```
 
+---
+
+### Schritt 3: Beide Änderungen in einem Commit
+
+Zwei Dateien gleichzeitig ändern und in einem einzigen Commit pushen:
+
+**`gitops/config/gitea/values.yaml`** — Image-Tag anheben:
 ```yaml
-# gitops/apps/gitea/gitea.yaml (relevanter Ausschnitt)
-sources:
-  - repoURL: https://dl.gitea.com/charts/
-    chart: gitea
-    targetRevision: 12.6.0          # ← geändert
-    helm:
-      valueFiles:
-        - $values/gitops/config/gitea/values.yaml
-  - repoURL: git@github.com:arx666x/homelab-infrastructure.git   # temporär GitHub
-    targetRevision: HEAD
-    ref: values
+image:
+  tag: "1.26.1"    # war: "1.25.5"
+```
+
+**`gitops/apps/gitea/gitea.yaml`** — Chart-Version anheben:
+```yaml
+targetRevision: 12.6.0    # war: 12.5.3
 ```
 
 ```bash
-git add gitops/apps/gitea/gitea.yaml
-git commit -m "feat: gitea chart upgrade 12.5.3 → 12.6.0 (app 1.25.5 stays pinned)"
+git add gitops/config/gitea/values.yaml gitops/apps/gitea/gitea.yaml
+git commit -m "feat: gitea upgrade chart 12.5.3 → 12.6.0, app 1.25.5 → 1.26.1"
 git push
 ```
+
+ArgoCD erkennt den Commit und startet den Sync automatisch.
 
 ---
 
 ### Schritt 4: Upgrade beobachten
 
-ArgoCD startet den Sync automatisch (`syncPolicy: automated`).
-
 ```bash
-# Upgrade-Verlauf live verfolgen
 kubectl get pods -n gitea -w
 # Erwartete Sequenz (Recreate-Strategy):
-#   gitea-xxx   Running → Terminating   (alter Pod wird beendet)
-#   gitea-yyy   Pending → Init:0/3 → Init:1/3 → Init:2/3 → Running
-
-# Init-Container-Logs falls Hänger
-kubectl logs -n gitea -l app.kubernetes.io/name=gitea -c init-directories --tail=50
-kubectl logs -n gitea -l app.kubernetes.io/name=gitea -c init-app-ini --tail=50
-kubectl logs -n gitea -l app.kubernetes.io/name=gitea -c configure-gitea --tail=50
-
-# ArgoCD Sync-Status
-argocd app get gitea
-argocd app wait gitea --health --timeout 300
+#   gitea-xxx   Running → Terminating
+#   gitea-yyy   Init:0/3 → Init:1/3 → Init:2/3 → Running
 ```
 
-**Erwartete Downtime:** 60–120 Sekunden (Recreate + Init-Container)
+Bei Hänger in Init-Containern sofort Logs prüfen:
+
+```bash
+kubectl logs -n gitea -l app.kubernetes.io/name=gitea -c init-app-ini --tail=50
+kubectl logs -n gitea -l app.kubernetes.io/name=gitea -c configure-gitea --tail=50
+```
+
+**Erwartete Downtime:** 60–120 Sekunden
 
 ---
 
 ### Schritt 5: Post-Upgrade-Verifikation
 
 ```bash
-# Pod läuft?
-kubectl get pods -n gitea
-# → gitea-xxx   1/1   Running
-
-# Helm-Version bestätigen
-helm list -n gitea
-# → gitea-12.6.0
-
-# App-Version unverändert?
+# App-Version korrekt?
 kubectl -n gitea get deploy gitea -o jsonpath='{.spec.template.spec.containers[0].image}'
-# → docker.gitea.com/gitea:1.25.5
+# → docker.gitea.com/gitea:1.26.1
 
-# API antwortet
+# API antwortet mit neuer Version?
 curl -s https://gitea.reckeweg.io/api/v1/version | jq .version
-# → "1.25.5"
+# → "1.26.1"
 
-# SSH-Verbindung
+# SSH funktioniert?
 ssh -T git@gitea.reckeweg.io
-# → Hi <user>! You've successfully authenticated...
 
-# Logs auf Errors
+# Logs sauber?
 kubectl -n gitea logs deploy/gitea --tail=100 | grep -iE "error|fatal|panic"
 
-# ArgoCD synct wieder von Gitea (test: eine App manuell refreshen)
-argocd app get argocd --refresh
+# ArgoCD-Repo-Verbindung intakt?
+argocd repo list | grep reckeweg.io
+# → STATUS = Successful
 ```
 
 ---
 
-### Schritt 6: GitHub-Fallback zurückstellen → Gitea als Source
-
-Sobald der neue Pod stabil läuft (mindestens 5 Minuten beobachten):
+### Schritt 6: Smoke-Tests
 
 ```bash
-# gitops/apps/gitea/gitea.yaml — values-Source zurück auf Gitea
-```
-
-```yaml
-# Von (GitHub-Fallback):
-  - repoURL: git@github.com:arx666x/homelab-infrastructure.git
-    targetRevision: HEAD
-    ref: values
-# Zu (Gitea):
-  - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
-    targetRevision: HEAD
-    ref: values
-```
-
-```bash
-git add gitops/apps/gitea/gitea.yaml
-git commit -m "chore: restore gitea values source to self-hosted gitea after upgrade"
-git push
-
-# Kurz warten bis ArgoCD die neue Repo-Source aufnimmt
-sleep 30
-argocd app get gitea
-```
-
----
-
-### Schritt 7: Smoke-Tests
-
-```bash
-# Web-UI
 curl -s -o /dev/null -w "%{http_code}" https://gitea.reckeweg.io
 # → 200
 
-# ArgoCD kann Gitea-Repo lesen
-argocd repo list | grep reckeweg.io
-# → STATUS = Successful
-
-# Alle Apps noch Synced/Healthy?
 argocd app list | grep -v "Synced.*Healthy"
+# → keine Ausgabe (alle Apps OK)
 
-# act-runner noch online (falls enabled)
 kubectl get pods -n gitea -l app.kubernetes.io/name=act-runner
-# Gitea UI: https://gitea.reckeweg.io/-/admin/actions/runners
-# → Runner sollte als "idle" oder "active" erscheinen
+# → act-runner läuft (2/2)
 ```
 
 ---
 
-### Rollback
+### Rollback (Catch-22-geprüft, 2026-05-18)
 
-Falls der neue Pod nicht startet oder kritische Fehler auftreten:
-
-**Option A: ArgoCD targetRevision zurücksetzen**
+> **Wichtig:** `root-infrastructure` **zuerst** deaktivieren — sonst stellt es die gitea-App
+> sofort zurück und der Rollback schlägt fehl.
 
 ```bash
-# gitops/apps/gitea/gitea.yaml
-# targetRevision: 12.6.0  →  12.5.3
+# 1. Beide Auto-syncs deaktivieren (root-infrastructure ZUERST)
+kubectl patch application root-infrastructure -n argocd --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":null}}}'
+kubectl patch application gitea -n argocd --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":null}}}'
 
-git add gitops/apps/gitea/gitea.yaml
-git commit -m "revert: gitea chart rollback 12.6.0 → 12.5.3"
+# 2. Letzte 12.5.3-Revision aus History ermitteln und rollbacken
+argocd app history gitea
+argocd app rollback gitea <letzte-12.5.3-ID>
+
+# 3. Beide Dateien im Repo zurücksetzen und pushen
+#    gitops/config/gitea/values.yaml: image.tag "1.26.1" → "1.25.5"
+#    gitops/apps/gitea/gitea.yaml: targetRevision 12.6.0 → 12.5.3
+git add gitops/config/gitea/values.yaml gitops/apps/gitea/gitea.yaml
+git commit -m "revert: gitea rollback 12.6.0/1.26.1 → 12.5.3/1.25.5"
 git push
-# → ArgoCD synct sofort auf 12.5.3 zurück
+
+# 4. root-infrastructure syncen (liest Revert-Commit)
+argocd app sync root-infrastructure
+
+# 5. Auto-syncs reaktivieren
+kubectl patch application root-infrastructure -n argocd --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+kubectl patch application gitea -n argocd --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
 ```
 
-**Option B: Helm direkt (wenn ArgoCD-Deadlock)**
-
-Falls Gitea nicht startet und ArgoCD blockiert ist:
-
-```bash
-# Aktuellen Helm-State prüfen
-helm list -n gitea
-
-# Auf vorherige Revision zurückrollen
-helm -n gitea rollback gitea
-
-# Revision-History
-helm -n gitea history gitea
-```
-
-> **Wichtig:** Nach einem erfolgreichen Rollback die ArgoCD-App wieder auf den alten
-> targetRevision-Stand bringen und committen, damit ArgoCD nicht erneut auf 12.6.0 syncen will.
+> ⚠️ Falls DB-Migration bereits gelaufen ist: Rollback auf 1.25.5 **nicht sicher**.
+> In diesem Fall PostgreSQL-Backup einspielen oder auf 1.26.1 verbleiben und Fehler debuggen.
 
 ---
 
-## Checkliste 12.5.3 → 12.6.0
-
-> **Status: BLOCKIERT** — Chart 12.6.0 inkompatibel mit Gitea 1.25.5 (`-apply-env` Flag fehlt).
-> Upgrade erst möglich wenn App-Versions-Pfad geklärt ist.
+## Checkliste 12.5.3 → 12.6.0 (zweiter Versuch)
 
 **Vorbereitung**
 
-- [x] Gitea API antwortet: `curl https://gitea.reckeweg.io/api/v1/version` (2026-05-18)
-- [x] ArgoCD Repo-Status: alle `Successful` (2026-05-18)
-- [ ] ArgoCD SSH-Credentials für GitHub hinterlegt (fehlt — GitHub-Fallback nicht verfügbar)
-- [ ] App-Version für `-apply-env`-Kompatibilität ermittelt
+- [x] Erster Versuch gescheitert: `-apply-env` Flag fehlt in 1.25.5 (2026-05-18)
+- [x] Ursache geklärt: Chart 12.6.0 erfordert App-Version 1.26.1 (2026-05-18)
+- [ ] DB-Backup erstellt (`pg_dump gitea | gzip`)
+- [ ] Gitea API antwortet: `1.25.5`
+- [ ] ArgoCD Repo-Status: `Successful`
+- [ ] Keine laufenden Actions Jobs
 
 **Durchführung**
 
-- [x] `targetRevision: 12.6.0` committed und gepusht (2026-05-18)
-- [x] ArgoCD Sync gestartet — Pod terminiert
-- [x] Init-Container `init-app-ini` crasht: `flag provided but not defined: -apply-env`
-- [x] Rollback auf Revision 17 (12.5.3) erfolgreich (2026-05-18)
-- [x] `targetRevision: 12.5.3` im Repo wiederhergestellt (2026-05-18)
-- [x] Auto-sync reaktiviert, Status: `Synced to 12.5.3 / Healthy` (2026-05-18)
+- [ ] `values.yaml`: `image.tag: "1.26.1"` gesetzt
+- [ ] `gitea.yaml`: `targetRevision: 12.6.0` gesetzt
+- [ ] Commit + Push (`git push`)
+- [ ] ArgoCD Sync gestartet — Pod terminiert
+- [ ] Alle Init-Container ohne Fehler durchgelaufen
+- [ ] App-Version `1.26.1` bestätigt (`kubectl get deploy`)
+- [ ] API antwortet mit `1.26.1`
+- [ ] SSH-Verbindung funktioniert
+- [ ] Keine Error-Logs
+- [ ] ArgoCD Repo-Status: `Successful`
+- [ ] Alle Smoke-Tests ✅
 
 ---
 
