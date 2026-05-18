@@ -51,10 +51,10 @@ neuen Gitea-Version führt zu einem echten Deadlock.
 
 ## Upgrade 12.5.3 → 12.6.0
 
-**Datum:** 2026-05-18 — **FEHLGESCHLAGEN, ZURÜCKGEROLLT**  
+**Datum:** 2026-05-18 — **ERFOLGREICH**  
 **Aktuell:** Chart 12.5.3 / Gitea 1.25.5  
-**Ziel:** Chart 12.6.0 / Gitea 1.25.5 (App-Version bleibt eingefroren)  
-**Risiko:** ~~🟢 Niedrig~~ → **🔴 Blockiert** — Chart 12.6.0 inkompatibel mit Gitea 1.25.5
+**Ziel:** Chart 12.6.0 / Gitea 1.26.1  
+**Risiko:** 🟡 Mittel — kombinierter Chart- und App-Versions-Bump, DB-Migration
 
 ### Befund (2026-05-18)
 
@@ -213,8 +213,8 @@ kubectl -n gitea get deploy gitea -o jsonpath='{.spec.template.spec.containers[0
 curl -s https://gitea.reckeweg.io/api/v1/version | jq .version
 # → "1.26.1"
 
-# SSH funktioniert?
-ssh -T git@gitea.reckeweg.io
+# SSH funktioniert? (SSH läuft über git.reckeweg.io, nicht gitea.reckeweg.io)
+ssh -T git@git.reckeweg.io
 
 # Logs sauber?
 kubectl -n gitea logs deploy/gitea --tail=100 | grep -iE "error|fatal|panic"
@@ -285,24 +285,24 @@ kubectl patch application gitea -n argocd --type merge \
 
 - [x] Erster Versuch gescheitert: `-apply-env` Flag fehlt in 1.25.5 (2026-05-18)
 - [x] Ursache geklärt: Chart 12.6.0 erfordert App-Version 1.26.1 (2026-05-18)
-- [ ] DB-Backup erstellt (`pg_dump gitea | gzip`)
-- [ ] Gitea API antwortet: `1.25.5`
-- [ ] ArgoCD Repo-Status: `Successful`
-- [ ] Keine laufenden Actions Jobs
+- [x] DB-Backup erstellt: `gitea-db-backup-pre-1.26.1-20260518-1401.sql.gz` (266K) (2026-05-18)
+- [x] Gitea API antwortet: `1.25.5` (2026-05-18)
+- [x] ArgoCD Repo-Status: `Successful` (2026-05-18)
+- [x] Keine laufenden Actions Jobs (2026-05-18)
 
 **Durchführung**
 
-- [ ] `values.yaml`: `image.tag: "1.26.1"` gesetzt
-- [ ] `gitea.yaml`: `targetRevision: 12.6.0` gesetzt
-- [ ] Commit + Push (`git push`)
-- [ ] ArgoCD Sync gestartet — Pod terminiert
-- [ ] Alle Init-Container ohne Fehler durchgelaufen
-- [ ] App-Version `1.26.1` bestätigt (`kubectl get deploy`)
-- [ ] API antwortet mit `1.26.1`
-- [ ] SSH-Verbindung funktioniert
-- [ ] Keine Error-Logs
-- [ ] ArgoCD Repo-Status: `Successful`
-- [ ] Alle Smoke-Tests ✅
+- [x] `values.yaml`: `image.tag: "1.26.1"` gesetzt (2026-05-18)
+- [x] `gitea.yaml`: `targetRevision: 12.6.0` gesetzt (2026-05-18)
+- [x] Commit + Push (2026-05-18)
+- [x] ArgoCD Sync gestartet — Pod terminiert
+- [x] Alle Init-Container ohne Fehler durchgelaufen (`Init:0/3 → 1/3 → 2/3 → Running`)
+- [x] Image `docker.gitea.com/gitea:1.26.1-rootless` bestätigt (2026-05-18)
+- [x] API antwortet mit `1.26.1` (2026-05-18)
+- [x] SSH-Verbindung `git@git.reckeweg.io` funktioniert (2026-05-18)
+- [x] Keine Error-Logs (2026-05-18)
+- [x] ArgoCD: `Synced to 12.6.0 / Healthy` (2026-05-18)
+- [x] Alle Smoke-Tests ✅ (2026-05-18)
 
 ---
 
