@@ -51,24 +51,75 @@ neuen Gitea-Version führt zu einem echten Deadlock.
 
 ## Upgrade 12.5.3 → 12.6.0
 
-**Datum:** (offen)  
+**Datum:** 2026-05-18 — **FEHLGESCHLAGEN, ZURÜCKGEROLLT**  
 **Aktuell:** Chart 12.5.3 / Gitea 1.25.5  
 **Ziel:** Chart 12.6.0 / Gitea 1.25.5 (App-Version bleibt eingefroren)  
-**Risiko:** 🟢 Niedrig — Chart-Only-Bump, kein App-Versions- oder DB-Migrations-Schritt
+**Risiko:** ~~🟢 Niedrig~~ → **🔴 Blockiert** — Chart 12.6.0 inkompatibel mit Gitea 1.25.5
 
-> **Warum App-Version eingefroren?**  
-> Gitea 1.26.0 hat einen Breaking Change im Init-Container (`configure-gitea` verwendet `-o`-Flag
-> nicht mehr). Solange das upstream Chart keinen Fix enthält, bleibt das Image auf `1.25.5` fixiert
-> (`image.tag: "1.25.5"` in `gitops/config/gitea/values.yaml`).
+### Befund (2026-05-18)
+
+Chart 12.6.0 ruft im Init-Container `init-app-ini` den Gitea-Binary mit dem Flag `-apply-env` auf.
+Dieses Flag existiert in Gitea 1.25.5 nicht:
+
+```
+Incorrect Usage: flag provided but not defined: -apply-env
+```
+
+Der Pod blieb in `Init:CrashLoopBackOff` hängen. Gitea war nicht erreichbar → ArgoCD-Catch-22
+vollständig eingetreten (ArgoCD konnte nicht mehr von `git.reckeweg.io` lesen).
+
+**Rollback-Pfad (dokumentiert für Wiederholung):**
+
+```bash
+# 1. Auto-sync deaktivieren (root-infrastructure ZUERST, sonst wird gitea sofort zurückgestellt)
+kubectl patch application root-infrastructure -n argocd --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":null}}}'
+kubectl patch application gitea -n argocd --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":null}}}'
+
+# 2. Auf letzte funktionierende Revision rollbacken
+argocd app history gitea   # letzte 12.5.3-Revision notieren
+argocd app rollback gitea <ID>
+
+# 3. gitea.yaml im Repo auf 12.5.3 zurücksetzen und pushen
+# → git push reicht (pusht auf Gitea + GitHub gleichzeitig)
+
+# 4. root-infrastructure syncen (liest neuen Revert-Commit)
+argocd app sync root-infrastructure
+
+# 5. Auto-sync wieder aktivieren
+kubectl patch application root-infrastructure -n argocd --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+kubectl patch application gitea -n argocd --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+```
+
+> ⚠️ **Lernfeld:** `root-infrastructure` hat `selfHeal: true` — es stellt die gitea-Application
+> sofort zurück wenn ArgoCD drift erkennt. Deshalb muss `root-infrastructure` **zuerst** deaktiviert
+> werden, bevor `gitea` deaktiviert wird.
+
+**Voraussetzung für erneuten Upgrade-Versuch:**
+
+Chart 12.6.0 benötigt eine Gitea-Version die `-apply-env` kennt. Vor dem nächsten Upgrade prüfen:
+
+```bash
+helm show values gitea/gitea --version 12.6.0 | grep -A5 "init"
+# Oder: welche Gitea-App-Version bringt 12.6.0 als Default mit?
+helm show chart gitea/gitea --version 12.6.0 | grep appVersion
+```
+
+Wahrscheinlich muss die App-Version von 1.25.5 auf 1.26.x oder 1.27.x angehoben werden.
+Dafür muss zuerst das `-o`-Flag-Problem aus 1.26.0 untersucht werden — oder ein neueres Chart
+das beide Flags korrekt behandelt.
 
 ### Änderungen Chart 12.5.x → 12.6.x
 
 | Bereich | Änderung | Betrifft uns? |
 |---------|----------|---------------|
-| Gitea App-Version | Chart-Default aktualisiert | **Nein** — `image.tag` explizit auf `1.25.5` fixiert |
-| Init-Container | Ggf. Anpassungen in `configure-gitea` | Zu prüfen (Logs nach Upgrade) |
+| Gitea App-Version | Chart-Default aktualisiert | **Ja** — Chart 12.6.0 nutzt `-apply-env`, fehlt in 1.25.5 |
+| Init-Container `init-app-ini` | Neues Flag `-apply-env` eingeführt | **Breaking** bei gepinntem 1.25.5-Image |
 | Subchart-Versionen | Valkey/PostgreSQL-Subcharts können gebumpt sein | Irrelevant — alle Subcharts deaktiviert |
-| RBAC/ServiceAccount | Mögliche Ergänzungen | Zu prüfen mit `helm diff` |
+| RBAC/ServiceAccount | Mögliche Ergänzungen | Nicht geprüft (Upgrade vor Pods-Start fehlgeschlagen) |
 
 ---
 
@@ -326,26 +377,24 @@ helm -n gitea history gitea
 
 ## Checkliste 12.5.3 → 12.6.0
 
+> **Status: BLOCKIERT** — Chart 12.6.0 inkompatibel mit Gitea 1.25.5 (`-apply-env` Flag fehlt).
+> Upgrade erst möglich wenn App-Versions-Pfad geklärt ist.
+
 **Vorbereitung**
 
-- [ ] Backup-Commit: `gitea.yaml.bak` lokal gesichert
-- [ ] GitHub erreichbar (`ssh -T git@github.com`)
-- [ ] Gitea API antwortet: `curl https://gitea.reckeweg.io/api/v1/version`
-- [ ] ArgoCD Repo-Status: alle `Successful`
-- [ ] Keine laufenden Gitea Actions Jobs (`/-/admin/actions`)
+- [x] Gitea API antwortet: `curl https://gitea.reckeweg.io/api/v1/version` (2026-05-18)
+- [x] ArgoCD Repo-Status: alle `Successful` (2026-05-18)
+- [ ] ArgoCD SSH-Credentials für GitHub hinterlegt (fehlt — GitHub-Fallback nicht verfügbar)
+- [ ] App-Version für `-apply-env`-Kompatibilität ermittelt
 
 **Durchführung**
 
-- [ ] Schritt 1: `repoURL` auf GitHub umgestellt und in beide Repos gepusht
-- [ ] Schritt 3: `targetRevision: 12.6.0` committed und gepusht (Gitea + GitHub)
-- [ ] Schritt 4: ArgoCD Sync beobachtet — Pod neu gestartet
-- [ ] Schritt 4: Alle Init-Container ohne Fehler durchgelaufen
-- [ ] Schritt 5: `gitea-12.6.0` in `helm list -n gitea` bestätigt
-- [ ] Schritt 5: Image-Tag noch `1.25.5` (unverändert)
-- [ ] Schritt 5: API-Version bestätigt
-- [ ] Schritt 6: `repoURL` zurück auf `git@git.reckeweg.io` umgestellt
-- [ ] Schritt 7: Alle Smoke-Tests ✅
-- [ ] ArgoCD Repo-Status nach Rückstellung: `Successful`
+- [x] `targetRevision: 12.6.0` committed und gepusht (2026-05-18)
+- [x] ArgoCD Sync gestartet — Pod terminiert
+- [x] Init-Container `init-app-ini` crasht: `flag provided but not defined: -apply-env`
+- [x] Rollback auf Revision 17 (12.5.3) erfolgreich (2026-05-18)
+- [x] `targetRevision: 12.5.3` im Repo wiederhergestellt (2026-05-18)
+- [x] Auto-sync reaktiviert, Status: `Synced to 12.5.3 / Healthy` (2026-05-18)
 
 ---
 
