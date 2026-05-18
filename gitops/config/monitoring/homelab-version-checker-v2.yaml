@@ -267,7 +267,7 @@ data:
     # ---------------------------------------------------------------------------
     
     def github_latest_release(repo):
-        raw = http_get(f"https://api.github.com/repos/{repo}/releases?per_page=100")
+        raw = http_get(f"https://api.github.com/repos/{repo}/releases?per_page=50")
         if not raw:
             return None
         try:
@@ -594,10 +594,10 @@ spec:
               resources:
                 requests:
                   cpu: 100m
-                  memory: 128Mi
+                  memory: 256Mi
                 limits:
                   cpu: 500m
-                  memory: 256Mi
+                  memory: 512Mi
 
           volumes:
             - name: script
