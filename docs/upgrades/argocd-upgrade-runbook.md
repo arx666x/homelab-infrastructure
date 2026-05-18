@@ -1,9 +1,9 @@
-# ArgoCD Upgrade Runbook: 2.9.3 → 3.3.9
+# ArgoCD Upgrade Runbook
 
 **Erstellt:** 2026-04-30  
+**Zuletzt aktualisiert:** 2026-05-18  
 **Ziel-Umgebung:** seri-k8s Homelab, k3s v1.32.3+k3s1  
-**Von:** ArgoCD 2.9.3  
-**Nach:** ArgoCD 3.3.9  
+**Aktuell dokumentiert:** 2.9.3 → 3.4.1  
 
 ---
 
@@ -621,3 +621,89 @@ Danach Affinity und Resources mit den sicheren Patch-Befehlen oben neu setzen.
 |---|---|---|---|---|
 | 2026-04-30 | 2.9.3 | 3.2.10 | ✅ | 9 Hops, Resource Tracking auf annotation migriert |
 | 2026-05-04 | 3.2.10 | 3.3.9 | ✅ | `--server-side --force-conflicts` Pflicht; NodeAffinity+Limits gesetzt |
+| 2026-05-18 | 3.3.9 | 3.4.1 | ✅ | Kein Handlungsbedarf; CLI via brew (3.4.2) |
+
+---
+
+## Phase 8: Hop 3.3.9 → 3.4.1
+
+**Durchgeführt:** 2026-05-18  
+**Status:** ✅ Erfolgreich
+
+### Breaking Changes 3.3 → 3.4
+
+#### ⚠️ PRÜFEN: Cluster-Versionsformat geändert (Cluster-Generator)
+
+Das Format der Kubernetes-Version wechselt von `Major.Minor` auf `vMajor.Minor.Patch`.
+
+Betrifft ApplicationSets, die den **Cluster Generator** mit dem Label `argocd.argoproj.io/kubernetes-version` nutzen.
+
+**Check vorher:**
+```bash
+kubectl get applicationsets -n argocd -o yaml | grep "kubernetes-version"
+# Leer = kein Handlungsbedarf
+```
+
+#### ⚠️ HINWEIS: Application-Healthstatus `Missing` geändert
+
+`Missing` erscheint ab 3.4 nur noch, wenn **alle** Ressourcen einer Application fehlen (vor dem ersten Sync). Einzelne fehlende Ressourcen werden künftig im Sync-Status, nicht im Health-Status angezeigt.
+
+Mögliche Auswirkung: Bestehende Apps können kurz einen abweichenden Health-Status zeigen, normalisieren sich nach dem ersten Refresh automatisch.
+
+#### ✅ UNBETROFFEN: gRPC DNS-Verhalten
+
+`GRPC_ENABLE_TXT_SERVICE_CONFIG` wechselt auf `false` (Default). Betrifft nur TXT-basierte gRPC-Service-Konfiguration — in dieser Umgebung nicht genutzt.
+
+#### ✅ UNBETROFFEN: Dex `ContinueOnConnectorFailure`
+
+Dex 2.45.0 aktiviert `ContinueOnConnectorFailure` standardmäßig. Dex ist in dieser Umgebung kein primärer Auth-Provider — kein Handlungsbedarf.
+
+#### ✅ UNBETROFFEN: Custom Health Checks (Ingress/IngressRoute)
+
+Der Ingress/IngressRoute-Health-Check in `argocd-cm` bleibt vollständig kompatibel.
+
+#### ✅ UNBETROFFEN: `--server-side --force-conflicts`
+
+Weiterhin erforderlich (seit 3.3) — keine Änderung.
+
+---
+
+### Upgrade-Befehl
+
+```bash
+kubectl apply -n argocd \
+  --server-side \
+  --force-conflicts \
+  -f "https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.1/manifests/install.yaml"
+
+kubectl rollout status deployment/argocd-server              -n argocd --timeout=300s
+kubectl rollout status deployment/argocd-repo-server         -n argocd --timeout=300s
+kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout=300s
+```
+
+### Post-3.4 Verifikation
+
+```bash
+# Version bestätigen
+kubectl get deployment argocd-server -n argocd \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+# Erwartung: quay.io/argoproj/argocd:v3.4.1
+
+# Alle Apps Synced/Healthy?
+kubectl get applications -n argocd \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.sync.status}{"\t"}{.status.health.status}{"\n"}{end}'
+
+# Cluster-Generator-Labels prüfen (Versionsformat)
+kubectl get applicationsets -n argocd -o yaml | grep "kubernetes-version"
+
+# Ingress Health Check noch aktiv?
+kubectl get cm argocd-cm -n argocd -o yaml | grep -A5 "customizations.health"
+
+# argocd CLI aktualisieren (via brew)
+brew upgrade argocd
+argocd version --client
+```
+
+| Datum | Von | Auf | Ergebnis | Besonderheiten |
+|---|---|---|---|---|
+| 2026-05-18 | 3.3.9 | 3.4.1 | ✅ | Kein Handlungsbedarf; CLI via brew (3.4.2) |
