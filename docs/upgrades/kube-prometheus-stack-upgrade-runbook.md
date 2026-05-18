@@ -1,4 +1,4 @@
-# Runbook: kube-prometheus-stack Upgrade 55.5.0 → 84.5.0
+# Runbook: kube-prometheus-stack Upgrade 55.5.0 → 85.1.3
 
 **Umgebung:** homelab k3s-Cluster (`reckeweg.io`)  
 **Namespace:** `monitoring`  
@@ -38,7 +38,8 @@ Jeder Major-Bump kann CRD-Änderungen enthalten. Die Reihenfolge ist zwingend:
 | 11      | 79.x → 80.x  | v0.87.0             | CRD-Update   |
 | 12      | 80.x → 81.x  | v0.88.0             | CRD-Update   |
 | 13      | 81.x → 82.x  | v0.89.0             | CRD-Update   |
-| Ziel    | 84.5.0       | aktuell             | —            |
+| 14      | 82.x → 84.5.0| v0.90.1             | CRD-Update   |
+| 15 (Ziel) | 84.5.0 → 85.1.3 | v0.90.1 (unverändert) | Distroless Images Default |
 
 > **Hinweis:** Zwischen den explizit genannten Breaking-Change-Versionen kann man
 > innerhalb einer Major-Linie (z. B. 55.x → 61.x) direkt springen, da dort keine
@@ -559,7 +560,7 @@ argocd app wait kube-prometheus-stack --health --timeout 300
 
 ---
 
-## Station 13 (Final): Chart 81.x → 84.5.0 (Operator v0.89.0)
+## Station 13: Chart 81.x → 84.5.0 (Operator v0.89.0)
 
 ### Schritt 13.1: CRDs für v0.89.0
 
@@ -570,12 +571,46 @@ for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents
 done
 ```
 
-### Schritt 13.2: Finales Ziel in Git setzen
+### Schritt 13.2: Ziel in Git setzen
 
 ```bash
 # targetRevision: "84.5.0"
 git add gitops/apps/monitoring.yaml
-git commit -m "chore(monitoring): upgrade kube-prometheus-stack 81.x → 84.5.0 (final)"
+git commit -m "chore(monitoring): upgrade kube-prometheus-stack 81.x → 84.5.0"
+git push
+
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
+```
+
+---
+
+## Station 14 (Final): Chart 84.5.0 → 85.1.3 (**Distroless Images Default**)
+
+> ✅ **Abgeschlossen am 2026-05-18** — `targetRevision: "85.1.3"` in `gitops/apps/monitoring.yaml` gesetzt.
+
+### Breaking Change: Distroless Images als Default (85.x)
+
+Ab Chart 85.x sind die Distroless-Varianten von `prometheus` und
+`prometheus-node-exporter` standardmäßig aktiviert.
+
+**Betrifft diesen Cluster:** Nein — keine private Registry, Images werden direkt
+von der öffentlichen Registry gezogen. Kein Handlungsbedarf.
+
+**Falls private Registry verwendet wird:** Distroless-Tags müssen ebenfalls
+synchronisiert werden (Image-Tags mit Distroless-Suffix).
+
+### Kein CRD-Update erforderlich
+
+Prometheus-Operator bleibt bei **v0.90.1** — identisch zu Chart 84.5.0.
+Keine CRD-Änderungen nötig.
+
+### Schritt 14.1: Finales Ziel in Git setzen
+
+```bash
+# targetRevision: "85.1.3"
+git add gitops/apps/monitoring.yaml
+git commit -m "chore(monitoring): upgrade kube-prometheus-stack 84.5.0 → 85.1.3 (distroless images default)"
 git push
 
 argocd app sync kube-prometheus-stack --timeout 300
@@ -613,12 +648,12 @@ kubectl get alertmanager -n monitoring
 argocd app get kube-prometheus-stack
 ```
 
-**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 84.5.0:**
+**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 85.1.3:**
 - Prometheus-Operator: `v0.90.1`
-- Prometheus: `3.11.3`
+- Prometheus: `3.x` (Distroless-Image)
 - Grafana HTTP Status: `200`
 - Alle 10 CRDs: `Healthy`
-- ArgoCD: `Synced to 84.5.0`, `Health Status: Healthy`
+- ArgoCD: `Synced to 85.1.3`, `Health Status: Healthy`
 
 ### Auto-Sync wieder aktivieren (optional)
 
