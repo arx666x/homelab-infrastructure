@@ -1,8 +1,8 @@
 # KubeVirt + CDI Upgrade Runbook
 
-**Ziel:** KubeVirt v1.3.1 → v1.7.3 | CDI v1.59.0 → v1.65.0  
-**Methode:** Schrittweise über 4 Minor-Versionen, GitOps via ArgoCD  
-**Datum:** 2026-05-05
+**Ziel:** KubeVirt v1.3.1 → v1.8.2 | CDI v1.59.0 → v1.65.0  
+**Methode:** Schrittweise über Minor-Versionen, GitOps via ArgoCD  
+**Letzte Aktualisierung:** 2026-05-18 (Schritt 5: v1.7.3 → v1.8.2)
 
 ---
 
@@ -17,12 +17,13 @@
 
 ## Upgrade-Pfad
 
-| Schritt | KubeVirt | CDI |
-|---------|----------|-----|
-| 1 | v1.3.1 → **v1.4.0** | v1.59.0 → **v1.60.5** |
-| 2 | v1.4.0 → **v1.5.2** | v1.60.5 → **v1.61.5** |
-| 3 | v1.5.2 → **v1.6.5** | v1.61.5 → **v1.63.1** |
-| 4 | v1.6.5 → **v1.7.3** | v1.63.1 → **v1.65.0** |
+| Schritt | KubeVirt | CDI | Status |
+|---------|----------|-----|--------|
+| 1 | v1.3.1 → **v1.4.0** | v1.59.0 → **v1.60.5** | ✅ abgeschlossen |
+| 2 | v1.4.0 → **v1.5.2** | v1.60.5 → **v1.61.5** | ✅ abgeschlossen |
+| 3 | v1.5.2 → **v1.6.5** | v1.61.5 → **v1.63.1** | ✅ abgeschlossen |
+| 4 | v1.6.5 → **v1.7.3** | v1.63.1 → **v1.65.0** | ✅ abgeschlossen |
+| 5 | v1.7.3 → **v1.8.2** | v1.65.0 (keine Änderung) | 🔄 aktuell |
 
 > **Warum diese Patch-Versionen?**  
 > Immer die letzte verfügbare Patch-Version innerhalb eines Minor-Zweigs –
@@ -304,6 +305,107 @@ kubectl describe kubevirt kubevirt -n kubevirt | grep -A5 "Conditions"
 
 ---
 
+## Schritt 5: v1.8.2 / CDI v1.65.0 (Ziel 2026-05-18)
+
+### Release-Highlights v1.8.x
+
+> **Breaking Changes – vor dem Upgrade prüfen:**
+> - **macvtap-Binding entfernt:** Falls irgendwo `interface: macvtap` in VM-Specs → auf
+>   `bridge` oder `masquerade` migrieren. windows-ad nutzt kein macvtap → kein Risiko.
+> - **SLIRP-Binding entfernt:** Falls `interface: slirp` in VM-Specs → migrieren.
+>   windows-ad nutzt kein SLIRP → kein Risiko.
+> - **VirtioFS Feature-Gate entfernt:** VirtioFS ist jetzt GA, das `VirtioFS` Feature Gate
+>   muss aus der CR entfernt werden (falls vorhanden). Aktuell nicht gesetzt → kein Risiko.
+> - **Metric-Umbenennung:** `kubevirt_vmi_migration_data_total_bytes` →
+>   `kubevirt_vmi_migration_data_bytes_total` (Prometheus-Alerts ggf. anpassen).
+
+> **Neue Features v1.8.x:**
+> - **HAL (Hypervisor Abstraction Layer):** KubeVirt kann jetzt Backends jenseits von KVM
+>   nutzen (Fundament für zukünftige Hypervisor-Flexibilität).
+> - **ARM64-Verbesserungen:** SMBIOS-Informationen sind jetzt in ARM64-Guest-VMs sichtbar
+>   (relevant für zukünftigen Windows Server 2025 ARM auf Colima/ARM-Nodes).
+>   Node-Labeller unterstützt jetzt ARM64-Cluster inkl. machine-type Labels.
+> - **ContainerPath Volumes:** Flexiblerer Storage-Attachment-Mechanismus.
+> - **Incremental Backup (CBT):** Storage-agnostische inkrementelle VM-Backups via
+>   QEMU/libvirt Changed Block Tracking.
+> - **PCIe NUMA-aware Topology:** GPU- und Host-Device-Placement respektiert NUMA.
+> - **rebootPolicy:** Neues Feld für VM-Reboot-Verhalten.
+> - **RBAC-Härtung:** VNC/Screenshot aus `kubevirt.io:edit` ClusterRole entfernt.
+
+> **CDI v1.65.0** bleibt unverändert – kompatibel mit KubeVirt 1.8.x.
+
+### 5a. Datei anpassen
+
+**`gitops/config/kubevirt/kustomization.yaml`**
+```yaml
+resources:
+  - https://github.com/kubevirt/kubevirt/releases/download/v1.8.2/kubevirt-operator.yaml
+  - kubevirt-cr.yaml
+```
+
+CDI bleibt auf v1.65.0 – keine Änderung an `gitops/config/cdi/kustomization.yaml`.
+
+### 5b. Commit & Push
+
+```bash
+git add gitops/config/kubevirt/kustomization.yaml
+git commit -m "chore: upgrade KubeVirt v1.7.3→v1.8.2"
+git push
+```
+
+### 5c. ArgoCD sync
+
+```bash
+# ArgoCD selfHeal triggert automatisch – oder manuell:
+argocd app sync kubevirt-operator
+```
+
+### 5d. Final Verify
+
+```bash
+# KubeVirt Version
+kubectl get deployment virt-operator -n kubevirt \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="KUBEVIRT_VERSION")].value}'
+# Erwarteter Output: v1.8.2
+
+# KubeVirt CR Status
+kubectl get kubevirt kubevirt -n kubevirt
+# NAME       AGE   PHASE
+# kubevirt   ...   Deployed
+
+# Alle virt-* Pods Running (nur auf AMD64-Nodes wegen nodeSelector)
+kubectl get pods -n kubevirt -o wide
+
+# CDI bleibt v1.65.0
+kubectl get cdi cdi -n cdi -o jsonpath='{.status.observedVersion}'
+# Erwarteter Output: v1.65.0
+
+# KubeVirt CR detailliert
+kubectl describe kubevirt kubevirt -n kubevirt | grep -A5 "Conditions"
+```
+
+**Go/No-Go:** KubeVirt `phase=Deployed`, alle Pods Running → Upgrade abgeschlossen.
+
+---
+
+### Ausblick: Windows Server 2025 ARM auf Colima
+
+v1.8.2 enthält relevante ARM64-Fixes (SMBIOS-Sichtbarkeit in Guests, Node-Labeller für ARM64).
+Damit sind die technischen Grundlagen verbessert. Für den Betrieb auf Colima (ARM64-Mac):
+
+1. **Colima mit KVM:** `colima start --vm-type vz --arch aarch64 --cpu 4 --memory 8`
+2. **kubevirt-cr.yaml anpassen:** `nodeSelector: kubernetes.io/arch: amd64` entfernen
+   oder auf `arm64` wechseln – in einem separaten Runbook dokumentieren.
+3. **KubeVirt auf ARM64-Node:** Setzt echtes KVM oder passthrough voraus; Colima
+   mit Virtualization Framework (vz) kann KVM-beschleunigung für ARM Guests bieten.
+4. **Windows Server 2025 ARM ISO:** Muss als ARM64-Image vorliegen; CDI DataVolume
+   oder direkter PVC-Import über Longhorn.
+
+> **Wichtig:** Colima-Test separat durchführen, nicht im Homelab-Cluster.
+> Solange `nodeSelector: amd64` in der CR ist, laufen virt-handler etc. nur auf AMD64-Nodes.
+
+---
+
 ## Troubleshooting
 
 ### ArgoCD OutOfSync nach Upgrade
@@ -355,6 +457,7 @@ Upgrade-Abschluss gefixt. Reihenfolge dann:
 | KubeVirt Operator | v1.5.2 | `https://github.com/kubevirt/kubevirt/releases/download/v1.5.2/kubevirt-operator.yaml` |
 | KubeVirt Operator | v1.6.5 | `https://github.com/kubevirt/kubevirt/releases/download/v1.6.5/kubevirt-operator.yaml` |
 | KubeVirt Operator | v1.7.3 | `https://github.com/kubevirt/kubevirt/releases/download/v1.7.3/kubevirt-operator.yaml` |
+| KubeVirt Operator | **v1.8.2** | `https://github.com/kubevirt/kubevirt/releases/download/v1.8.2/kubevirt-operator.yaml` |
 | CDI Operator | v1.60.5 | `https://github.com/kubevirt/containerized-data-importer/releases/download/v1.60.5/cdi-operator.yaml` |
 | CDI Operator | v1.61.5 | `https://github.com/kubevirt/containerized-data-importer/releases/download/v1.61.5/cdi-operator.yaml` |
 | CDI Operator | v1.63.1 | `https://github.com/kubevirt/containerized-data-importer/releases/download/v1.63.1/cdi-operator.yaml` |
