@@ -58,11 +58,16 @@ curl -s -o /dev/null -w "%{http_code}" https://gitea.reckeweg.io
 curl -s -o /dev/null -w "%{http_code}" https://argocd.reckeweg.io
 ```
 
+### Durchgeführte Änderungen
+
+**`gitops/apps/traefik.yaml`** — `targetRevision: 39.0.8` → `40.0.0`  
+Kein Eingriff in die values nötig: `kubernetesIngressNginx` wird nicht verwendet, Service-Spec bleibt unverändert.
+
 ### Checkliste v39 → v40
 
-- [x] CRDs vorab via `helm show crds | kubectl apply --server-side` aktualisiert
-- [x] `targetRevision: 40.0.0` in `gitops/apps/traefik.yaml` gesetzt und gepusht
-- [ ] ArgoCD sync erfolgreich
+- [ ] CRDs vorab via `helm show crds | kubectl apply --server-side` aktualisiert
+- [x] `targetRevision: 40.0.0` in `gitops/apps/traefik.yaml` gesetzt und committed (2026-05-18)
+- [ ] ArgoCD sync erfolgreich (`argocd app wait traefik --health`)
 - [ ] Traefik Pod läuft mit Proxy v3.7.x Image
 - [ ] Keine Error-Logs
 - [ ] Smoke-Tests alle ✅
