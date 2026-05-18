@@ -99,8 +99,7 @@ In `gitops/apps/gitea/gitea.yaml` die values-Source temporär auf GitHub umstell
 # Änderung in BEIDE Repos pushen:
 git add gitops/apps/gitea/gitea.yaml
 git commit -m "temp: switch gitea values source to github for upgrade safety"
-git push                                    # → Gitea (local source)
-git push github main                        # → GitHub (fallback target)
+git push    # → origin pusht auf Gitea + GitHub gleichzeitig
 
 # ArgoCD manuell neu laden damit die Repo-Source sofort wechselt:
 argocd app get gitea
@@ -175,7 +174,6 @@ sources:
 git add gitops/apps/gitea/gitea.yaml
 git commit -m "feat: gitea chart upgrade 12.5.3 → 12.6.0 (app 1.25.5 stays pinned)"
 git push
-git push github main
 ```
 
 ---
@@ -260,7 +258,6 @@ Sobald der neue Pod stabil läuft (mindestens 5 Minuten beobachten):
 git add gitops/apps/gitea/gitea.yaml
 git commit -m "chore: restore gitea values source to self-hosted gitea after upgrade"
 git push
-git push github main       # GitHub-Spiegel auch aktuell halten
 
 # Kurz warten bis ArgoCD die neue Repo-Source aufnimmt
 sleep 30
@@ -303,7 +300,7 @@ Falls der neue Pod nicht startet oder kritische Fehler auftreten:
 
 git add gitops/apps/gitea/gitea.yaml
 git commit -m "revert: gitea chart rollback 12.6.0 → 12.5.3"
-git push github main     # GitHub als Fallback-Source ist noch aktiv!
+git push
 # → ArgoCD synct sofort auf 12.5.3 zurück
 ```
 
@@ -332,7 +329,7 @@ helm -n gitea history gitea
 **Vorbereitung**
 
 - [ ] Backup-Commit: `gitea.yaml.bak` lokal gesichert
-- [ ] GitHub-Remote verfügbar und aktuell (`git push github main`)
+- [ ] GitHub erreichbar (`ssh -T git@github.com`)
 - [ ] Gitea API antwortet: `curl https://gitea.reckeweg.io/api/v1/version`
 - [ ] ArgoCD Repo-Status: alle `Successful`
 - [ ] Keine laufenden Gitea Actions Jobs (`/-/admin/actions`)
