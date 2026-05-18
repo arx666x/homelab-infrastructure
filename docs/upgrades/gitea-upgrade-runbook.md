@@ -90,7 +90,7 @@ In `gitops/apps/gitea/gitea.yaml` die values-Source temporär auf GitHub umstell
     targetRevision: HEAD
     ref: values
 # Zu:
-  - repoURL: https://github.com/arx666x/homelab-infrastructure.git
+  - repoURL: git@github.com:arx666x/homelab-infrastructure.git
     targetRevision: HEAD
     ref: values
 ```
@@ -109,7 +109,7 @@ argocd app sync gitea --dry-run
 ```
 
 > **Voraussetzung:** GitHub-Remote muss als `github` konfiguriert sein:
-> `git remote get-url github` → `https://github.com/arx666x/homelab-infrastructure.git`
+> `git remote get-url github` → `git@github.com:arx666x/homelab-infrastructure.git`
 
 ---
 
@@ -166,7 +166,7 @@ sources:
     helm:
       valueFiles:
         - $values/gitops/config/gitea/values.yaml
-  - repoURL: https://github.com/arx666x/homelab-infrastructure.git   # temporär GitHub
+  - repoURL: git@github.com:arx666x/homelab-infrastructure.git   # temporär GitHub
     targetRevision: HEAD
     ref: values
 ```
@@ -247,7 +247,7 @@ Sobald der neue Pod stabil läuft (mindestens 5 Minuten beobachten):
 
 ```yaml
 # Von (GitHub-Fallback):
-  - repoURL: https://github.com/arx666x/homelab-infrastructure.git
+  - repoURL: git@github.com:arx666x/homelab-infrastructure.git
     targetRevision: HEAD
     ref: values
 # Zu (Gitea):
