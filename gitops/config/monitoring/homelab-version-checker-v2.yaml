@@ -267,21 +267,25 @@ data:
     # ---------------------------------------------------------------------------
     
     def github_latest_release(repo):
-        raw = http_get(f"https://api.github.com/repos/{repo}/releases?per_page=20")
+        raw = http_get(f"https://api.github.com/repos/{repo}/releases?per_page=100")
         if not raw:
             return None
         try:
             releases = json.loads(raw)
         except Exception:
             return None
+        stable = []
         for rel in releases:
             if rel.get("prerelease") or rel.get("draft"):
                 continue
             tag = rel.get("tag_name", "")
             if re.search(r'(alpha|beta|rc|dev|\.ea[\.\d]|-ea[\.\d])', tag, re.I):
                 continue
-            return tag
-        return None
+            stable.append(tag)
+        if not stable:
+            return None
+        stable.sort(key=semver_key, reverse=True)
+        return stable[0]
     
     
     def k3s_node_version():
