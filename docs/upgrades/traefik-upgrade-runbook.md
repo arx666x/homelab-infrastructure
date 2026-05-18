@@ -137,12 +137,12 @@ Keine values-Anpassungen nötig. Gateway API nicht im Einsatz, daher CRD-Entfern
 
 ### Checkliste v40.0.0 → v40.2.0
 
-- [ ] CRDs vorab via `helm show crds | kubectl apply --server-side` aktualisiert
+- [x] CRDs vorab via `helm show crds | kubectl apply --server-side` aktualisiert (2026-05-18)
 - [x] `targetRevision: 40.2.0` in `gitops/apps/traefik.yaml` gesetzt und committed (2026-05-18)
-- [ ] ArgoCD sync erfolgreich (`argocd app wait traefik --health`)
-- [ ] Traefik Pod läuft mit Proxy v3.7.1 Image
-- [ ] Keine Error-Logs
-- [ ] Smoke-Tests alle ✅
+- [x] ArgoCD sync erfolgreich — Healthy & Synced (2026-05-18)
+- [x] Traefik Pod läuft mit Proxy v3.7.1 Image
+- [x] Keine Error-Logs
+- [x] Smoke-Tests alle ✅
 
 ---
 
