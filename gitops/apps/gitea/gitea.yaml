@@ -14,7 +14,7 @@ spec:
       helm:
         valueFiles:
           - $values/gitops/config/gitea/values.yaml
-    - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
+    - repoURL: git@github.com:arx666x/homelab-infrastructure.git
       targetRevision: HEAD
       ref: values
   destination:
