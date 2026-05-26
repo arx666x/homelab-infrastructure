@@ -14,7 +14,7 @@ statefulset:
     limits:
       cpu: 4000m
       memory: 6Gi
-  actRunner:
+  runner:
     registry: docker.io
     repository: gitea/act_runner
     tag: "0.6.1"
