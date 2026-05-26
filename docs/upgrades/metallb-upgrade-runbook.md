@@ -1,25 +1,33 @@
-# MetalLB Upgrade Runbook: Chart 0.14.8 → 0.15.3
+# MetalLB Upgrade Runbook: Chart 0.15.3 → 0.16.0
 
-**Datum:** 2026-05-04  
-**Status:** ✅ Erfolgreich abgeschlossen am 2026-05-04  
+**Datum:** 2026-05-26  
+**Status:** ✅ Erfolgreich abgeschlossen am 2026-05-26  
 **Scope:** Homelab k3s-Cluster (`reckeweg.io`)  
 **Namespace:** `metallb-system`  
-**Von:** Helm Chart 0.14.8 / MetalLB v0.14.8  
-**Auf:** Helm Chart 0.15.3 / MetalLB v0.15.3  
-**Risiko:** 🟡 Mittel — kein Breaking Change in CRDs, aber kurzer L2-Ausfall während Speaker-Neustart  
+**Von:** Helm Chart 0.15.3 / MetalLB v0.15.3  
+**Auf:** Helm Chart 0.16.0 / MetalLB v0.16.0  
+**Risiko:** 🟡 Mittel — kein Breaking Change für L2-Mode, aber kurzer L2-Ausfall während Speaker-Neustart  
 **Deployment-Methode:** ArgoCD GitOps, Multi-Source App (`gitops/apps/metallb.yaml`)
 
 ---
 
 ## Wichtige Hinweise vorab
 
-### Was sich in 0.15.x ändert
+### Was sich in 0.16.0 ändert
 
-- **`metallb.universe.tf` Annotation-Prefix ist deprecated** → Migriere zu `metallb.io` (z.B. `metallb.io/address-pool` statt `metallb.universe.tf/address-pool`). Alter Prefix funktioniert noch, aber künftige Versionen könnten ihn entfernen.
-- **Helm aktualisiert CRDs automatisch** (laut offiziellem MetalLB-Docs kein manueller Schritt nötig — im Gegensatz zu Traefik).
+#### Relevant für L2-Mode (diese Umgebung)
+
+- **L2 Speaker Election respektiert jetzt Service Selectors** — Bug Fix: Bisher wurden Service Selectors in Advertisements bei der Speaker-Wahl ignoriert. In L2-Mode ohne komplexe Selectors kein Breaking Change.
+- **Native TLS ersetzt kube-rbac-proxy** — Metriken-Endpoints nutzen jetzt selbstsignierte Zertifikate statt kube-rbac-proxy. Falls PodMonitor/ServiceMonitor aktiv ist: Scrape-Konfiguration prüfen.
+- **ServiceSelector in Advertisement-Ressourcen** — Neue optionale Möglichkeit, Advertisements auf bestimmte Services zu beschränken. Kein Pflicht-Update der bestehenden config.yaml.
+- **FRR 10.5.3** — Routingdaemon-Update (L2-Mode nutzt FRR nur intern, kein BGP aktiv).
 - **Speaker-Neustart bedeutet ~5–30 Sekunden L2-Ausfall** auf den betroffenen IPs. Traefik (`192.168.20.100`) und Gitea SSH (`192.168.20.101`) sind kurz nicht erreichbar.
-- **BGPPeer v1beta1 ist deprecated** (nur relevant wenn BGP genutzt wird — bei dir L2-Mode, daher nicht relevant).
-- **Neue `ConfigurationState` CRD** in 0.15.3 — wird automatisch hinzugefügt.
+
+#### Nicht relevant für diese Umgebung (L2-Mode)
+
+- **FRR-K8s wird Standard-BGP-Mode** (FRR non-K8s deprecated) — kein BGP aktiv, nicht betroffen.
+- **Per-peer local-AS Override** (`localASN` Feld in BGPPeer) — BGP-Feature, irrelevant.
+- **Konfigurierbarer BGP Debounce Timeout** — BGP-Feature, irrelevant.
 
 ### Deine Konfiguration
 
@@ -47,7 +55,7 @@ argocd app get metallb
 # Aktuelle Version bestätigen
 kubectl -n argocd get application metallb \
   -o jsonpath='{.spec.sources[0].targetRevision}{"\n"}'
-# Erwartung: 0.14.8
+# Erwartung: 0.15.3
 # Hinweis: .spec.source (singular) liefert leer bei Multi-Source Apps!
 
 # Alle MetalLB Pods Running?
@@ -149,27 +157,26 @@ cd ~/git/homelab-infrastructure
 # Aktuelle Version prüfen
 grep targetRevision gitops/apps/metallb.yaml
 
-# Version von 0.14.8 auf 0.15.3 setzen
-sed -i '' 's/targetRevision: 0.14.8/targetRevision: 0.15.3/' gitops/apps/metallb.yaml
+# Version von 0.15.3 auf 0.16.0 setzen
+sed -i '' 's/targetRevision: 0.15.3/targetRevision: 0.16.0/' gitops/apps/metallb.yaml
 
 # Ergebnis prüfen
 grep targetRevision gitops/apps/metallb.yaml
-# Erwartung: targetRevision: 0.15.3
+# Erwartung: targetRevision: 0.16.0
 ```
 
 ### 3.2 Committen und pushen
 
 ```bash
 git add gitops/apps/metallb.yaml
-git commit -m "chore: upgrade metallb 0.14.8 → 0.15.3
+git commit -m "chore: upgrade metallb 0.15.3 → 0.16.0
 
-Changes in 0.15.x:
-- New ConfigurationState CRD for error visibility
-- IPAddressPool and ServiceBGPStatus status fields
-- FRR 10.4.1 (CVE-2025-22874 fix)
-- Distroless images (reduced attack surface)
-- metallb.universe.tf annotation prefix deprecated → metallb.io
-- readOnlyRootFilesystem + no privilege escalation security hardening"
+Changes in 0.16.0:
+- L2 speaker election now respects service selectors (bug fix)
+- Native TLS replaces kube-rbac-proxy for metrics endpoints
+- ServiceSelector support in advertisement resources
+- FRR 10.5.3
+- FRR-K8s becomes default BGP mode (FRR non-K8s deprecated, L2 unaffected)"
 
 git push
 ```
@@ -204,20 +211,17 @@ kubectl get pods -n metallb-system
 ### 4.2 CRDs nach Upgrade prüfen
 
 ```bash
-# Neue CRD ConfigurationState muss vorhanden sein
-kubectl get crd configurationstates.metallb.io
-
 # Alle MetalLB CRDs
 kubectl get crds | grep metallb.io
-# Erwartet:
+# Erwartet (unverändert gegenüber 0.15.x):
 # bfdprofiles.metallb.io
 # bgpadvertisements.metallb.io
-# bgppeers.metallb.io
+# bgppeers.metallb.io              <-- localASN Feld hinzugekommen (kein Breaking Change)
 # communities.metallb.io
-# configurationstates.metallb.io      <-- NEU in 0.15.3
+# configurationstates.metallb.io
 # ipaddresspools.metallb.io
 # l2advertisements.metallb.io
-# servicebgpstatuses.metallb.io       <-- NEU in 0.15.0
+# servicebgpstatuses.metallb.io
 # servicel2statuses.metallb.io
 ```
 
@@ -227,12 +231,12 @@ kubectl get crds | grep metallb.io
 # Controller-Version
 kubectl get pod -n metallb-system -l app.kubernetes.io/component=controller \
   -o jsonpath='{.items[0].spec.containers[0].image}{"\n"}'
-# Erwartung: quay.io/metallb/controller:v0.15.3
+# Erwartung: quay.io/metallb/controller:v0.16.0
 
 # Speaker-Version
 kubectl get pod -n metallb-system -l app.kubernetes.io/component=speaker \
   -o jsonpath='{.items[0].spec.containers[0].image}{"\n"}'
-# Erwartung: quay.io/metallb/speaker:v0.15.3
+# Erwartung: quay.io/metallb/speaker:v0.16.0
 ```
 
 ---
@@ -281,15 +285,19 @@ kubectl get l2advertisement -n metallb-system -o yaml
 # Falls eth0.20 auch drin war: prüfen ob noch gesetzt
 ```
 
-### 5.4 IP Pool Status (NEU in 0.15.x)
+### 5.4 Native TLS Metriken-Endpoint prüfen (NEU in 0.16.0)
 
 ```bash
-# Neuer Status auf IPAddressPool
-kubectl get ipaddresspool -n metallb-system -o yaml
-# spec.status zeigt jetzt available/assigned counter
+# kube-rbac-proxy ist nicht mehr vorhanden — stattdessen self-signed TLS
+# Controller und Speaker lauschen direkt auf Port 9120 (HTTPS)
+kubectl get pods -n metallb-system -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .spec.containers[*]}{.name}{" "}{end}{"\n"}{end}'
+# Kein "kube-rbac-proxy" Container mehr erwartet
 
-# ConfigurationState prüfen (NEU in 0.15.3)
+# ConfigurationState prüfen
 kubectl get configurationstate -n metallb-system -o yaml 2>/dev/null || echo "CRD not yet present"
+
+# IP Pool Status
+kubectl get ipaddresspool -n metallb-system -o yaml
 ```
 
 ### 5.5 ArgoCD Status
@@ -330,7 +338,7 @@ kubectl get prometheusrule -n metallb-system
 
 ### 6.3 Wiki-Eintrag aktualisieren
 
-In Gitea-Wiki: `Cluster_Components/MetalLB` → Version auf 0.15.3 setzen, Upgrade-Datum eintragen.
+In Gitea-Wiki: `Cluster_Components/MetalLB` → Version auf 0.16.0 setzen, Upgrade-Datum eintragen.
 
 ---
 
@@ -339,11 +347,11 @@ In Gitea-Wiki: `Cluster_Components/MetalLB` → Version auf 0.15.3 setzen, Upgra
 Falls nach dem Sync Probleme auftreten (L2 bricht komplett ein):
 
 ```bash
-# Sofortige Rückkehr zu 0.14.8
+# Sofortige Rückkehr zu 0.15.3
 cd ~/git/homelab-infrastructure
-sed -i '' 's/targetRevision: 0.15.3/targetRevision: 0.14.8/' gitops/apps/metallb.yaml
+sed -i '' 's/targetRevision: 0.16.0/targetRevision: 0.15.3/' gitops/apps/metallb.yaml
 git add gitops/apps/metallb.yaml
-git commit -m "revert: metallb zurück auf 0.14.8 (upgrade fehlgeschlagen)"
+git commit -m "revert: metallb zurück auf 0.15.3 (upgrade fehlgeschlagen)"
 git push
 
 # ArgoCD Sync erzwingen
@@ -361,12 +369,12 @@ kubectl patch application metallb -n argocd \
   --type='json' \
   -p='[{"op":"remove","path":"/spec/syncPolicy/automated"}]'
 
-# Direkt auf 0.14.8 helm upgrade (Notfall)
+# Direkt auf 0.15.3 helm upgrade (Notfall)
 helm repo add metallb https://metallb.github.io/metallb
 helm repo update
 helm upgrade metallb metallb/metallb \
   --namespace metallb-system \
-  --version 0.14.8 \
+  --version 0.15.3 \
   --reuse-values
 
 # Danach Repo fixen, Auto-Sync wieder aktivieren
@@ -391,6 +399,7 @@ helm upgrade metallb metallb/metallb \
 | Datum | Von | Auf | Ergebnis | Besonderheiten |
 |---|---|---|---|---|
 | 2026-05-04 | 0.14.8 | 0.15.3 | ✅ Erfolgreich | Alle 9 Speaker neu gestartet, 2 neue CRDs, kein L2-Ausfall bemerkt |
+| 2026-05-26 | 0.15.3 | 0.16.0 | ✅ Erfolgreich | Maintenance-Upgrade, kein L2-Ausfall bemerkt |
 
 **Beobachtungen beim Upgrade 0.14.8 → 0.15.3:**
 - ArgoCD hat CRDs automatisch korrekt aktualisiert (kein manueller Schritt nötig)
@@ -399,6 +408,12 @@ helm upgrade metallb metallb/metallb \
 - ICMP-Ping auf `.100` liefert Timeout — das ist UniFi/FritzBox ICMP-Blocking, kein MetalLB-Problem
 - `curl -sk https://192.168.20.100 → 404` = korrekt (Traefik antwortet, kein Hostname-Route-Match)
 - ArgoCD UI war während Sync träge/nicht erreichbar → bekanntes Ressourcenproblem (siehe ArgoCD-Tuning-Notizen)
+
+**Beobachtungen beim Upgrade 0.15.3 → 0.16.0:**
+- Reines Maintenance-Upgrade für L2-Mode — keine CRD-Breaking-Changes
+- Native TLS ersetzt kube-rbac-proxy (kein `kube-rbac-proxy` Container mehr in Pods)
+- FRR 10.5.3 Update transparent im Hintergrund
+- L2-Announcements sofort nach Speaker-Neustart wieder aktiv
 
 ---
 
