@@ -135,6 +135,11 @@ kubectl get pvc -n gitea
 # Erwartet: data-runner-gitea-actions-runner-0   Bound   20Gi
 ```
 
+> **Hinweis zu 2/2:** In 0.1.1 ist DinD als Kubernetes Native Sidecar implementiert
+> (Init-Container mit `restartPolicy: Always`, verfügbar ab Kubernetes 1.29).
+> Der Pod zeigt weiterhin `2/2 Running` — DinD zählt als Sidecar-Init-Container
+> und erscheint in `kubectl logs` als `dind (init)`, läuft aber dauerhaft mit.
+
 ---
 
 ## Phase 6: Altes PVC aufräumen
