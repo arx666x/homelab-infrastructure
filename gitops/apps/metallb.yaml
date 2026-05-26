@@ -14,6 +14,9 @@ spec:
       targetRevision: 0.16.0
       helm:
         releaseName: metallb
+        values: |
+          frrk8s:
+            enabled: false
     
     # MetalLB Config aus Git
     - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
