@@ -39,7 +39,8 @@ Jeder Major-Bump kann CRD-Änderungen enthalten. Die Reihenfolge ist zwingend:
 | 12      | 80.x → 81.x  | v0.88.0             | CRD-Update   |
 | 13      | 81.x → 82.x  | v0.89.0             | CRD-Update   |
 | 14      | 82.x → 84.5.0| v0.90.1             | CRD-Update   |
-| 15 (Ziel) | 84.5.0 → 85.1.3 | v0.90.1 (unverändert) | Distroless Images Default |
+| 15      | 84.5.0 → 85.1.3 | v0.90.1 (unverändert) | Distroless Images Default |
+| 16 (Ziel) | 85.1.3 → 85.3.3 | v0.90.1 (unverändert) | Maintenance (Grafana 12.4.1) |
 
 > **Hinweis:** Zwischen den explizit genannten Breaking-Change-Versionen kann man
 > innerhalb einer Major-Linie (z. B. 55.x → 61.x) direkt springen, da dort keine
@@ -585,7 +586,7 @@ argocd app wait kube-prometheus-stack --health --timeout 300
 
 ---
 
-## Station 14 (Final): Chart 84.5.0 → 85.1.3 (**Distroless Images Default**)
+## Station 14: Chart 84.5.0 → 85.1.3 (**Distroless Images Default**)
 
 > ✅ **Abgeschlossen am 2026-05-18** — `targetRevision: "85.1.3"` in `gitops/apps/monitoring.yaml` gesetzt.
 
@@ -611,6 +612,33 @@ Keine CRD-Änderungen nötig.
 # targetRevision: "85.1.3"
 git add gitops/apps/monitoring.yaml
 git commit -m "chore(monitoring): upgrade kube-prometheus-stack 84.5.0 → 85.1.3 (distroless images default)"
+git push
+
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
+```
+
+---
+
+## Station 15 (Final): Chart 85.1.3 → 85.3.3 (Maintenance)
+
+> ✅ **Abgeschlossen am 2026-05-26** — `targetRevision: "85.3.3"` in `gitops/apps/monitoring.yaml` gesetzt.
+
+### Keine Breaking Changes
+
+Reine Maintenance-Releases. Kein CRD-Update nötig — prometheus-operator bleibt bei **v0.90.1**.
+
+**Komponentenupdates:**
+- Grafana: v12.4.0 → v12.4.1
+- ThanosRuler: `extraEnv`-Support ergänzt (85.2.2)
+- Diverse kleinere Dependency-Updates
+
+### Schritt 15.1: Ziel in Git setzen
+
+```bash
+# targetRevision: "85.3.3"
+git add gitops/apps/monitoring.yaml
+git commit -m "chore(monitoring): upgrade kube-prometheus-stack 85.1.3 → 85.3.3"
 git push
 
 argocd app sync kube-prometheus-stack --timeout 300
@@ -648,12 +676,12 @@ kubectl get alertmanager -n monitoring
 argocd app get kube-prometheus-stack
 ```
 
-**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 85.1.3:**
+**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 85.3.3:**
 - Prometheus-Operator: `v0.90.1`
 - Prometheus: `3.x` (Distroless-Image)
-- Grafana HTTP Status: `200`
+- Grafana: `12.4.1`, HTTP Status: `200`
 - Alle 10 CRDs: `Healthy`
-- ArgoCD: `Synced to 85.1.3`, `Health Status: Healthy`
+- ArgoCD: `Synced to 85.3.3`, `Health Status: Healthy`
 
 ### Auto-Sync wieder aktivieren (optional)
 
