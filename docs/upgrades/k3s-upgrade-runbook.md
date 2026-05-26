@@ -12,6 +12,7 @@
 | v1.28.x   | v1.32.3   | 2026-04-28 | 4 Minor-Hops, Traefik-Swap v2→v3                    |
 | v1.32.3   | v1.35.4   | 2026-05-04 | etcd 3.5→3.6 (Pflichtschritt über v1.32.11)         |
 | v1.35.4   | v1.36.0   | 2026-05-17 | 1 Hop, RPi-Kernel 6.18 iptables-Umstellung erforderlich |
+| v1.36.0   | v1.36.1   | 2026-05-18 | Patch-Release, bugfixes only, kein Sonderfall       |
 
 ---
 
