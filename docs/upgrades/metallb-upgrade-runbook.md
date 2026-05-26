@@ -391,6 +391,7 @@ helm upgrade metallb metallb/metallb \
 | Gitea SSH (.101) nach Speaker-Neustart tot | ARP-Cache auf Clients veraltet | `arp -d 192.168.20.101` auf dem betroffenen Client; Speaker braucht ~30s |
 | Speaker 4/4 Container, aber `component=speaker` Label nicht gefunden | Label-Selector-Mismatch nach Upgrade | `kubectl get pods -n metallb-system --show-labels` prüfen |
 | GMKTec-Nodes ARP-Probleme (k3s-03a Incident) | `arp_announce`/`arp_ignore` falsch | `/etc/sysctl.d/99-arp-fix.conf` auf Masters muss aktiv sein |
+| ArgoCD: `nil pointer evaluating interface {}.serviceMonitor` | In 0.16.0 ist `frrk8s.enabled: true` jetzt Default; frr-k8s Subchart schlägt fehl | `frrk8s.enabled: false` in Helm-Values der ArgoCD App setzen (L2-Mode braucht kein FRR-K8s) |
 
 ---
 
