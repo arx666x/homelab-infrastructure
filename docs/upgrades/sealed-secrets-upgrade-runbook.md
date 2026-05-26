@@ -162,7 +162,7 @@ ArgoCD syncronisiert automatisch zurück. Bestehende SealedSecrets sind von eine
 
 | Datum | Von | Auf | Ergebnis | Besonderheiten |
 |---|---|---|---|---|
-| 2026-05-26 | 2.18.5 | 2.18.6 | ⏳ Ausstehend | Patch-Release |
+| 2026-05-26 | 2.18.5 | 2.18.6 | ✅ Erfolgreich | Patch-Release, kein erneutes Versiegeln nötig |
 
 ---
 
