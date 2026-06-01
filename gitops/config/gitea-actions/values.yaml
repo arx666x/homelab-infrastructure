@@ -23,10 +23,14 @@ statefulset:
         level: info
       cache:
         enabled: false
+      runner:
+        labels:
+          - "ubuntu-latest:docker://catthehacker/ubuntu:act-22.04"
+          - "ubuntu-22.04:docker://catthehacker/ubuntu:act-22.04"
+          - "ubuntu-20.04:docker://catthehacker/ubuntu:act-20.04"
       container:
         require_docker: true
         docker_timeout: 300s
-        workdir_parent: /tmp/act
   dind:
     extraEnvs:
       - name: DOCKER_IPTABLES_LEGACY
