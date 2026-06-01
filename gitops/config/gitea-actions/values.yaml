@@ -31,6 +31,7 @@ statefulset:
       container:
         require_docker: true
         docker_timeout: 300s
+        options: "--tmpfs /var/run:rw,nosuid,exec"
   dind:
     extraEnvs:
       - name: DOCKER_IPTABLES_LEGACY
