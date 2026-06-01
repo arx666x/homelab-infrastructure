@@ -17,7 +17,7 @@ statefulset:
   runner:
     registry: docker.io
     repository: gitea/act_runner
-    tag: "0.6.1"
+    tag: "nightly"
   dind:
     extraEnvs:
       - name: DOCKER_IPTABLES_LEGACY
