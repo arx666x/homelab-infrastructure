@@ -5,12 +5,12 @@ GITEA_URL="https://git.reckeweg.io"
 GITEA_TOKEN="${GITEA_TOKEN:?GITEA_TOKEN env var required}"
 WORKFLOW_PATH=".gitea/workflows/mirror-to-sailpoint.yml"
 
-NEW_CONTENT='name: Mirror to SailPoint GitHub
+NEW_WORKFLOW='name: Mirror to SailPoint GitHub
 
 on:
   push:
     branches:
-      - '"'"'**'"'"'
+      - "**"
   delete: {}
 
 jobs:
@@ -32,44 +32,85 @@ jobs:
             "https://x-access-token:${SAILPOINT_TOKEN}@github.com/achim-reckeweg-sp/${SHORT_NAME}.git"
 '
 
-api() {
-  curl -s -H "Authorization: token ${GITEA_TOKEN}" "$@"
+# Raw API response for debugging
+RAW=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" \
+  "${GITEA_URL}/api/v1/user/repos?limit=50")
+
+if [ -z "$RAW" ]; then
+  echo "ERROR: curl returned empty response. Check network/URL."
+  exit 1
+fi
+
+# Check if valid JSON
+echo "$RAW" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null || {
+  echo "ERROR: API returned non-JSON:"
+  echo "$RAW" | head -5
+  exit 1
 }
 
-echo "Fetching repositories..."
-REPOS=$(api "${GITEA_URL}/api/v1/user/repos?limit=50" | \
-  python3 -c "import sys,json; [print(r['full_name']) for r in json.load(sys.stdin)]")
+REPOS=$(echo "$RAW" | python3 -c "
+import sys, json
+repos = json.load(sys.stdin)
+if isinstance(repos, list):
+    for r in repos:
+        print(r['full_name'])
+else:
+    print('Unexpected response:', repos, file=sys.stderr)
+    sys.exit(1)
+")
 
 if [ -z "$REPOS" ]; then
-  echo "No repositories found. Check your GITEA_TOKEN."
-  exit 1
+  echo "No repositories found."
+  exit 0
 fi
 
 echo "Repos found:"
 echo "$REPOS"
 echo ""
 
+ENCODED=$(python3 -c "
+import base64, sys
+content = sys.stdin.read()
+print(base64.b64encode(content.encode()).decode())
+" <<< "$NEW_WORKFLOW")
+
 for REPO in $REPOS; do
-  RESPONSE=$(api "${GITEA_URL}/api/v1/repos/${REPO}/contents/${WORKFLOW_PATH}")
-  SHA=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['sha'])" 2>/dev/null || true)
+  RESPONSE=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" \
+    "${GITEA_URL}/api/v1/repos/${REPO}/contents/${WORKFLOW_PATH}")
+
+  SHA=$(echo "$RESPONSE" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    print(d.get('sha', ''))
+except:
+    print('')
+" 2>/dev/null)
 
   if [ -z "$SHA" ]; then
     echo "  SKIP ${REPO} — workflow not found"
     continue
   fi
 
-  echo "  UPDATE ${REPO} (sha=${SHA})"
+  echo "  UPDATE ${REPO}"
 
-  ENCODED=$(python3 -c "import base64,sys; print(base64.b64encode(open('/dev/stdin').read().encode()).decode())" <<< "$NEW_CONTENT")
-
-  api -X PUT \
+  RESULT=$(curl -s -X PUT \
+    -H "Authorization: token ${GITEA_TOKEN}" \
     -H "Content-Type: application/json" \
     "${GITEA_URL}/api/v1/repos/${REPO}/contents/${WORKFLOW_PATH}" \
-    -d "{
-      \"message\": \"fix: replace actions/checkout with pure git mirror (no node required)\",
-      \"content\": \"${ENCODED}\",
-      \"sha\": \"${SHA}\"
-    }" | python3 -c "import sys,json; d=json.load(sys.stdin); print('  OK' if 'content' in d else '  ERROR: '+str(d))"
+    -d "{\"message\":\"fix: replace actions/checkout with pure git mirror (no node required)\",\"content\":\"${ENCODED}\",\"sha\":\"${SHA}\"}")
+
+  echo "$RESULT" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    if 'content' in d:
+        print('  OK')
+    else:
+        print('  ERROR:', d.get('message', str(d)))
+except Exception as e:
+    print('  ERROR parsing response:', e)
+"
 done
 
 echo ""
