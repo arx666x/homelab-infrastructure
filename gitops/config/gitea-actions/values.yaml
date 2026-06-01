@@ -18,6 +18,15 @@ statefulset:
     registry: docker.io
     repository: gitea/act_runner
     tag: "nightly"
+    config: |
+      log:
+        level: info
+      cache:
+        enabled: false
+      container:
+        require_docker: true
+        docker_timeout: 300s
+        workdir_parent: /tmp/act
   dind:
     extraEnvs:
       - name: DOCKER_IPTABLES_LEGACY
