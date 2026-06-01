@@ -1,5 +1,4 @@
 #!/bin/bash
-set -euo pipefail
 
 GITEA_URL="https://git.reckeweg.io"
 GITEA_TOKEN="${GITEA_TOKEN:?GITEA_TOKEN env var required}"
@@ -32,30 +31,40 @@ jobs:
             "https://x-access-token:${SAILPOINT_TOKEN}@github.com/achim-reckeweg-sp/${SHORT_NAME}.git"
 '
 
-# Raw API response for debugging
-RAW=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" \
+echo "Step 1: Fetching repo list from ${GITEA_URL}..."
+RAW=$(curl -s --max-time 10 \
+  -H "Authorization: token ${GITEA_TOKEN}" \
   "${GITEA_URL}/api/v1/user/repos?limit=50")
+CURL_EXIT=$?
 
-if [ -z "$RAW" ]; then
-  echo "ERROR: curl returned empty response. Check network/URL."
+echo "curl exit code: ${CURL_EXIT}"
+echo "Response length: ${#RAW} bytes"
+echo "Response preview: ${RAW:0:200}"
+echo ""
+
+if [ $CURL_EXIT -ne 0 ]; then
+  echo "ERROR: curl failed with exit code ${CURL_EXIT}"
   exit 1
 fi
 
-# Check if valid JSON
-echo "$RAW" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null || {
-  echo "ERROR: API returned non-JSON:"
-  echo "$RAW" | head -5
+if [ -z "$RAW" ]; then
+  echo "ERROR: empty response"
   exit 1
-}
+fi
 
+echo "Step 2: Parsing repo list..."
 REPOS=$(echo "$RAW" | python3 -c "
 import sys, json
-repos = json.load(sys.stdin)
-if isinstance(repos, list):
-    for r in repos:
-        print(r['full_name'])
-else:
-    print('Unexpected response:', repos, file=sys.stderr)
+try:
+    data = json.load(sys.stdin)
+    if isinstance(data, list):
+        for r in data:
+            print(r['full_name'])
+    else:
+        print('ERROR: unexpected JSON structure:', type(data).__name__, file=sys.stderr)
+        sys.exit(1)
+except json.JSONDecodeError as e:
+    print('ERROR: invalid JSON:', e, file=sys.stderr)
     sys.exit(1)
 ")
 
@@ -64,18 +73,19 @@ if [ -z "$REPOS" ]; then
   exit 0
 fi
 
-echo "Repos found:"
+echo "Repos:"
 echo "$REPOS"
 echo ""
 
 ENCODED=$(python3 -c "
 import base64, sys
-content = sys.stdin.read()
-print(base64.b64encode(content.encode()).decode())
+print(base64.b64encode(sys.stdin.read().encode()).decode())
 " <<< "$NEW_WORKFLOW")
 
 for REPO in $REPOS; do
-  RESPONSE=$(curl -s -H "Authorization: token ${GITEA_TOKEN}" \
+  echo "Checking ${REPO}..."
+  RESPONSE=$(curl -s --max-time 10 \
+    -H "Authorization: token ${GITEA_TOKEN}" \
     "${GITEA_URL}/api/v1/repos/${REPO}/contents/${WORKFLOW_PATH}")
 
   SHA=$(echo "$RESPONSE" | python3 -c "
@@ -85,16 +95,15 @@ try:
     print(d.get('sha', ''))
 except:
     print('')
-" 2>/dev/null)
+")
 
   if [ -z "$SHA" ]; then
-    echo "  SKIP ${REPO} — workflow not found"
+    echo "  SKIP — workflow not found"
     continue
   fi
 
-  echo "  UPDATE ${REPO}"
-
-  RESULT=$(curl -s -X PUT \
+  echo "  Updating (sha=${SHA})..."
+  RESULT=$(curl -s --max-time 10 -X PUT \
     -H "Authorization: token ${GITEA_TOKEN}" \
     -H "Content-Type: application/json" \
     "${GITEA_URL}/api/v1/repos/${REPO}/contents/${WORKFLOW_PATH}" \
@@ -104,14 +113,10 @@ except:
 import sys, json
 try:
     d = json.load(sys.stdin)
-    if 'content' in d:
-        print('  OK')
-    else:
-        print('  ERROR:', d.get('message', str(d)))
+    print('  OK' if 'content' in d else '  ERROR: ' + d.get('message', str(d)))
 except Exception as e:
-    print('  ERROR parsing response:', e)
+    print('  ERROR:', e)
 "
 done
 
-echo ""
 echo "Done."
