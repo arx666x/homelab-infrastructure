@@ -251,17 +251,20 @@ if ($Phase -eq 3) {
         Write-Skip "CA laeuft bereits (CertSvc: Running)"
     }
 
-    # CA-Zertifikat exportieren
+    # Sicherstellen dass CertSvc laeuft bevor wir Zertifikate anfordern
+    Start-Sleep -Seconds 5
     $caExportPath = "C:\certs"
     New-Item -Path $caExportPath -ItemType Directory -Force | Out-Null
-    Start-Sleep -Seconds 5
 
-    $caCert = Get-ChildItem Cert:\LocalMachine\CA |
+    # ---- CA-Zertifikat exportieren ----
+    Write-Step "CA-Zertifikat exportieren"
+
+    $caCert = Get-ChildItem Cert:\LocalMachine\Root |
         Where-Object { $_.Subject -like "*$($config.CAName)*" } |
         Select-Object -First 1
 
     if ($null -eq $caCert) {
-        $caCert = Get-ChildItem Cert:\LocalMachine\Root |
+        $caCert = Get-ChildItem Cert:\LocalMachine\CA |
             Where-Object { $_.Subject -like "*$($config.CAName)*" } |
             Select-Object -First 1
     }
@@ -274,6 +277,130 @@ if ($Phase -eq 3) {
         Write-OK "CA-Zertifikat exportiert: $caExportPath\ca.cer"
     } else {
         Write-Warn "CA-Zertifikat nicht im Store gefunden - nach Neustart erneut pruefen"
+    }
+
+    # ---- LDAPS-Zertifikat mit expliziten SANs ausstellen ----
+    #
+    # Warum explizit statt Auto-Enrollment?
+    #   AD CS stellt beim DC-Enrollment automatisch ein Kerberos Authentication
+    #   Zertifikat aus, dessen SANs nur den aktuellen FQDN enthalten.
+    #   Java prueft bei LDAPS den Hostnamen gegen die SANs - schlaegt fehl wenn
+    #   IIQ den DC unter einem anderen Namen erreicht (z.B. cluster-intern
+    #   ad.seri.svc.cluster.local statt ad-resource.seri.sailpointdemo.com).
+    #   Wir stellen daher ein eigenes Zertifikat mit allen bekannten SANs aus.
+    #
+    Write-Step "LDAPS-Zertifikat mit SANs ausstellen"
+
+    # Alle SANs die das LDAPS-Zertifikat erhalten soll.
+    # DNS-Namen: alle Hostnamen unter denen IIQ den DC ansprechen wird.
+    # Erweiterbar ohne Rebuild des seri-iiq Images - nur Windows-Image neu bauen.
+    $ldapsSanDns = @(
+        # Externer FQDN (sailpointdemo.com Domain)
+        "$($config.ComputerName).$($config.DomainName)",   # ad-resource.seri.sailpointdemo.com
+        "*.$($config.DomainName)",                          # *.seri.sailpointdemo.com (Wildcard)
+        # Kubernetes cluster-intern (Service-DNS aller Namespaces)
+        "windows-ad.windows-ad.svc.cluster.local",          # Service FQDN im windows-ad Namespace
+        "windows-ad",                                        # Kurzname
+        # Colima / lokales K8s (svc.cluster.local Default)
+        "ad.seri.svc.cluster.local",                        # historisch genutzter Kurzname
+        # Hostname ohne Domain (NetBIOS-kompatibel)
+        $config.ComputerName                                 # ad-resource
+    )
+
+    # INF-Datei fuer certreq - definiert Zertifikatsanforderung mit SANs
+    $sanEntries = ($ldapsSanDns | ForEach-Object { "dns=$_" }) -join "&"
+
+    $infContent = @"
+[Version]
+Signature="`$Windows NT`$"
+
+[NewRequest]
+Subject          = "CN=$($config.ComputerName).$($config.DomainName)"
+KeySpec          = 1
+KeyLength        = 2048
+Exportable       = TRUE
+MachineKeySet    = TRUE
+SMIME            = FALSE
+PrivateKeyArchive = FALSE
+UserProtected    = FALSE
+UseExistingKeySet = FALSE
+ProviderName     = "Microsoft RSA SChannel Cryptographic Provider"
+ProviderType     = 12
+RequestType      = CMC
+KeyUsage         = 0xa0
+HashAlgorithm    = SHA256
+
+[EnhancedKeyUsageExtension]
+OID = 1.3.6.1.5.5.7.3.1  ; Server Authentication
+OID = 1.3.6.1.5.5.7.3.2  ; Client Authentication
+
+[Extensions]
+; Subject Alternative Names
+2.5.29.17 = "{text}"
+_continue_ = "$sanEntries"
+
+[RequestAttributes]
+CertificateTemplate = WebServer
+"@
+
+    $infPath = "$caExportPath\ldaps-request.inf"
+    $reqPath = "$caExportPath\ldaps-request.req"
+    $crtPath = "$caExportPath\ldaps.crt"
+    $rspPath = "$caExportPath\ldaps.rsp"
+
+    [System.IO.File]::WriteAllText($infPath, $infContent, [System.Text.Encoding]::ASCII)
+
+    # Zertifikatsanforderung erstellen
+    $certreqNew = certreq -new -machine -q $infPath $reqPath 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "certreq -new Fehler (ExitCode $LASTEXITCODE): $certreqNew"
+    } else {
+        Write-OK "Zertifikatsanforderung erstellt: $reqPath"
+    }
+
+    # Bei der lokalen CA einreichen und sofort ausstellen
+    $caName = "$($config.ComputerName)\$($config.CAName)"
+    $certreqSubmit = certreq -submit -machine -q -config $caName $reqPath $crtPath 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "certreq -submit Fehler (ExitCode $LASTEXITCODE): $certreqSubmit"
+    } else {
+        Write-OK "Zertifikat ausgestellt: $crtPath"
+    }
+
+    # Zertifikat in den lokalen Zertifikatstore importieren (damit NTDS es findet)
+    $certreqAccept = certreq -accept -machine -q $crtPath 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "certreq -accept Fehler (ExitCode $LASTEXITCODE): $certreqAccept"
+    } else {
+        Write-OK "Zertifikat in LocalMachine\My importiert"
+    }
+
+    # Ausstehende Anforderungen in der CA genehmigen falls noetig
+    # (bei EnterpriseRootCA mit WebServer-Template normalerweise automatisch)
+    $pending = certutil -view -restrict "Disposition=9" -out "RequestID,CommonName" 2>&1
+    if ($pending -match "RequestId") {
+        Write-Warn "Offene CA-Anforderungen gefunden - bitte manuell genehmigen oder Template-Permissions pruefen"
+        Write-Host $pending -ForegroundColor Yellow
+    }
+
+    # SANs im exportierten Zertifikat zur Verifikation ausgeben
+    Write-Step "Verifikation: SANs im ausgestellten LDAPS-Zertifikat"
+    $ldapsCert = Get-ChildItem Cert:\LocalMachine\My |
+        Where-Object { $_.Subject -like "*$($config.ComputerName)*" -and $_.EnhancedKeyUsageList.ObjectId -contains "1.3.6.1.5.5.7.3.1" } |
+        Sort-Object NotBefore -Descending |
+        Select-Object -First 1
+
+    if ($ldapsCert) {
+        $sanExt = $ldapsCert.Extensions | Where-Object { $_.Oid.Value -eq "2.5.29.17" }
+        if ($sanExt) {
+            Write-OK "SANs im LDAPS-Zertifikat:"
+            $sanExt.Format($true) -split "`n" | Where-Object { $_ -ne "" } | ForEach-Object {
+                Write-Host "    $_" -ForegroundColor White
+            }
+        }
+        Write-OK "Gueltig bis: $($ldapsCert.NotAfter)"
+    } else {
+        Write-Warn "LDAPS-Zertifikat nicht im Store gefunden - NTDS-Neustart abwarten"
     }
 
     # ---- NTDS neu starten damit LDAPS aktiv wird ----
@@ -425,8 +552,15 @@ if ($Phase -eq 3) {
     Write-Host "Service Account : ldap-service@$($config.DomainName)" -ForegroundColor White
     Write-Host "  Passwort      : ServiceAcc@SERI2025!  <-- AENDERN!" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "CA-Zertifikat   : C:\certs\ca.cer" -ForegroundColor White
+    Write-Host "CA-Zertifikat   : C:\certs\ca.cer  (→ seri-iiq Truststore)" -ForegroundColor White
     Write-Host "CA Base64       : C:\certs\ca.crt.b64" -ForegroundColor White
+    Write-Host "LDAPS-Cert INF  : C:\certs\ldaps-request.inf" -ForegroundColor White
+    Write-Host "LDAPS-Cert CRT  : C:\certs\ldaps.crt" -ForegroundColor White
+    Write-Host ""
+    Write-Host "LDAPS SANs:" -ForegroundColor Cyan
+    foreach ($san in $ldapsSanDns) {
+        Write-Host "    dns=$san" -ForegroundColor White
+    }
     Write-Host ""
     Write-Host "RDP             : Port 3389, NLA deaktiviert" -ForegroundColor White
     Write-Host "LDAPS           : Port 636" -ForegroundColor White
@@ -434,11 +568,14 @@ if ($Phase -eq 3) {
     Write-Host "NAECHSTE SCHRITTE:" -ForegroundColor Cyan
     Write-Host "  1. VirtIO Treiber in System32\drivers pruefen (Warnungen oben)" -ForegroundColor White
     Write-Host "  2. Windows Updates installieren" -ForegroundColor White
-    Write-Host "  3. C:\certs\ca.cer auf Synology NAS kopieren" -ForegroundColor White
+    Write-Host "  3. C:\certs\ca.cer auf Synology NAS kopieren (fuer seri-iiq Image-Build)" -ForegroundColor White
     Write-Host "  4. VM herunterfahren: Stop-Computer -Force" -ForegroundColor White
     Write-Host "  5. Image komprimieren und auf Synology hochladen" -ForegroundColor White
     Write-Host "  6. ArgoCD sync: argocd app sync windows-ad" -ForegroundColor White
     Write-Host ""
-    Write-Warn "CA-Zertifikat als Kubernetes Secret speichern!"
+    Write-Warn "Nur ca.cer wird im seri-iiq Image-Build benoetigt (keytool Import)!"
+    Write-Warn "Das LDAPS-Cert (ldaps.crt) bleibt im Windows-Image - nicht exportieren."
+    Write-Host ""
+    Write-Warn "CA-Zertifikat als Kubernetes Secret speichern (optional, fuer Init-Jobs):"
     Write-Warn "kubectl create secret generic windows-ad-ca --from-file=ca.crt=ca.cer -n windows-ad"
 }
