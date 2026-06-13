@@ -1,6 +1,6 @@
 #!/bin/bash
 
-GITEA_URL="https://git.reckeweg.io"
+GITEA_URL="https://gitea.reckeweg.io"
 GITEA_TOKEN="${GITEA_TOKEN:?GITEA_TOKEN env var required}"
 WORKFLOW_PATH=".gitea/workflows/mirror-to-sailpoint.yml"
 
