@@ -1,4 +1,4 @@
-# Runbook: kube-prometheus-stack Upgrade 55.5.0 → 85.1.3
+# Runbook: kube-prometheus-stack Upgrade 55.5.0 → 86.2.0
 
 **Umgebung:** homelab k3s-Cluster (`reckeweg.io`)  
 **Namespace:** `monitoring`  
@@ -40,7 +40,8 @@ Jeder Major-Bump kann CRD-Änderungen enthalten. Die Reihenfolge ist zwingend:
 | 13      | 81.x → 82.x  | v0.89.0             | CRD-Update   |
 | 14      | 82.x → 84.5.0| v0.90.1             | CRD-Update   |
 | 15      | 84.5.0 → 85.1.3 | v0.90.1 (unverändert) | Distroless Images Default |
-| 16 (Ziel) | 85.1.3 → 85.3.3 | v0.90.1 (unverändert) | Maintenance (Grafana 12.4.1) |
+| 16      | 85.1.3 → 85.3.3 | v0.90.1 (unverändert) | Maintenance (Grafana 12.4.1) |
+| 17 (Ziel) | 85.3.3 → 86.2.0 | **v0.91.0**           | CRD-Update + Prometheus 3.12 |
 
 > **Hinweis:** Zwischen den explizit genannten Breaking-Change-Versionen kann man
 > innerhalb einer Major-Linie (z. B. 55.x → 61.x) direkt springen, da dort keine
@@ -620,7 +621,7 @@ argocd app wait kube-prometheus-stack --health --timeout 300
 
 ---
 
-## Station 15 (Final): Chart 85.1.3 → 85.3.3 (Maintenance)
+## Station 15: Chart 85.1.3 → 85.3.3 (Maintenance)
 
 > ✅ **Abgeschlossen am 2026-05-26** — `targetRevision: "85.3.3"` in `gitops/apps/monitoring.yaml` gesetzt.
 
@@ -643,6 +644,66 @@ git push
 
 argocd app sync kube-prometheus-stack --timeout 300
 argocd app wait kube-prometheus-stack --health --timeout 300
+```
+
+---
+
+## Station 16 (Final): Chart 85.3.3 → 86.2.0 (Operator v0.91.0 + Prometheus 3.12)
+
+> ✅ **Abgeschlossen am 2026-06-14** — `targetRevision: "86.2.0"` in `gitops/apps/monitoring.yaml` gesetzt.
+
+### CRD-Update erforderlich: prometheus-operator v0.90.1 → v0.91.0
+
+**Neue/geänderte CRDs in v0.91.0:**
+- `ScrapeConfig`: Mutual-Exclusion-Enforcement für `basicAuth`/`authorization`/`oauth2`, neues `healthFilter`-Feld
+- `AlertmanagerConfig`: Neue Validierungen für VictorOps, OpsGenie, Email; Email-Threading
+- `Prometheus`/`PrometheusAgent`: Neue Feature Gates `PrometheusShardRetentionPolicy`, `PrometheusTopologySharding`; neues SigV4-Feld `externalId`
+- `ThanosRuler`: `cipherSuites` und `curves` für Thanos Sidecars
+
+> **Hinweis:** `monitoring.yaml` hat `skipCrds: false` und `ServerSideApply=true` gesetzt.
+> ArgoCD managed die CRDs als Teil des Sync. Falls ArgoCD beim Sync auf CRD-Konflikte
+> läuft, CRDs manuell pre-applyen (siehe unten).
+
+### Schritt 16.1: CRDs für v0.91.0 (falls ArgoCD-Sync fehlschlägt)
+
+```bash
+BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.91.0/example/prometheus-operator-crd"
+for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+done
+```
+
+### Schritt 16.2: Ziel in Git setzen
+
+```bash
+# targetRevision: "86.2.0"
+git add gitops/apps/monitoring.yaml
+git commit -m "chore(monitoring): upgrade kube-prometheus-stack 85.3.3 → 86.2.0 (operator v0.91.0)"
+git push
+
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
+```
+
+### Komponentenupdates in 86.x
+
+| Komponente | Alt | Neu |
+|---|---|---|
+| prometheus-operator | v0.90.1 | v0.91.0 |
+| Prometheus | 3.11.x (distroless) | **3.12.0** (distroless) |
+| Alertmanager | v0.32.1 | v0.32.2 |
+| Grafana (chart) | 12.4.1 | 12.4.2 |
+
+### Neue optionale Konfiguration (nicht Breaking)
+
+```yaml
+# Neu in 86.x — PromQL-Optionen für den Admission-Webhook
+prometheusOperator:
+  admissionWebhooks:
+    deployment:
+      promqlOptions: []
+      # Mögliche Werte: experimental-functions, duration-expression-parsing,
+      # extended-range-selectors, binop-fill-modifiers
 ```
 
 ---
@@ -676,12 +737,13 @@ kubectl get alertmanager -n monitoring
 argocd app get kube-prometheus-stack
 ```
 
-**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 85.3.3:**
-- Prometheus-Operator: `v0.90.1`
-- Prometheus: `3.x` (Distroless-Image)
-- Grafana: `12.4.1`, HTTP Status: `200`
+**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 86.2.0:**
+- Prometheus-Operator: `v0.91.0`
+- Prometheus: `3.12.0` (Distroless-Image)
+- Alertmanager: `v0.32.2`
+- Grafana: `12.4.2`, HTTP Status: `200`
 - Alle 10 CRDs: `Healthy`
-- ArgoCD: `Synced to 85.3.3`, `Health Status: Healthy`
+- ArgoCD: `Synced to 86.2.0`, `Health Status: Healthy`
 
 ### Auto-Sync wieder aktivieren (optional)
 
