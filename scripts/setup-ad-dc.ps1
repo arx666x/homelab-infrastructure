@@ -358,7 +358,7 @@ CertificateTemplate = WebServer
 
     # Bei der lokalen CA einreichen und sofort ausstellen
     $caName = "$($config.ComputerName)\$($config.CAName)"
-    $certreqSubmit = certreq -submit -machine -q -config $caName $reqPath $crtPath 2>&1
+    $certreqSubmit = certreq -submit -q -config $caName $reqPath $crtPath 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Warn "certreq -submit Fehler (ExitCode $LASTEXITCODE): $certreqSubmit"
     } else {
