@@ -298,11 +298,9 @@ if ($Phase -eq 3) {
         # Externer FQDN (sailpointdemo.com Domain)
         "$($config.ComputerName).$($config.DomainName)",   # ad-resource.seri.sailpointdemo.com
         "*.$($config.DomainName)",                          # *.seri.sailpointdemo.com (Wildcard)
-        # Kubernetes cluster-intern (Service-DNS aller Namespaces)
-        "windows-ad.windows-ad.svc.cluster.local",          # Service FQDN im windows-ad Namespace
+        # Kubernetes cluster-intern
+        "windows-ad.seri.svc.cluster.local",                # Service FQDN im seri Namespace
         "windows-ad",                                        # Kurzname
-        # Colima / lokales K8s (svc.cluster.local Default)
-        "ad.seri.svc.cluster.local",                        # historisch genutzter Kurzname
         # Hostname ohne Domain (NetBIOS-kompatibel)
         $config.ComputerName                                 # ad-resource
     )
