@@ -203,6 +203,11 @@ In Windows PowerShell (`10.0.2.2` ist die QEMU-Host-IP von innen erreichbar):
 Invoke-WebRequest http://10.0.2.2:8080/setup-ad-dc.ps1 -OutFile C:\setup-ad-dc.ps1
 ```
 
+ExecutionPolicy für diese Session setzen:
+```powershell
+      Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+```
+
 Skript ausführen:
 
 ```powershell
