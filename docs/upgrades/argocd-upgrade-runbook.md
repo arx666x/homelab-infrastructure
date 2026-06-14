@@ -623,6 +623,7 @@ Danach Affinity und Resources mit den sicheren Patch-Befehlen oben neu setzen.
 | 2026-05-04 | 3.2.10 | 3.3.9 | ✅ | `--server-side --force-conflicts` Pflicht; NodeAffinity+Limits gesetzt |
 | 2026-05-18 | 3.3.9 | 3.4.1 | ✅ | Kein Handlungsbedarf; CLI via brew (3.4.2) |
 | 2026-05-18 | 3.4.1 | 3.4.2 | ✅ | Patch-Release, kein Breaking Change; CLI via brew bereits aktuell |
+| 2026-06-14 | 3.4.2 | 3.4.3 | ✅ | Patch-Release; Security-Fix dompurify CVE-2026-41240; kein Breaking Change |
 
 ---
 
@@ -736,3 +737,32 @@ argocd version --client
 | Datum | Von | Auf | Ergebnis | Besonderheiten |
 |---|---|---|---|---|
 | 2026-05-18 | 3.3.9 | 3.4.1 | ✅ | Kein Handlungsbedarf; CLI via brew (3.4.2) |
+
+---
+
+## Phase 10: Patch-Hop 3.4.2 → 3.4.3
+
+**Durchgeführt:** 2026-06-14  
+**Status:** ✅ Erfolgreich
+
+Patch-Release — kein Breaking Change. Enthält Security-Fix für dompurify (CVE-2026-41240) und diverse Bugfixes (Race Condition im Application Controller, nil-pointer in gitops-engine, `app wait` Verhalten).
+
+```bash
+kubectl apply -n argocd \
+  --server-side \
+  --force-conflicts \
+  -f "https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.3/manifests/install.yaml"
+
+kubectl rollout status deployment/argocd-server              -n argocd --timeout=300s
+kubectl rollout status deployment/argocd-repo-server         -n argocd --timeout=300s
+kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout=300s
+
+# Version bestätigen
+kubectl get deployment argocd-server -n argocd \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+# Erwartung: quay.io/argoproj/argocd:v3.4.3
+
+# CLI (via brew, sobald Paket verfügbar)
+brew upgrade argocd
+argocd version --client
+```
