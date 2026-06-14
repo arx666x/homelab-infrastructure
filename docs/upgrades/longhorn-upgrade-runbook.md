@@ -1,9 +1,9 @@
-# Longhorn Upgrade Runbook: 1.5.3 → 1.11.2
+# Longhorn Upgrade Runbook: 1.5.3 → 1.12.0
 
 **Cluster:** homelab-infrastructure (seri-k8s)  
 **Methode:** ArgoCD / GitOps (`gitops/apps/longhorn.yaml`)  
-**Upgrade-Pfad:** `1.5.3 → 1.6.2 → 1.7.3 → 1.8.2 → 1.9.2 → 1.10.2 → 1.11.1 → 1.11.2` (sieben Hops)  
-**Durchgeführt:** 2026-04-30 (1.5.3→1.7.3) und 2026-05-03 (1.7.3→1.11.1) sowie 2026-05-05 (1.11.1→1.11.2)
+**Upgrade-Pfad:** `1.5.3 → 1.6.2 → 1.7.3 → 1.8.2 → 1.9.2 → 1.10.2 → 1.11.1 → 1.11.2 → 1.12.0` (acht Hops)  
+**Durchgeführt:** 2026-04-30 (1.5.3→1.7.3) und 2026-05-03 (1.7.3→1.11.1) sowie 2026-05-05 (1.11.1→1.11.2) und 2026-06-14 (1.11.2→1.12.0)
 
 ---
 
@@ -475,6 +475,48 @@ kubectl get engines.longhorn.io -n longhorn-system -o json | kubectl apply -f -
 
 ---
 
+## Hop 7: 1.11.2 → 1.12.0
+
+> ℹ️ Direkter Hop erlaubt (Minor-Version-Upgrade von 1.11.x → 1.12.x).  
+> Keine Breaking Changes für V1-only-Setups. Kein Webhook-Umbau, keine CRD-Migration nötig.
+
+**Recherchierte Risiken:**
+- Kein CRD-Timing-Bug bekannt (anders als Hop 5 und 6)
+- `data-engine-cpu-mask` Default ändert sich auf 2 Cores — betrifft nur V2, irrelevant für diesen Cluster
+- CSI Storage Capacity Bug (Zero-Capacity-Knoten) ist **gefixt** — kein Workaround nötig
+- Downgrade nach erfolgreichem Upgrade dauerhaft gesperrt
+
+Standard-Ablauf mit `sed -i '' 's/1.11.2/1.12.0/'`:
+
+```bash
+sed -i '' 's/targetRevision: "1.11.2"/targetRevision: "1.12.0"/' gitops/apps/longhorn.yaml
+grep -n "targetRevision" gitops/apps/longhorn.yaml
+
+git add gitops/apps/longhorn.yaml
+git commit -m "chore: upgrade longhorn 1.11.2 → 1.12.0"
+git push gitea main && git push github main
+```
+
+Dann Standard-Ablauf: ArgoCD Sync → Rollout abwarten → Engine-Upgrade im UI → Validierung.
+
+### Abschlussvalidierung
+
+```bash
+# Manager-Version
+kubectl get pods -n longhorn-system -l app=longhorn-manager \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+# Erwartung: longhornio/longhorn-manager:v1.12.0
+
+# Alle Volumes healthy
+kubectl get volumes.longhorn.io -n longhorn-system \
+  -o custom-columns="NAME:.metadata.name,STATE:.status.state,ROBUSTNESS:.status.robustness"
+
+# Engine Images — alte Version REFCOUNT=0
+kubectl get engineimage -n longhorn-system
+```
+
+---
+
 ## Zeitplan (tatsächlich benötigt)
 
 | Hop | Datum | Dauer |
@@ -486,4 +528,5 @@ kubectl get engines.longhorn.io -n longhorn-system -o json | kubectl apply -f -
 | Hop 5: 1.9.2 → 1.10.2 | 2026-05-03 | ~90 min (inkl. Volume-Feld-Bug) |
 | Hop 6: 1.10.2 → 1.11.1 | 2026-05-03 | ~120 min (inkl. Node-Status-Bug) |
 | ArgoCD CRD Webhook-Fix | 2026-05-03 | ~5 min |
-| **Gesamt** | | **~7h** |
+| Hop 7: 1.11.2 → 1.12.0 | 2026-06-14 | — |
+| **Gesamt** | | **~7h+** |
