@@ -203,6 +203,15 @@ if ($Phase -eq 3) {
     Write-Step "Phase 3: CA, LDAPS, RDP und Service Account konfigurieren"
     Remove-PhaseTask -p 3
 
+    # Uhr synchronisieren bevor Zertifikate ausgestellt werden
+    Write-Step "Systemuhr synchronisieren"
+    try {
+        w32tm /resync /force | Out-Null
+        Write-OK "Uhr synchronisiert: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
+    } catch {
+        Write-Warn "Uhrsync fehlgeschlagen (kein NTP erreichbar?) - Zertifikat notBefore koennte in der Zukunft liegen"
+    }
+
     # AD erreichbar?
     try {
         $domain = Get-ADDomain
