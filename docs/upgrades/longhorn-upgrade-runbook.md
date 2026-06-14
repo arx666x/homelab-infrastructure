@@ -528,5 +528,5 @@ kubectl get engineimage -n longhorn-system
 | Hop 5: 1.9.2 → 1.10.2 | 2026-05-03 | ~90 min (inkl. Volume-Feld-Bug) |
 | Hop 6: 1.10.2 → 1.11.1 | 2026-05-03 | ~120 min (inkl. Node-Status-Bug) |
 | ArgoCD CRD Webhook-Fix | 2026-05-03 | ~5 min |
-| Hop 7: 1.11.2 → 1.12.0 | 2026-06-14 | — |
+| Hop 7: 1.11.2 → 1.12.0 | 2026-06-14 | problemlos, kein Workaround nötig |
 | **Gesamt** | | **~7h+** |
