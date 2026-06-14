@@ -2,7 +2,7 @@
 
 **Ziel:** KubeVirt v1.3.1 → v1.8.2 | CDI v1.59.0 → v1.65.0  
 **Methode:** Schrittweise über Minor-Versionen, GitOps via ArgoCD  
-**Letzte Aktualisierung:** 2026-05-18 (Schritt 5: v1.7.3 → v1.8.2)
+**Letzte Aktualisierung:** 2026-06-14 (Schritt 6: v1.8.2 → v1.8.3)
 
 ---
 
@@ -23,7 +23,8 @@
 | 2 | v1.4.0 → **v1.5.2** | v1.60.5 → **v1.61.5** | ✅ abgeschlossen |
 | 3 | v1.5.2 → **v1.6.5** | v1.61.5 → **v1.63.1** | ✅ abgeschlossen |
 | 4 | v1.6.5 → **v1.7.3** | v1.63.1 → **v1.65.0** | ✅ abgeschlossen |
-| 5 | v1.7.3 → **v1.8.2** | v1.65.0 (keine Änderung) | 🔄 aktuell |
+| 5 | v1.7.3 → **v1.8.2** | v1.65.0 (keine Änderung) | ✅ abgeschlossen |
+| 6 | v1.8.2 → **v1.8.3** | v1.65.0 (keine Änderung) | 🔄 aktuell |
 
 > **Warum diese Patch-Versionen?**  
 > Immer die letzte verfügbare Patch-Version innerhalb eines Minor-Zweigs –
@@ -406,6 +407,56 @@ Damit sind die technischen Grundlagen verbessert. Für den Betrieb auf Colima (A
 
 ---
 
+## Schritt 6: v1.8.3 / CDI v1.65.0 (Patch-Release, 2026-06-14)
+
+Reiner Bugfix/Security-Patch, keine Breaking Changes.
+
+> **Security-Fixes (relevant):**
+> - Symlink-Traversal in VMExport dir handler behoben
+> - virt-api: Autorisierungsfehler bei tiefen Subresource-Pfaden behoben (inkorrekte Access Checks)
+> - CVE GHSA-p77j-4mvh-x3m3 gepatcht (gRPC-Dependency)
+>
+> **Weitere Fixes:**
+> - VMI-Status meldete fälschlicherweise Pod-IPv6 statt Guest-IPv6
+> - Cross-Namespace Live-Migration auf IPv6-Clustern repariert
+> - virt-controller DRA Claim Rendering für GPU/HostDevice
+> - Doppelte `kubevirt_vmi_info`-Metriken während Live-Migration behoben
+> - Deprecated: `kubevirt_vm_created_total`, `kubevirt_vm_created_by_pod_total`
+
+### 6a. Datei anpassen
+
+**`gitops/config/kubevirt/kustomization.yaml`**
+```yaml
+resources:
+  - https://github.com/kubevirt/kubevirt/releases/download/v1.8.3/kubevirt-operator.yaml
+  - kubevirt-cr.yaml
+```
+
+### 6b. Commit & Push
+
+```bash
+git add gitops/config/kubevirt/kustomization.yaml
+git commit -m "chore: upgrade KubeVirt v1.8.2→v1.8.3"
+git push
+```
+
+### 6c. ArgoCD sync
+
+```bash
+argocd app sync kubevirt-operator
+```
+
+### 6d. Verify
+
+```bash
+kubectl get kubevirt kubevirt -n kubevirt -o jsonpath='{.status.observedKubeVirtVersion}'
+# Erwarteter Output: v1.8.3
+
+kubectl get pods -n kubevirt -o wide
+```
+
+---
+
 ## Troubleshooting
 
 ### ArgoCD OutOfSync nach Upgrade
@@ -457,7 +508,8 @@ Upgrade-Abschluss gefixt. Reihenfolge dann:
 | KubeVirt Operator | v1.5.2 | `https://github.com/kubevirt/kubevirt/releases/download/v1.5.2/kubevirt-operator.yaml` |
 | KubeVirt Operator | v1.6.5 | `https://github.com/kubevirt/kubevirt/releases/download/v1.6.5/kubevirt-operator.yaml` |
 | KubeVirt Operator | v1.7.3 | `https://github.com/kubevirt/kubevirt/releases/download/v1.7.3/kubevirt-operator.yaml` |
-| KubeVirt Operator | **v1.8.2** | `https://github.com/kubevirt/kubevirt/releases/download/v1.8.2/kubevirt-operator.yaml` |
+| KubeVirt Operator | v1.8.2 | `https://github.com/kubevirt/kubevirt/releases/download/v1.8.2/kubevirt-operator.yaml` |
+| KubeVirt Operator | **v1.8.3** | `https://github.com/kubevirt/kubevirt/releases/download/v1.8.3/kubevirt-operator.yaml` |
 | CDI Operator | v1.60.5 | `https://github.com/kubevirt/containerized-data-importer/releases/download/v1.60.5/cdi-operator.yaml` |
 | CDI Operator | v1.61.5 | `https://github.com/kubevirt/containerized-data-importer/releases/download/v1.61.5/cdi-operator.yaml` |
 | CDI Operator | v1.63.1 | `https://github.com/kubevirt/containerized-data-importer/releases/download/v1.63.1/cdi-operator.yaml` |
