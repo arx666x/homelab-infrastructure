@@ -766,3 +766,44 @@ kubectl get deployment argocd-server -n argocd \
 brew upgrade argocd
 argocd version --client
 ```
+
+---
+
+## Troubleshooting: Alle Apps `Unknown` nach ArgoCD-Upgrade
+
+**Symptom:** Nach einem ArgoCD-Upgrade zeigen alle oder viele Apps den Sync-Status `Unknown` (aber `Healthy`). In den App-Conditions steht:
+
+```
+Failed to load target state: failed to generate manifest for source 1 of 1:
+rpc error: code = Unknown desc = failed to list refs:
+ssh: handshake failed: knownhosts: key is unknown
+```
+
+**Ursache:** ArgoCD-Upgrades via `kubectl apply` setzen die `argocd-ssh-known-hosts-cm` auf den Installations-Default zurück. Der Default enthält nur GitHub, GitLab, Bitbucket und Azure DevOps — **nicht** `git.reckeweg.io`. ArgoCD kann dann nicht mehr auf das Gitea-Repo zugreifen.
+
+**Henne-Ei-Problem:** Der Key liegt in `gitops/config/argocd/argocd-ssh-known-hosts-cm.yaml` im Git-Repo — aber ArgoCD kann ihn nicht aus Git laden, weil der Key für den Git-Zugriff fehlt. Der Cluster steckt fest.
+
+> **Passiert:** 2026-06-14 nach dem Upgrade auf v3.4.3
+
+### Notfall-Fix
+
+```bash
+# Schritt 1: Aktuellen Key von Gitea scannen und in den ConfigMap patchen
+GITEA_KEYS=$(ssh-keyscan git.reckeweg.io 2>/dev/null | grep -v "^#")
+CURRENT=$(kubectl get configmap argocd-ssh-known-hosts-cm -n argocd \
+  -o jsonpath='{.data.ssh_known_hosts}')
+NEW_CONTENT="${CURRENT}
+${GITEA_KEYS}"
+kubectl patch configmap argocd-ssh-known-hosts-cm -n argocd \
+  --type merge \
+  -p "{\"data\":{\"ssh_known_hosts\":$(echo "$NEW_CONTENT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}}"
+
+# Schritt 2: Repo-Server neustarten damit er den neuen ConfigMap einliest
+kubectl rollout restart deployment -n argocd argocd-repo-server
+
+# Schritt 3: Warten bis alle Apps wieder Synced sind (ca. 30–60s)
+kubectl get applications -n argocd \
+  -o custom-columns='NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status'
+```
+
+**Dauerhafter Fix:** Die Keys liegen in [`gitops/config/argocd/argocd-ssh-known-hosts-cm.yaml`](../../gitops/config/argocd/argocd-ssh-known-hosts-cm.yaml) im Repo. ArgoCD stellt den ConfigMap nach dem Notfall-Fix automatisch aus Git wieder her — aber das Henne-Ei-Problem bleibt: **Beim nächsten Upgrade muss der Notfall-Fix erneut ausgeführt werden**, bevor ArgoCD den Fix aus Git laden kann.
