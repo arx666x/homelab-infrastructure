@@ -146,6 +146,79 @@ Keine values-Anpassungen nötig. Gateway API nicht im Einsatz, daher CRD-Entfern
 
 ---
 
+## Upgrade v40.2.0 → v40.3.0 (Proxy v3.7.1 → v3.7.4)
+
+**Datum:** 2026-06-15  
+**Scope:** Homelab k3s-Cluster (`reckeweg.io`)  
+**Namespace:** `traefik`  
+**Aktuell:** Chart v40.2.0 / Traefik Proxy v3.7.1  
+**Ziel:** Chart v40.3.0 / Traefik Proxy v3.7.4  
+**Risiko:** 🟢 Niedrig — Patch-Release; nur neue Features, kein Breaking Change
+
+### Änderungen v40.2.0 → v40.3.0
+
+| Bereich | Änderung | Betrifft uns? |
+|---------|----------|---------------|
+| Proxy | Traefik Proxy v3.7.1 → v3.7.4 (Bugfixes) | Ja — neues Image |
+| accesslog | Neuer Parameter `defaultmode` für Query-Parameter-Logging | Optional, kein Handlungsbedarf |
+| kubernetesGateway | `qps` und `burst` auf Gateway-Provider konfigurierbar | Nein — Gateway API nicht im Einsatz |
+| Hub CRDs | Hub CRDs auf v1.31.0 aktualisiert | Nein — Hub nicht im Einsatz |
+| Hub | Nil-Guard-Fix für `hub.token` im Hub-License-Template | Nein — Hub nicht im Einsatz |
+
+### Durchführung
+
+**Schritt 1: CRDs vorab aktualisieren**
+
+```bash
+helm repo update
+helm show crds traefik/traefik --version 40.3.0 | \
+  kubectl apply --server-side --force-conflicts -f -
+```
+
+**Schritt 2: targetRevision in ArgoCD aktualisieren**
+
+```yaml
+# gitops/apps/traefik.yaml
+targetRevision: "40.3.0"
+```
+
+ArgoCD synct automatisch. Status prüfen:
+
+```bash
+argocd app get traefik
+argocd app wait traefik --health
+```
+
+**Schritt 3: Post-Upgrade-Verifikation**
+
+```bash
+# Traefik Proxy Version prüfen (erwartet: v3.7.4)
+kubectl -n traefik get deploy traefik -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+# Logs auf Errors prüfen
+kubectl -n traefik logs deploy/traefik --tail=100 | grep -iE "error|fatal"
+
+# Smoke-Tests
+curl -s -o /dev/null -w "%{http_code}" https://gitea.reckeweg.io
+curl -s -o /dev/null -w "%{http_code}" https://argocd.reckeweg.io
+```
+
+### Durchgeführte Änderungen
+
+**`gitops/apps/traefik.yaml`** — `targetRevision: 40.2.0` → `40.3.0`  
+Keine values-Anpassungen nötig. Hub und Gateway API nicht im Einsatz.
+
+### Checkliste v40.2.0 → v40.3.0
+
+- [ ] CRDs vorab via `helm show crds | kubectl apply --server-side` aktualisiert
+- [ ] `targetRevision: 40.3.0` in `gitops/apps/traefik.yaml` gesetzt und committed
+- [ ] ArgoCD sync erfolgreich — Healthy & Synced
+- [ ] Traefik Pod läuft mit Proxy v3.7.4 Image
+- [ ] Keine Error-Logs
+- [ ] Smoke-Tests alle ✅
+
+---
+
 ## Upgrade v26.0.0 → v39.0.8 (Proxy v2 → v3)
 
 **Datum:** 2026-05-04  
