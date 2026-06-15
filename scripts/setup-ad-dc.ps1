@@ -22,7 +22,7 @@
 
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet(1,2,3)]
+    [ValidateSet(1,2,3,4)]
     [int]$Phase,
 
     [switch]$AutoContinue
@@ -708,6 +708,13 @@ if ($Phase -eq 4) {
     Write-Host "  Serial: $serial" -ForegroundColor White
     & $iqServiceExe -m "SN:$serial"
     Write-OK "IQService konfiguriert: SN:$serial"
+
+    # StartupType auf AutomaticDelayedStart + NTDS-Abhängigkeit setzen
+    # Verhindert dass IQService beim Reboot startet bevor AD DS vollständig hochgefahren ist
+    Write-Step "IQService Starttyp und Abhaengigkeiten konfigurieren"
+    Set-Service -Name $iqServiceName -StartupType AutomaticDelayedStart
+    sc.exe config $iqServiceName depend= NTDS | Out-Null
+    Write-OK "Starttyp: AutomaticDelayedStart / Dependency: NTDS"
 
     # IQService neu starten
     Write-Step "IQService-IIQ neu starten"
