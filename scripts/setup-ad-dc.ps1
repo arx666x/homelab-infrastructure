@@ -382,6 +382,55 @@ CertificateTemplate = WebServer
         Write-OK "Zertifikat in LocalMachine\My importiert"
     }
 
+    # ---- Private Key fuer IQService-Dienstkonto zugaenglich machen ----
+    # IQService laeuft als adadmin - dieser Account braucht Lesezugriff auf den
+    # Private Key des WebServer-Zertifikats (certreq erstellt Keys nur fuer SYSTEM/Admins).
+    Write-Step "Private Key fuer IQService-Dienstkonto freigeben"
+    $webCert = Get-ChildItem Cert:\LocalMachine\My |
+        Where-Object {
+            $_.Subject -like "*$($config.ComputerName)*" -and
+            $_.EnhancedKeyUsageList.ObjectId -contains "1.3.6.1.5.5.7.3.1" -and
+            -not ($_.Extensions | Where-Object { $_.Oid.Value -eq "2.5.29.17" } |
+                  ForEach-Object { $_.Format($false) } | Select-String "DS Object Guid")
+        } |
+        Sort-Object NotBefore -Descending |
+        Select-Object -First 1
+
+    if ($webCert) {
+        try {
+            $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($webCert)
+            $keyPath = [System.IO.Path]::Combine(
+                $env:ProgramData, "Microsoft\Crypto\RSA\MachineKeys", $rsa.Key.UniqueName)
+            $acl = Get-Acl $keyPath
+            $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+                "$($config.DomainNetBIOS)\adadmin", "Read", "Allow")
+            $acl.AddAccessRule($rule)
+            Set-Acl $keyPath $acl
+            Write-OK "Private Key freigegeben: $keyPath"
+            Write-OK "WebServer-Cert Thumbprint: $($webCert.Thumbprint)"
+            Write-OK "WebServer-Cert Serial:     $($webCert.SerialNumber)"
+        } catch {
+            Write-Warn "Private Key Freigabe fehlgeschlagen: $_"
+        }
+    } else {
+        Write-Warn "WebServer-Zertifikat nicht gefunden - Private Key Freigabe uebersprungen"
+    }
+
+    # ---- hosts-Eintrag fuer IQService DNS-Aufloesung ----
+    # IQService laeuft auf dem DC selbst und versucht windows-ad.seri.svc.cluster.local
+    # aufzuloesen - dieser Name ist nur innerhalb des Kubernetes-Clusters bekannt.
+    # Der Eintrag leitet den Namen auf localhost (127.0.0.1) um, da der DC sich selbst ist.
+    Write-Step "hosts-Eintrag fuer Kubernetes-DNS-Name setzen"
+    $hostsPath = "C:\Windows\System32\drivers\etc\hosts"
+    $hostsEntry = "127.0.0.1   windows-ad.seri.svc.cluster.local"
+    $hostsContent = Get-Content $hostsPath -Raw
+    if ($hostsContent -notmatch [regex]::Escape("windows-ad.seri.svc.cluster.local")) {
+        Add-Content -Path $hostsPath -Value "`r`n$hostsEntry"
+        Write-OK "hosts-Eintrag gesetzt: $hostsEntry"
+    } else {
+        Write-Skip "hosts-Eintrag windows-ad.seri.svc.cluster.local"
+    }
+
     # Ausstehende Anforderungen in der CA genehmigen falls noetig
     # (bei EnterpriseRootCA mit WebServer-Template normalerweise automatisch)
     $pending = certutil -view -restrict "Disposition=9" -out "RequestID,CommonName" 2>&1
@@ -579,10 +628,110 @@ CertificateTemplate = WebServer
     Write-Host "  4. VM herunterfahren: Stop-Computer -Force" -ForegroundColor White
     Write-Host "  5. Image komprimieren und auf Synology hochladen" -ForegroundColor White
     Write-Host "  6. ArgoCD sync: argocd app sync windows-ad" -ForegroundColor White
+    Write-Host "  7. Phase 4 ausfuehren: .\setup-ad-dc.ps1 -Phase 4" -ForegroundColor White
     Write-Host ""
     Write-Warn "Nur ca.cer wird im seri-iiq Image-Build benoetigt (keytool Import)!"
     Write-Warn "Das LDAPS-Cert (ldaps.crt) bleibt im Windows-Image - nicht exportieren."
     Write-Host ""
     Write-Warn "CA-Zertifikat als Kubernetes Secret speichern (optional, fuer Init-Jobs):"
     Write-Warn "kubectl create secret generic windows-ad-ca --from-file=ca.crt=ca.cer -n windows-ad"
+}
+
+# ============================================================
+# PHASE 4: IQService-Zertifikat registrieren
+# Muss nach Phase 3 ausgefuehrt werden sobald IQService installiert ist.
+# Idempotent: kann wiederholt werden.
+# ============================================================
+if ($Phase -eq 4) {
+    Write-Step "Phase 4: IQService-Zertifikat registrieren"
+
+    $iqServiceName = "IQService-IIQ"
+    $iqServiceExe  = "C:\SailPoint\IQService-IIQ\IQService.exe"
+
+    # IQService installiert?
+    $svc = Get-Service -Name $iqServiceName -ErrorAction SilentlyContinue
+    if ($null -eq $svc) {
+        Write-Warn "Service '$iqServiceName' nicht gefunden - bitte IQService zunaechst installieren."
+        exit 1
+    }
+
+    # WebServer-Cert mit SANs finden (kein 'DS Object Guid' = kein Auto-Enrolled-DC-Cert)
+    Write-Step "WebServer-Zertifikat mit cluster-SANs suchen"
+    $webCert = Get-ChildItem Cert:\LocalMachine\My |
+        Where-Object {
+            $_.Subject -like "*$($config.ComputerName)*" -and
+            $_.EnhancedKeyUsageList.ObjectId -contains "1.3.6.1.5.5.7.3.1" -and
+            -not ($_.Extensions | Where-Object { $_.Oid.Value -eq "2.5.29.17" } |
+                  ForEach-Object { $_.Format($false) } | Select-String "DS Object Guid")
+        } |
+        Sort-Object NotBefore -Descending |
+        Select-Object -First 1
+
+    if ($null -eq $webCert) {
+        Write-Warn "Kein WebServer-Zertifikat gefunden - Phase 3 zunaechst ausfuehren."
+        exit 1
+    }
+
+    Write-OK "Gefunden: $($webCert.Thumbprint) / NotBefore: $($webCert.NotBefore)"
+    $sanExt = $webCert.Extensions | Where-Object { $_.Oid.Value -eq "2.5.29.17" }
+    if ($sanExt) {
+        Write-OK "SANs: $($sanExt.Format($false))"
+    }
+
+    # Private Key fuer adadmin zugaenglich machen (idempotent)
+    Write-Step "Private Key fuer $($config.DomainNetBIOS)\adadmin freigeben"
+    try {
+        $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($webCert)
+        $keyPath = [System.IO.Path]::Combine(
+            $env:ProgramData, "Microsoft\Crypto\RSA\MachineKeys", $rsa.Key.UniqueName)
+        $acl = Get-Acl $keyPath
+        $existingRule = $acl.Access | Where-Object {
+            $_.IdentityReference -like "*adadmin*" -and $_.FileSystemRights -match "Read"
+        }
+        if ($null -eq $existingRule) {
+            $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+                "$($config.DomainNetBIOS)\adadmin", "Read", "Allow")
+            $acl.AddAccessRule($rule)
+            Set-Acl $keyPath $acl
+            Write-OK "Zugriffsregel gesetzt: $keyPath"
+        } else {
+            Write-Skip "Zugriffsregel fuer adadmin"
+        }
+    } catch {
+        Write-Warn "Private Key Freigabe: $_"
+    }
+
+    # IQService auf dieses Zertifikat festlegen via Serial Number
+    # Verhindert dass IQService beim naechsten Start ein Auto-Enrolled-Cert waehlt
+    Write-Step "IQService-Zertifikat per Serial Number fixieren"
+    $serial = $webCert.SerialNumber
+    Write-Host "  Serial: $serial" -ForegroundColor White
+    & $iqServiceExe -m "SN:$serial"
+    Write-OK "IQService konfiguriert: SN:$serial"
+
+    # IQService neu starten
+    Write-Step "IQService-IIQ neu starten"
+    Restart-Service -Name $iqServiceName -Force
+    Start-Sleep -Seconds 5
+    $svcStatus = (Get-Service -Name $iqServiceName).Status
+    Write-OK "IQService Status: $svcStatus"
+
+    Write-Host ""
+    Write-Separator
+    Write-Host "PHASE 4 ABGESCHLOSSEN" -ForegroundColor Green
+    Write-Separator
+    Write-Host "IQService-Zertifikat : $($webCert.Thumbprint)" -ForegroundColor White
+    Write-Host "Serial Number        : $serial" -ForegroundColor White
+    Write-Host "Gueltig bis          : $($webCert.NotAfter)" -ForegroundColor White
+    Write-Host ""
+    Write-Host "WICHTIG: IIQ Application-Konfiguration (Active Directory):" -ForegroundColor Cyan
+    Write-Host "  Den bevorzugten DC explizit setzen, damit IIQ nicht per DNS-Discovery" -ForegroundColor White
+    Write-Host "  einen fuer den Cluster unaufloeslichen Hostnamen bekommt:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  <entry key=""servers"">" -ForegroundColor White
+    Write-Host "    <value><List><String>windows-ad.seri.svc.cluster.local</String></List></value>" -ForegroundColor White
+    Write-Host "  </entry>" -ForegroundColor White
+    Write-Host ""
+    Write-Warn "Ohne 'servers'-Eintrag liefert IQService per Get-ADDomainController den"
+    Write-Warn "Namen 'ad-resource.seri.sailpointdemo.com' - unbekannt im Kubernetes-Cluster!"
 }
