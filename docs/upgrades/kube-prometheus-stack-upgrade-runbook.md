@@ -1,4 +1,4 @@
-# Runbook: kube-prometheus-stack Upgrade 55.5.0 → 86.2.0
+# Runbook: kube-prometheus-stack Upgrade 55.5.0 → 86.2.3
 
 **Umgebung:** homelab k3s-Cluster (`reckeweg.io`)  
 **Namespace:** `monitoring`  
@@ -41,7 +41,8 @@ Jeder Major-Bump kann CRD-Änderungen enthalten. Die Reihenfolge ist zwingend:
 | 14      | 82.x → 84.5.0| v0.90.1             | CRD-Update   |
 | 15      | 84.5.0 → 85.1.3 | v0.90.1 (unverändert) | Distroless Images Default |
 | 16      | 85.1.3 → 85.3.3 | v0.90.1 (unverändert) | Maintenance (Grafana 12.4.1) |
-| 17 (Ziel) | 85.3.3 → 86.2.0 | **v0.91.0**           | CRD-Update + Prometheus 3.12 |
+| 17      | 85.3.3 → 86.2.0 | **v0.91.0**           | CRD-Update + Prometheus 3.12 |
+| 18 (Ziel) | 86.2.0 → 86.2.3 | v0.91.0 (unverändert) | Maintenance (Grafana 12.4.5, kube-state-metrics 7.4.1) |
 
 > **Hinweis:** Zwischen den explizit genannten Breaking-Change-Versionen kann man
 > innerhalb einer Major-Linie (z. B. 55.x → 61.x) direkt springen, da dort keine
@@ -648,7 +649,7 @@ argocd app wait kube-prometheus-stack --health --timeout 300
 
 ---
 
-## Station 16 (Final): Chart 85.3.3 → 86.2.0 (Operator v0.91.0 + Prometheus 3.12)
+## Station 16: Chart 85.3.3 → 86.2.0 (Operator v0.91.0 + Prometheus 3.12)
 
 > ✅ **Abgeschlossen am 2026-06-14** — `targetRevision: "86.2.0"` in `gitops/apps/monitoring.yaml` gesetzt.
 
@@ -708,6 +709,30 @@ prometheusOperator:
 
 ---
 
+## Station 17 (Final): Chart 86.2.0 → 86.2.3 (Maintenance)
+
+> ✅ **Abgeschlossen am 2026-06-15** — `targetRevision: "86.2.3"` in `gitops/apps/monitoring.yaml` gesetzt.
+
+### Keine Breaking Changes, kein CRD-Update
+
+Prometheus-Operator bleibt bei **v0.91.0**. Reine Dependency-Patches via Renovate.
+
+| Komponente | Alt | Neu |
+|---|---|---|
+| Grafana (chart) | 12.4.2 | 12.4.5 |
+| kube-state-metrics | 7.4.0 | 7.4.1 |
+
+### Schritt 17.1: Ziel in Git setzen
+
+```bash
+# targetRevision: "86.2.3"
+git add gitops/apps/monitoring.yaml
+git commit -m "kube-prometheus-stack upgrade 86.2.0 → 86.2.3 (Maintenance)"
+git push
+```
+
+---
+
 ## Abschluss-Verifikation
 
 ```bash
@@ -737,13 +762,14 @@ kubectl get alertmanager -n monitoring
 argocd app get kube-prometheus-stack
 ```
 
-**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 86.2.0:**
+**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 86.2.3:**
 - Prometheus-Operator: `v0.91.0`
 - Prometheus: `3.12.0` (Distroless-Image)
 - Alertmanager: `v0.32.2`
-- Grafana: `12.4.2`, HTTP Status: `200`
+- Grafana: `12.4.5`, HTTP Status: `200`
+- kube-state-metrics: `7.4.1`
 - Alle 10 CRDs: `Healthy`
-- ArgoCD: `Synced to 86.2.0`, `Health Status: Healthy`
+- ArgoCD: `Synced to 86.2.3`, `Health Status: Healthy`
 
 ### Auto-Sync wieder aktivieren (optional)
 
