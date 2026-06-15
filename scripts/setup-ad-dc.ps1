@@ -712,8 +712,7 @@ if ($Phase -eq 4) {
     # StartupType auf AutomaticDelayedStart + NTDS-Abhängigkeit setzen
     # Verhindert dass IQService beim Reboot startet bevor AD DS vollständig hochgefahren ist
     Write-Step "IQService Starttyp und Abhaengigkeiten konfigurieren"
-    Set-Service -Name $iqServiceName -StartupType AutomaticDelayedStart
-    sc.exe config $iqServiceName depend= NTDS | Out-Null
+    sc.exe config $iqServiceName start= delayed-auto depend= NTDS | Out-Null
     Write-OK "Starttyp: AutomaticDelayedStart / Dependency: NTDS"
 
     # IQService neu starten
