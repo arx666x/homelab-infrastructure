@@ -168,7 +168,7 @@ ArgoCD syncronisiert automatisch zurück. Bestehende SealedSecrets sind von eine
 
 ## Referenzen
 
-- [Sealed Secrets GitHub Releases](https://github.com/bitnami-labs/sealed-secrets/releases)
-- [Sealed Secrets Helm Chart (Bitnami Labs)](https://bitnami-labs.github.io/sealed-secrets)
+- [Sealed Secrets GitHub Releases](https://github.com/bitnami/sealed-secrets/releases)
+- [Sealed Secrets Helm Chart (Bitnami Labs)](https://bitnami.github.io/sealed-secrets)
 - Lokale ArgoCD App: `gitops/apps/sealed-secrets.yaml`
 - Betriebshandbuch: `gitops/sealed-secrets/sealed-secrets-doku.md`

@@ -120,9 +120,10 @@ HELM_SERVICES = [
         "name": "sealed-secrets",
         "app_file": "gitops/apps/sealed-secrets.yaml",
         "chart": "sealed-secrets",
-        "repo_url": "https://bitnami-labs.github.io/sealed-secrets/",
+        "repo_url": "https://bitnami.github.io/sealed-secrets",  # repo moved: bitnami-labs → bitnami
         "runbook": "docs/upgrades/sealed-secrets-upgrade-runbook.md",
-        "github_repo": "bitnami-labs/sealed-secrets",
+        "github_repo": "bitnami/sealed-secrets",
+        "github_release_prefix": "helm-v",  # tags: helm-v2.19.0 → chart 2.19.0
         "source_index": None,
     },
     {
