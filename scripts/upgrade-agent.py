@@ -254,6 +254,11 @@ def is_prerelease(v: str) -> bool:
     return bool(re.search(r"(alpha|beta|rc|dev|pre|snapshot|\.ea[\.\d]|-ea[\.\d])", v, re.I))
 
 
+def is_helm_chart_tag(tag: str) -> bool:
+    """Exclude Helm-chart-only release tags like 'vheadlamp-helm-0.43.0' or 'helm-0.43.0'."""
+    return bool(re.search(r"(helm|chart)", tag, re.I))
+
+
 # ---------------------------------------------------------------------------
 # Helm version lookup  (uses helm binary — never loads index.yaml in Python)
 # ---------------------------------------------------------------------------
@@ -341,7 +346,8 @@ def github_latest_release(repo: str, prerelease_ok: bool = False) -> Optional[st
 
     stable = [r for r in releases
               if not r.get("prerelease") and not r.get("draft")
-              and not is_prerelease(r.get("tag_name", ""))]
+              and not is_prerelease(r.get("tag_name", ""))
+              and not is_helm_chart_tag(r.get("tag_name", ""))]
     if not stable:
         return None
     stable.sort(key=lambda r: parse_version(r.get("tag_name", "0")), reverse=True)
@@ -444,7 +450,7 @@ Respond with JSON only, no other text:
 
     response = client.messages.create(
         model="claude-opus-4-8",
-        max_tokens=512,
+        max_tokens=2048,
         thinking={"type": "adaptive"},
         messages=[{"role": "user", "content": prompt}]
     )
