@@ -21,7 +21,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: homeassistant
-          image: ghcr.io/home-assistant/home-assistant:2026.3.4
+          image: ghcr.io/home-assistant/home-assistant:2026.6.3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8123

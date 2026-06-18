@@ -14,7 +14,9 @@ gitops/
         ├── deployment.yaml         # HA Container, strategy: Recreate
         ├── service.yaml            # ClusterIP :8123
         ├── certificate.yaml        # cert-manager Certificate → homeassistant-tls Secret
-        └── ingressroute.yaml       # Traefik, homeassistant.reckeweg.io
+        ├── ingressroute.yaml       # Traefik, homeassistant.reckeweg.io
+        ├── sealed-secret.yaml      # Generische Secrets (ggf. leer/auskommentiert)
+        └── sealed-secret-ccu.yaml  # CCU-spezifische Secrets
 ```
 
 ## Pi-hole DNS
@@ -92,3 +94,5 @@ Neue Versionen: https://github.com/home-assistant/core/releases
 
 > **Kein `latest`-Tag verwenden** – ArgoCD würde keinen neuen Rollout triggern
 > da sich der Tag nicht ändert.
+
+Upgrade-Runbook: [docs/upgrades/homeassistant-upgrade-runbook.md](upgrades/homeassistant-upgrade-runbook.md)
