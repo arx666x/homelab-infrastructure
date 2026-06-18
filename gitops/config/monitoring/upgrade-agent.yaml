@@ -1,0 +1,153 @@
+---
+# ============================================================
+# Upgrade Agent
+# Prüft wöchentlich Helm Chart- und Image-Versionen,
+# fragt Claude nach der Upgrade-Entscheidung,
+# erstellt automatisch Gitea PRs oder sendet Benachrichtigungen.
+#
+# Secrets:
+#   upgrade-agent-credentials  (sealed) → anthropic-api-key, gitea-token
+#   alertmanager-credentials   (sealed, bereits vorhanden) → gmail-password, telegram-bot-token
+# ============================================================
+
+# ------------------------------------------------------------
+# 1. ServiceAccount
+# ------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: upgrade-agent
+  namespace: monitoring
+
+---
+# ------------------------------------------------------------
+# 2. ConfigMap – Python-Script
+# ------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: upgrade-agent-script
+  namespace: monitoring
+data:
+  upgrade-agent.py: |
+    # Script is maintained at scripts/upgrade-agent.py in the Git repository.
+    # This ConfigMap is auto-generated during deployment — see upgrade-agent-setup.md.
+    # To update: re-run the deployment script or manually sync.
+
+---
+# ------------------------------------------------------------
+# 3. CronJob – jeden Montag 08:00 Uhr Europe/Berlin
+# ------------------------------------------------------------
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: upgrade-agent
+  namespace: monitoring
+  labels:
+    app: upgrade-agent
+spec:
+  schedule: "0 6 * * 1"   # 06:00 UTC = 08:00 Europe/Berlin
+  timeZone: "Europe/Berlin"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: upgrade-agent
+          restartPolicy: OnFailure
+
+          nodeSelector:
+            kubernetes.io/arch: amd64
+
+          tolerations:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists
+              effect: NoSchedule
+
+          initContainers:
+            - name: copy-helm
+              image: alpine/helm:3.14.4
+              command:
+                - sh
+                - -c
+                - "cp /usr/bin/helm /shared/helm && chmod +x /shared/helm"
+              volumeMounts:
+                - name: shared-bin
+                  mountPath: /shared
+
+            - name: copy-script
+              image: bitnami/git:latest
+              command:
+                - sh
+                - -c
+                - |
+                  # Clone the repo to get the latest version of the script
+                  GITEA_TOKEN=$(cat /etc/upgrade-agent/secrets/gitea-token)
+                  git clone --depth=1 \
+                    "https://upgrade-agent:${GITEA_TOKEN}@gitea.reckeweg.io/achim/homelab-infrastructure.git" \
+                    /shared/repo
+                  cp /shared/repo/scripts/upgrade-agent.py /shared/upgrade-agent.py
+                  echo "Script version: $(head -3 /shared/upgrade-agent.py)"
+              volumeMounts:
+                - name: shared-bin
+                  mountPath: /shared
+                - name: upgrade-agent-credentials
+                  mountPath: /etc/upgrade-agent/secrets
+                  readOnly: true
+
+          containers:
+            - name: agent
+              image: python:3.12-slim
+              command:
+                - sh
+                - -c
+                - |
+                  pip install --quiet anthropic httpx pyyaml
+                  cd /shared/repo
+                  python /shared/upgrade-agent.py
+              env:
+                - name: PATH
+                  value: "/shared:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                - name: GITEA_BASE_URL
+                  value: "https://gitea.reckeweg.io"
+                - name: GITEA_REPO
+                  value: "achim/homelab-infrastructure"
+                - name: TELEGRAM_CHAT_ID
+                  value: "8677165142"
+                - name: SMTP_USER
+                  value: "achim.reckeweg@gmail.com"
+                - name: NOTIFY_EMAIL
+                  value: "achim.reckeweg@gmail.com"
+                - name: SECRETS_DIR
+                  value: "/etc/upgrade-agent/secrets"
+                - name: ALERTMANAGER_DIR
+                  value: "/etc/alertmanager/secrets/alertmanager-credentials"
+              volumeMounts:
+                - name: shared-bin
+                  mountPath: /shared
+                - name: upgrade-agent-credentials
+                  mountPath: /etc/upgrade-agent/secrets
+                  readOnly: true
+                - name: alertmanager-credentials
+                  mountPath: /etc/alertmanager/secrets/alertmanager-credentials
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: 1000m
+                  memory: 512Mi
+
+          volumes:
+            - name: shared-bin
+              emptyDir: {}
+            - name: upgrade-agent-credentials
+              secret:
+                secretName: upgrade-agent-credentials
+            - name: alertmanager-credentials
+              secret:
+                secretName: alertmanager-credentials

@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 """
-Upgrade Agent for seri-infrastructure-complete.
+Upgrade Agent — Kubernetes CronJob edition.
 
-Checks Helm chart versions, reads upgrade runbooks, uses Claude to decide
-whether an upgrade is safe for auto-PR or needs manual review with notification.
+Checks Helm chart versions AND git/kustomize image tags, reads upgrade runbooks,
+uses Claude to decide, and either creates a Gitea PR (auto-upgrade) or sends
+Telegram + email notification (manual review needed).
 
-Required environment variables:
-  ANTHROPIC_API_KEY     - Claude API key (console.anthropic.com)
-  GITEA_TOKEN           - Gitea API token with repo write access
-  TELEGRAM_BOT_TOKEN    - Telegram bot token for notifications
-  SMTP_PASSWORD         - Gmail app password for email notifications
+Runs as a Kubernetes CronJob in namespace 'monitoring'.
+Secrets are mounted from Kubernetes secrets — no Gitea Actions secrets needed.
 
-Optional:
-  GITEA_BASE_URL        - Default: https://gitea.reckeweg.io
-  GITEA_REPO            - Default: achim/homelab-infrastructure
-  TELEGRAM_CHAT_ID      - Default: 8677165142
-  SMTP_USER             - Default: achim.reckeweg@gmail.com
-  NOTIFY_EMAIL          - Default: achim.reckeweg@gmail.com
-  DRY_RUN               - Set to "true" to skip git push and PR/notification
+Secret mounts expected:
+  /etc/upgrade-agent/secrets/anthropic-api-key   (from upgrade-agent-credentials)
+  /etc/upgrade-agent/secrets/gitea-token          (from upgrade-agent-credentials)
+  /etc/alertmanager/secrets/alertmanager-credentials/telegram-bot-token
+  /etc/alertmanager/secrets/alertmanager-credentials/gmail-password
+
+Environment variables (optional overrides):
+  GITEA_BASE_URL      default: https://gitea.reckeweg.io
+  GITEA_REPO          default: achim/homelab-infrastructure
+  GITEA_SSH_URL       default: git@git.reckeweg.io:achim/homelab-infrastructure.git
+  TELEGRAM_CHAT_ID    default: 8677165142
+  SMTP_USER           default: achim.reckeweg@gmail.com
+  NOTIFY_EMAIL        default: achim.reckeweg@gmail.com
+  DRY_RUN             set to "true" to skip git push and notifications
 """
 
 import os
@@ -27,7 +32,9 @@ import json
 import subprocess
 import smtplib
 import logging
-from dataclasses import dataclass, field
+import tempfile
+import shutil
+from dataclasses import dataclass
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
@@ -42,18 +49,36 @@ import yaml
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-APPS_DIR = REPO_ROOT / "gitops" / "apps"
-RUNBOOKS_DIR = REPO_ROOT / "docs" / "upgrades"
 
-GITEA_BASE_URL = os.environ.get("GITEA_BASE_URL", "https://gitea.reckeweg.io")
-GITEA_REPO = os.environ.get("GITEA_REPO", "achim/homelab-infrastructure")
+GITEA_BASE_URL  = os.environ.get("GITEA_BASE_URL",  "https://gitea.reckeweg.io")
+GITEA_REPO      = os.environ.get("GITEA_REPO",      "achim/homelab-infrastructure")
+GITEA_SSH_URL   = os.environ.get("GITEA_SSH_URL",   "git@git.reckeweg.io:achim/homelab-infrastructure.git")
 TELEGRAM_CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "8677165142"))
-SMTP_USER = os.environ.get("SMTP_USER", "achim.reckeweg@gmail.com")
-NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL", "achim.reckeweg@gmail.com")
-DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"
+SMTP_USER       = os.environ.get("SMTP_USER",   "achim.reckeweg@gmail.com")
+NOTIFY_EMAIL    = os.environ.get("NOTIFY_EMAIL", "achim.reckeweg@gmail.com")
+DRY_RUN         = os.environ.get("DRY_RUN", "false").lower() == "true"
 
-# Services to track: app_file is relative to REPO_ROOT
-SERVICES = [
+# Secret file paths (mounted from Kubernetes secrets)
+SECRETS_DIR      = Path(os.environ.get("SECRETS_DIR", "/etc/upgrade-agent/secrets"))
+ALERTMANAGER_DIR = Path(os.environ.get("ALERTMANAGER_DIR",
+                         "/etc/alertmanager/secrets/alertmanager-credentials"))
+
+
+def _read_secret(path: Path, env_var: str = "") -> str:
+    """Read a secret from a mounted file or fall back to an env var."""
+    if path.exists():
+        return path.read_text().strip()
+    if env_var and os.environ.get(env_var):
+        return os.environ[env_var]
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Helm chart services
+# ---------------------------------------------------------------------------
+# source_index: None = single source, int = index in multi-source 'sources' list
+
+HELM_SERVICES = [
     {
         "name": "metrics-server",
         "app_file": "gitops/apps/metrics-server.yaml",
@@ -61,7 +86,7 @@ SERVICES = [
         "repo_url": "https://kubernetes-sigs.github.io/metrics-server/",
         "runbook": "docs/upgrades/metrics-server-upgrade-runbook.md",
         "github_repo": "kubernetes-sigs/metrics-server",
-        "source_index": None,  # single source
+        "source_index": None,
     },
     {
         "name": "longhorn",
@@ -79,7 +104,7 @@ SERVICES = [
         "repo_url": "https://metallb.github.io/metallb",
         "runbook": "docs/upgrades/metallb-upgrade-runbook.md",
         "github_repo": "metallb/metallb",
-        "source_index": 0,  # first source in multi-source app
+        "source_index": 0,
     },
     {
         "name": "kube-prometheus-stack",
@@ -95,7 +120,7 @@ SERVICES = [
         "name": "sealed-secrets",
         "app_file": "gitops/apps/sealed-secrets.yaml",
         "chart": "sealed-secrets",
-        "repo_url": "https://bitnami-labs.github.io/sealed-secrets/",  # trailing slash required
+        "repo_url": "https://bitnami-labs.github.io/sealed-secrets/",
         "runbook": "docs/upgrades/sealed-secrets-upgrade-runbook.md",
         "github_repo": "bitnami-labs/sealed-secrets",
         "source_index": None,
@@ -116,7 +141,60 @@ SERVICES = [
         "repo_url": "https://charts.jetstack.io",
         "runbook": "docs/upgrades/cert-manager-upgrade-runbook.md",
         "github_repo": "cert-manager/cert-manager",
-        "source_index": 0,  # first source in multi-source app
+        "source_index": 0,
+    },
+    {
+        "name": "loki-stack",
+        "app_file": "gitops/apps/loki.yaml",
+        "chart": "loki-stack",
+        "repo_url": "https://grafana.github.io/helm-charts",
+        "runbook": "",  # no dedicated runbook
+        "github_repo": "grafana/loki",
+        "source_index": None,
+    },
+]
+
+# ---------------------------------------------------------------------------
+# Git/Kustomize image services
+# ---------------------------------------------------------------------------
+# These are services tracked via git with pinned container image tags.
+# version_type: "ghcr" | "dockerhub"
+# current_image_pattern: regex to find the image line in the file
+
+IMAGE_SERVICES = [
+    {
+        "name": "homeassistant",
+        "image_files": ["gitops/config/homeassistant/deployment.yaml"],
+        "image_pattern": r"ghcr\.io/home-assistant/home-assistant:([^\s\"']+)",
+        "version_type": "ghcr",
+        "github_repo": "home-assistant/core",
+        "runbook": "",
+    },
+    {
+        "name": "guacamole",
+        "image_files": ["gitops/config/guacamole/guacamole.yaml"],
+        "image_pattern": r"guacamole/guacamole:([^\s\"']+)",
+        "version_type": "dockerhub",
+        "dockerhub_image": "guacamole/guacamole",
+        "github_repo": "apache/guacamole-client",
+        "runbook": "",
+    },
+    {
+        "name": "guacd",
+        "image_files": ["gitops/config/guacamole/guacd.yaml"],
+        "image_pattern": r"guacamole/guacd:([^\s\"']+)",
+        "version_type": "dockerhub",
+        "dockerhub_image": "guacamole/guacd",
+        "github_repo": "apache/guacamole-server",
+        "runbook": "",
+    },
+    {
+        "name": "headlamp",
+        "image_files": ["gitops/config/headlamp/headlamp.yaml"],
+        "image_pattern": r"ghcr\.io/headlamp-k8s/headlamp:([^\s\"']+)",
+        "version_type": "ghcr",
+        "github_repo": "headlamp-k8s/headlamp",
+        "runbook": "",
     },
 ]
 
@@ -139,18 +217,18 @@ log = logging.getLogger(__name__)
 @dataclass
 class UpgradeCandidate:
     name: str
-    app_file: str
-    chart: str
-    repo_url: str
-    runbook: str
-    github_repo: str
+    kind: str               # "helm" | "image"
+    files: list[str]        # relative paths to modify
     current_version: str
     latest_version: str
-    source_index: Optional[int]
+    github_repo: str
+    runbook: str
+    # optional fields
     github_release_prefix: str = ""
+    image_pattern: str = ""
     runbook_content: str = ""
     changelog: str = ""
-    decision: str = ""          # AUTO, NOTIFY, SKIP
+    decision: str = ""          # AUTO | NOTIFY | SKIP
     decision_reason: str = ""
 
 
@@ -158,60 +236,69 @@ class UpgradeCandidate:
 # Version utilities
 # ---------------------------------------------------------------------------
 
-def parse_version(version: str) -> tuple[int, ...]:
-    """Extract numeric components from a version string."""
-    clean = version.lstrip("v")
+def parse_version(v: str) -> tuple[int, ...]:
+    clean = re.sub(r"\+.*$", "", str(v).lstrip("v"))
     parts = re.findall(r"\d+", clean)
     return tuple(int(p) for p in parts[:3]) if parts else (0,)
 
 
 def version_bump_type(old: str, new: str) -> str:
-    """Return 'patch', 'minor', or 'major'."""
-    o = parse_version(old)
-    n = parse_version(new)
-    if len(o) < 3:
-        o = o + (0,) * (3 - len(o))
-    if len(n) < 3:
-        n = n + (0,) * (3 - len(n))
-
-    if n[0] != o[0]:
-        return "major"
-    if n[1] != o[1]:
-        return "minor"
+    o = parse_version(old) + (0, 0, 0)
+    n = parse_version(new)  + (0, 0, 0)
+    if n[0] != o[0]: return "major"
+    if n[1] != o[1]: return "minor"
     return "patch"
 
 
+def is_prerelease(v: str) -> bool:
+    return bool(re.search(r"(alpha|beta|rc|dev|pre|snapshot|\.ea[\.\d]|-ea[\.\d])", v, re.I))
+
+
 # ---------------------------------------------------------------------------
-# Helm version lookup
+# Helm version lookup  (uses helm binary — never loads index.yaml in Python)
 # ---------------------------------------------------------------------------
 
-def get_latest_helm_version(chart: str, repo_url: str) -> Optional[str]:
-    """Use helm show chart to get the latest available version."""
-    try:
-        result = subprocess.run(
-            ["helm", "show", "chart", chart, "--repo", repo_url],
-            capture_output=True, text=True, timeout=30
-        )
-        if result.returncode != 0:
-            log.warning("helm show chart failed for %s: %s", chart, result.stderr.strip())
-            return None
-        data = yaml.safe_load(result.stdout)
-        return data.get("version")
-    except (subprocess.TimeoutExpired, Exception) as e:
-        log.warning("Failed to get latest version for %s: %s", chart, e)
+_helm_repos: dict[str, str] = {}
+
+
+def _helm_ensure_repo(repo_url: str) -> str:
+    if repo_url in _helm_repos:
+        return _helm_repos[repo_url]
+    alias = f"r{len(_helm_repos)}"
+    subprocess.run(["helm", "repo", "add", alias, repo_url, "--force-update"],
+                   capture_output=True)
+    subprocess.run(["helm", "repo", "update", alias], capture_output=True)
+    _helm_repos[repo_url] = alias
+    return alias
+
+
+def helm_latest_stable(chart: str, repo_url: str) -> Optional[str]:
+    alias = _helm_ensure_repo(repo_url)
+    result = subprocess.run(
+        ["helm", "search", "repo", f"{alias}/{chart}", "--versions", "--output", "json"],
+        capture_output=True, text=True, timeout=30
+    )
+    if result.returncode != 0 or not result.stdout.strip():
         return None
+    try:
+        entries = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    stable = [e for e in entries if not is_prerelease(e.get("version", ""))]
+    if not stable:
+        stable = entries
+    stable.sort(key=lambda e: parse_version(e.get("version", "0")), reverse=True)
+    return stable[0].get("version") if stable else None
 
 
 # ---------------------------------------------------------------------------
 # ArgoCD app YAML parsing
 # ---------------------------------------------------------------------------
 
-def get_current_version(app_file: str, source_index: Optional[int]) -> Optional[str]:
-    """Read targetRevision from an ArgoCD Application YAML."""
+def get_helm_current_version(app_file: str, source_index: Optional[int]) -> Optional[str]:
     path = REPO_ROOT / app_file
     with open(path) as f:
         doc = yaml.safe_load(f)
-
     spec = doc.get("spec", {})
     if source_index is not None:
         sources = spec.get("sources", [])
@@ -222,103 +309,137 @@ def get_current_version(app_file: str, source_index: Optional[int]) -> Optional[
     return None
 
 
-def set_version_in_file(app_file: str, old_version: str, new_version: str) -> None:
-    """Replace targetRevision in the app YAML file (in-place)."""
-    path = REPO_ROOT / app_file
-    content = path.read_text()
-    # Escape dots and optional leading 'v' prefix
-    old_escaped = re.escape(old_version)
-    # Replace exactly — match the version value in targetRevision lines
-    updated = re.sub(
-        rf'(targetRevision:\s*["\']?){old_escaped}(["\']?)',
-        lambda m: f'{m.group(1)}{new_version}{m.group(2)}',
-        content,
-        count=1
-    )
-    if updated == content:
-        raise ValueError(f"Version {old_version} not found in {app_file}")
-    path.write_text(updated)
-
-
 # ---------------------------------------------------------------------------
-# GitHub release notes
+# Image version lookup
 # ---------------------------------------------------------------------------
 
-def fetch_github_releases(github_repo: str, current: str, latest: str,
-                           prefix: str = "") -> str:
-    """Fetch release notes between current and latest from GitHub API."""
-    url = f"https://api.github.com/repos/{github_repo}/releases"
+def get_image_current_version(image_files: list[str], pattern: str) -> tuple[Optional[str], Optional[str]]:
+    """Returns (version, first_file_containing_it)."""
+    for rel_path in image_files:
+        path = REPO_ROOT / rel_path
+        if not path.exists():
+            continue
+        m = re.search(pattern, path.read_text())
+        if m:
+            return m.group(1), rel_path
+    return None, None
+
+
+def github_latest_release(repo: str, prerelease_ok: bool = False) -> Optional[str]:
+    url = f"https://api.github.com/repos/{repo}/releases?per_page=30"
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-    github_token = os.environ.get("GITHUB_TOKEN")
-    if github_token:
-        headers["Authorization"] = f"Bearer {github_token}"
-
+    if token := os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {token}"
     try:
-        resp = httpx.get(url, headers=headers, params={"per_page": 20}, timeout=15)
+        resp = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
+        if resp.status_code != 200:
+            return None
+        releases = resp.json()
+    except Exception as e:
+        log.warning("GitHub releases fetch failed for %s: %s", repo, e)
+        return None
+
+    stable = [r for r in releases
+              if not r.get("prerelease") and not r.get("draft")
+              and not is_prerelease(r.get("tag_name", ""))]
+    if not stable:
+        return None
+    stable.sort(key=lambda r: parse_version(r.get("tag_name", "0")), reverse=True)
+    return stable[0].get("tag_name")
+
+
+def dockerhub_latest(image: str) -> Optional[str]:
+    url = f"https://hub.docker.com/v2/repositories/{image}/tags?page_size=50&ordering=last_updated"
+    try:
+        resp = httpx.get(url, timeout=15, follow_redirects=True)
+        if resp.status_code != 200:
+            return None
+        candidates = [t["name"] for t in resp.json().get("results", [])
+                      if re.match(r"^\d+\.\d+\.\d+$", t.get("name", ""))
+                      and not is_prerelease(t["name"])]
+    except Exception as e:
+        log.warning("Docker Hub fetch failed for %s: %s", image, e)
+        return None
+    if not candidates:
+        return None
+    candidates.sort(key=parse_version, reverse=True)
+    return candidates[0]
+
+
+# ---------------------------------------------------------------------------
+# Release notes
+# ---------------------------------------------------------------------------
+
+def fetch_release_notes(github_repo: str, current: str, latest: str,
+                        prefix: str = "") -> str:
+    url = f"https://api.github.com/repos/{github_repo}/releases?per_page=20"
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if token := os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        resp = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
         if resp.status_code != 200:
             return f"(GitHub API returned {resp.status_code})"
         releases = resp.json()
     except Exception as e:
-        return f"(Could not fetch releases: {e})"
+        return f"(Could not fetch: {e})"
 
-    current_clean = current.lstrip("v")
-    latest_clean = latest.lstrip("v")
-
-    relevant = []
+    current_v = parse_version(current)
+    latest_v  = parse_version(latest)
+    relevant  = []
     for rel in releases:
-        tag = rel.get("tag_name", "").lstrip("v")
+        tag = rel.get("tag_name", "")
+        tag_stripped = tag.lstrip("v")
         if prefix:
-            tag = tag.removeprefix(prefix)
-        tag = tag.lstrip("v")
-        if tag == current_clean:
-            break
-        if parse_version(tag) <= parse_version(current_clean):
-            continue
-        if parse_version(tag) > parse_version(latest_clean):
+            tag_stripped = tag_stripped.removeprefix(prefix).lstrip("v")
+        v = parse_version(tag_stripped)
+        if v <= current_v or v > latest_v:
             continue
         body = rel.get("body", "").strip()
-        relevant.append(f"### {rel.get('tag_name')}\n{body[:2000]}")
+        relevant.append(f"### {tag}\n{body[:2000]}")
 
-    if not relevant:
-        return "(No release notes found between current and latest version)"
-    return "\n\n".join(relevant)
+    return "\n\n".join(relevant) if relevant else "(No release notes found)"
 
 
 # ---------------------------------------------------------------------------
 # Claude decision
 # ---------------------------------------------------------------------------
 
-def ask_claude(candidate: UpgradeCandidate, client: anthropic.Anthropic) -> tuple[str, str]:
-    """
-    Ask Claude whether this upgrade is safe to auto-apply.
-    Returns (decision, reason) where decision is AUTO, NOTIFY, or SKIP.
-    """
-    bump = version_bump_type(candidate.current_version, candidate.latest_version)
+def ask_claude(c: UpgradeCandidate, client: anthropic.Anthropic) -> tuple[str, str]:
+    bump = version_bump_type(c.current_version, c.latest_version)
+    kind_label = "Helm chart" if c.kind == "helm" else "container image"
 
-    prompt = f"""You are an expert Kubernetes homelab administrator reviewing a Helm chart upgrade.
-Your job is to decide whether this upgrade can be applied automatically or requires manual review.
+    runbook_section = (
+        f"## Cluster-specific Upgrade Runbook:\n{c.runbook_content[:8000]}"
+        if c.runbook_content else
+        "## Cluster-specific Upgrade Runbook:\n(Not available for this service)"
+    )
 
-## Service: {candidate.name}
-## Chart: {candidate.chart}
-## Version change: {candidate.current_version} → {candidate.latest_version} ({bump} bump)
+    prompt = f"""You are a Kubernetes homelab administrator reviewing an upgrade candidate.
+Decide whether this upgrade can be applied automatically (AUTO) or requires manual review (NOTIFY).
 
-## Upgrade Runbook (cluster-specific notes):
-{candidate.runbook_content[:8000]}
+## Service: {c.name}
+## Type: {kind_label}
+## Version change: {c.current_version} → {c.latest_version} ({bump} bump)
+
+{runbook_section}
 
 ## Release Notes / Changelog:
-{candidate.changelog[:6000]}
+{c.changelog[:6000]}
 
-## Decision criteria:
-- AUTO: Patch bumps with no breaking changes in release notes. Minor bumps that the runbook explicitly marks as low-risk and no CRD migrations.
-- NOTIFY: Minor bumps with breaking changes, CRD changes, API removals, or anything the runbook marks as requiring manual steps. Also minor bumps where release notes mention schema changes, migration scripts, or configuration format changes.
-- NOTIFY: Major bumps always.
-- SKIP: If latest version is same as current (should not happen here, but be safe).
+## Decision rules:
+- AUTO: Patch bumps with no breaking changes in release notes. Minor bumps only if release notes
+  explicitly contain no breaking changes AND no CRD migrations AND no configuration format changes.
+- NOTIFY: Minor bumps with breaking changes, CRD schema changes, API removals, required migration
+  steps, or anything the runbook marks as requiring manual intervention.
+- NOTIFY: All major bumps without exception.
+- NOTIFY: When release notes are unavailable and bump is minor or major.
 
-Respond with a JSON object only, no other text:
+Respond with JSON only, no other text:
 {{
-  "decision": "AUTO" | "NOTIFY" | "SKIP",
-  "reason": "One or two sentences explaining why.",
-  "risks": ["list", "of", "specific", "risks", "if", "NOTIFY"]
+  "decision": "AUTO" | "NOTIFY",
+  "reason": "One or two sentences explaining the decision.",
+  "risks": ["specific risk 1", "specific risk 2"]
 }}"""
 
     response = client.messages.create(
@@ -328,125 +449,134 @@ Respond with a JSON object only, no other text:
         messages=[{"role": "user", "content": prompt}]
     )
 
-    text = ""
-    for block in response.content:
-        if block.type == "text":
-            text = block.text
-            break
+    text = next((b.text for b in response.content if b.type == "text"), "")
 
     try:
-        # Strip markdown code fences if present
-        clean = re.sub(r"```(?:json)?\n?", "", text).strip()
-        data = json.loads(clean)
+        clean = re.sub(r"```(?:json)?\n?", "", text).strip().rstrip("`")
+        data  = json.loads(clean)
         decision = data.get("decision", "NOTIFY")
-        risks = data.get("risks", [])
-        reason = data.get("reason", "")
+        reason   = data.get("reason", "")
+        risks    = data.get("risks", [])
         if risks:
             reason += " Risks: " + "; ".join(risks)
         return decision, reason
     except json.JSONDecodeError:
-        log.warning("Claude returned non-JSON for %s: %s", candidate.name, text)
-        return "NOTIFY", f"Claude response could not be parsed. Manual review needed. Raw: {text[:200]}"
+        log.warning("Claude non-JSON response for %s: %s", c.name, text[:200])
+        return "NOTIFY", f"Could not parse Claude response — manual review required."
 
 
 # ---------------------------------------------------------------------------
-# Git + Gitea PR
+# Git operations & Gitea PR
 # ---------------------------------------------------------------------------
 
-def create_pr(candidate: UpgradeCandidate) -> Optional[str]:
-    """Create a git branch, commit the version bump, push, and open a Gitea PR."""
-    branch = f"chore/upgrade-{candidate.name}-{candidate.latest_version}"
-    app_path = REPO_ROOT / candidate.app_file
+def apply_version_change(work_dir: Path, c: UpgradeCandidate) -> None:
+    """Apply the version change in the working directory."""
+    if c.kind == "helm":
+        # Replace targetRevision in the ArgoCD app YAML
+        for rel_path in c.files:
+            path = work_dir / rel_path
+            content = path.read_text()
+            old_escaped = re.escape(c.current_version)
+            updated = re.sub(
+                rf"(targetRevision:\s*[\"']?){old_escaped}([\"']?)",
+                lambda m: f"{m.group(1)}{c.latest_version}{m.group(2)}",
+                content, count=1
+            )
+            if updated == content:
+                raise ValueError(f"{c.current_version} not found in {rel_path}")
+            path.write_text(updated)
+    else:
+        # Replace image tag in manifest file(s)
+        for rel_path in c.files:
+            path = work_dir / rel_path
+            content = path.read_text()
+            updated = re.sub(
+                c.image_pattern,
+                lambda m: m.group(0).replace(c.current_version, c.latest_version),
+                content
+            )
+            if updated == content:
+                raise ValueError(f"Image tag {c.current_version} not found via pattern in {rel_path}")
+            path.write_text(updated)
+
+
+def create_pr(c: UpgradeCandidate) -> Optional[str]:
+    """Clone repo, apply change, push branch, open Gitea PR."""
+    gitea_token = _read_secret(SECRETS_DIR / "gitea-token", "GITEA_TOKEN")
+    if not gitea_token and not DRY_RUN:
+        log.error("GITEA_TOKEN not available — skipping PR for %s", c.name)
+        return None
+
+    branch = f"chore/upgrade-{c.name}-{c.latest_version.lstrip('v')}"
+    bump   = version_bump_type(c.current_version, c.latest_version)
 
     if DRY_RUN:
-        log.info("[DRY RUN] Would create PR: %s → %s (%s)",
-                 candidate.current_version, candidate.latest_version, candidate.name)
+        log.info("[DRY RUN] Would create PR branch %s for %s", branch, c.name)
         return None
 
+    work_dir = Path(tempfile.mkdtemp(prefix="upgrade-agent-"))
     try:
-        # Ensure we're on main and up-to-date
-        subprocess.run(["git", "-C", str(REPO_ROOT), "checkout", "main"],
-                       check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(REPO_ROOT), "pull", "--ff-only"],
-                       check=True, capture_output=True)
+        # Build HTTPS clone URL with embedded token
+        https_url = f"https://upgrade-agent:{gitea_token}@{GITEA_BASE_URL.removeprefix('https://')}/{GITEA_REPO}.git"
 
-        # Create branch
-        subprocess.run(["git", "-C", str(REPO_ROOT), "checkout", "-b", branch],
-                       check=True, capture_output=True)
-
-        # Apply version change
-        set_version_in_file(candidate.app_file, candidate.current_version, candidate.latest_version)
-
-        # Commit
-        rel_path = candidate.app_file
-        subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "add", rel_path],
-            check=True, capture_output=True
+        log.info("Cloning repo for %s...", c.name)
+        result = subprocess.run(
+            ["git", "clone", "--depth=1", https_url, str(work_dir / "repo")],
+            capture_output=True, text=True, timeout=120
         )
-        msg = (f"chore: upgrade {candidate.name} "
-               f"{candidate.current_version} → {candidate.latest_version}\n\n"
-               f"Auto-upgrade by upgrade-agent.\n"
-               f"Reason: {candidate.decision_reason}")
-        subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "commit", "-m", msg],
-            check=True, capture_output=True
+        if result.returncode != 0:
+            log.error("git clone failed: %s", result.stderr.strip())
+            return None
+
+        repo_dir = work_dir / "repo"
+        git = ["git", "-C", str(repo_dir)]
+
+        subprocess.run(git + ["config", "user.email", "upgrade-agent@reckeweg.io"], check=True, capture_output=True)
+        subprocess.run(git + ["config", "user.name", "Upgrade Agent"], check=True, capture_output=True)
+        subprocess.run(git + ["checkout", "-b", branch], check=True, capture_output=True)
+
+        apply_version_change(repo_dir, c)
+
+        for rel_path in c.files:
+            subprocess.run(git + ["add", rel_path], check=True, capture_output=True)
+
+        commit_msg = (
+            f"chore: upgrade {c.name} {c.current_version} → {c.latest_version}\n\n"
+            f"Auto-upgrade ({bump} bump) by upgrade-agent.\n"
+            f"Assessment: {c.decision_reason}"
         )
-
-        # Push to both remotes
-        for remote in ["origin", "github"]:
-            result = subprocess.run(
-                ["git", "-C", str(REPO_ROOT), "remote", "get-url", remote],
-                capture_output=True
-            )
-            if result.returncode == 0:
-                subprocess.run(
-                    ["git", "-C", str(REPO_ROOT), "push", remote, branch],
-                    check=True, capture_output=True
-                )
-
-        # Return to main
-        subprocess.run(["git", "-C", str(REPO_ROOT), "checkout", "main"],
-                       check=True, capture_output=True)
+        subprocess.run(git + ["commit", "-m", commit_msg], check=True, capture_output=True)
+        subprocess.run(git + ["push", "origin", branch], check=True, capture_output=True)
 
     except subprocess.CalledProcessError as e:
-        log.error("Git operation failed: %s", e.stderr.decode() if e.stderr else e)
-        subprocess.run(["git", "-C", str(REPO_ROOT), "checkout", "main"],
-                       capture_output=True)
+        log.error("Git operation failed for %s: %s", c.name,
+                  e.stderr.decode() if e.stderr else str(e))
         return None
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
     # Create Gitea PR via API
-    token = os.environ.get("GITEA_TOKEN", "")
-    if not token:
-        log.warning("GITEA_TOKEN not set, skipping PR creation")
-        return branch
-
-    bump = version_bump_type(candidate.current_version, candidate.latest_version)
     pr_body = (
-        f"## Auto-Upgrade: {candidate.name}\n\n"
-        f"| | |\n|---|---|\n"
-        f"| Chart | `{candidate.chart}` |\n"
-        f"| Bump type | **{bump}** |\n"
-        f"| From | `{candidate.current_version}` |\n"
-        f"| To | `{candidate.latest_version}` |\n\n"
-        f"**Claude assessment:** {candidate.decision_reason}\n\n"
-        f"---\n"
-        f"_Created automatically by upgrade-agent. Review, merge, or close._"
+        f"## Auto-Upgrade: {c.name}\n\n"
+        f"| Field | Value |\n|---|---|\n"
+        f"| Type | `{c.kind}` |\n"
+        f"| Bump | **{bump}** |\n"
+        f"| From | `{c.current_version}` |\n"
+        f"| To | `{c.latest_version}` |\n"
+        f"| Files | {', '.join(f'`{f}`' for f in c.files)} |\n\n"
+        f"**Claude assessment:** {c.decision_reason}\n\n"
+        f"---\n_Auto-created by upgrade-agent. Review, test, merge or close._"
     )
-
     api_url = f"{GITEA_BASE_URL}/api/v1/repos/{GITEA_REPO}/pulls"
     try:
         resp = httpx.post(
             api_url,
-            headers={
-                "Authorization": f"token {token}",
-                "Content-Type": "application/json",
-            },
+            headers={"Authorization": f"token {gitea_token}", "Content-Type": "application/json"},
             json={
-                "title": f"chore: upgrade {candidate.name} to {candidate.latest_version}",
+                "title": f"chore: upgrade {c.name} to {c.latest_version}",
                 "body": pr_body,
                 "head": branch,
                 "base": "main",
-                "labels": [],
             },
             timeout=15
         )
@@ -454,9 +584,8 @@ def create_pr(candidate: UpgradeCandidate) -> Optional[str]:
             pr_url = resp.json().get("html_url", "")
             log.info("PR created: %s", pr_url)
             return pr_url
-        else:
-            log.error("Gitea API error %s: %s", resp.status_code, resp.text[:200])
-            return branch
+        log.error("Gitea PR API error %s: %s", resp.status_code, resp.text[:200])
+        return branch
     except Exception as e:
         log.error("Failed to create Gitea PR: %s", e)
         return branch
@@ -467,86 +596,157 @@ def create_pr(candidate: UpgradeCandidate) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 def send_telegram(message: str) -> None:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    token = _read_secret(ALERTMANAGER_DIR / "telegram-bot-token", "TELEGRAM_BOT_TOKEN")
     if not token:
-        log.warning("TELEGRAM_BOT_TOKEN not set, skipping Telegram notification")
+        log.warning("Telegram bot token not available")
         return
     if DRY_RUN:
-        log.info("[DRY RUN] Telegram: %s", message[:100])
+        log.info("[DRY RUN] Telegram: %s", message[:120])
         return
-
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
-        resp = httpx.post(url, json={
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": message,
-            "parse_mode": "HTML",
-        }, timeout=10)
+        resp = httpx.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"},
+            timeout=10
+        )
         if resp.status_code != 200:
-            log.warning("Telegram API error: %s", resp.text[:100])
+            log.warning("Telegram error: %s", resp.text[:100])
     except Exception as e:
         log.warning("Telegram send failed: %s", e)
 
 
 def send_email(subject: str, body: str) -> None:
-    password = os.environ.get("SMTP_PASSWORD", "")
+    password = _read_secret(ALERTMANAGER_DIR / "gmail-password", "SMTP_PASSWORD")
     if not password:
-        log.warning("SMTP_PASSWORD not set, skipping email notification")
+        log.warning("Gmail password not available")
         return
     if DRY_RUN:
         log.info("[DRY RUN] Email: %s", subject)
         return
-
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = SMTP_USER
-    msg["To"] = NOTIFY_EMAIL
+    msg["Subject"], msg["From"], msg["To"] = subject, SMTP_USER, NOTIFY_EMAIL
     msg.attach(MIMEText(body, "plain"))
-
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_USER, password)
-            server.sendmail(SMTP_USER, NOTIFY_EMAIL, msg.as_string())
+        with smtplib.SMTP("smtp.gmail.com", 587) as s:
+            s.ehlo(); s.starttls(); s.login(SMTP_USER, password)
+            s.sendmail(SMTP_USER, NOTIFY_EMAIL, msg.as_string())
         log.info("Email sent: %s", subject)
     except Exception as e:
         log.warning("Email send failed: %s", e)
 
 
-def notify_manual_review(candidate: UpgradeCandidate) -> None:
-    bump = version_bump_type(candidate.current_version, candidate.latest_version)
-    subject = f"[Homelab] Manual upgrade needed: {candidate.name} {candidate.latest_version}"
+def notify_manual_review(c: UpgradeCandidate) -> None:
+    bump = version_bump_type(c.current_version, c.latest_version)
+    runbook_url = f"{GITEA_BASE_URL}/{GITEA_REPO}/src/branch/main/{c.runbook}" if c.runbook else "(no runbook)"
+    subject = f"[Homelab] Manual upgrade needed: {c.name} {c.latest_version}"
     body = (
-        f"Service: {candidate.name}\n"
-        f"Chart:   {candidate.chart}\n"
-        f"Bump:    {bump} ({candidate.current_version} → {candidate.latest_version})\n\n"
-        f"Reason:  {candidate.decision_reason}\n\n"
-        f"Runbook: {GITEA_BASE_URL}/{GITEA_REPO}/src/branch/main/{candidate.runbook}\n\n"
-        f"Release notes:\n{candidate.changelog[:1500]}"
+        f"Service:  {c.name}\n"
+        f"Type:     {c.kind}\n"
+        f"Bump:     {bump} ({c.current_version} → {c.latest_version})\n\n"
+        f"Reason:   {c.decision_reason}\n\n"
+        f"Runbook:  {runbook_url}\n\n"
+        f"Release notes:\n{c.changelog[:1500]}"
     )
-
-    tg_message = (
+    tg = (
         f"<b>🔔 Manual upgrade needed</b>\n"
-        f"<b>{candidate.name}</b>: {candidate.current_version} → {candidate.latest_version} ({bump})\n"
-        f"<i>{candidate.decision_reason[:300]}</i>\n\n"
-        f"Runbook: {GITEA_BASE_URL}/{GITEA_REPO}/src/branch/main/{candidate.runbook}"
+        f"<b>{c.name}</b>: {c.current_version} → {c.latest_version} ({bump})\n"
+        f"<i>{c.decision_reason[:300]}</i>"
+        + (f"\nRunbook: {runbook_url}" if c.runbook else "")
     )
-
     send_email(subject, body)
-    send_telegram(tg_message)
+    send_telegram(tg)
 
 
-def notify_auto_pr(candidate: UpgradeCandidate, pr_url: Optional[str]) -> None:
-    bump = version_bump_type(candidate.current_version, candidate.latest_version)
+def notify_auto_pr(c: UpgradeCandidate, pr_url: Optional[str]) -> None:
+    bump = version_bump_type(c.current_version, c.latest_version)
     link = pr_url or "(PR creation failed — check logs)"
-    tg_message = (
+    send_telegram(
         f"<b>✅ Auto-upgrade PR created</b>\n"
-        f"<b>{candidate.name}</b>: {candidate.current_version} → {candidate.latest_version} ({bump})\n"
-        f"<i>{candidate.decision_reason[:200]}</i>\n"
-        f"PR: {link}"
+        f"<b>{c.name}</b>: {c.current_version} → {c.latest_version} ({bump})\n"
+        f"<i>{c.decision_reason[:200]}</i>\nPR: {link}"
     )
-    send_telegram(tg_message)
+
+
+def notify_all_current() -> None:
+    send_telegram("✅ <b>Upgrade Agent</b>: All services are up to date.")
+
+
+# ---------------------------------------------------------------------------
+# Check functions
+# ---------------------------------------------------------------------------
+
+def check_helm_services() -> list[UpgradeCandidate]:
+    candidates = []
+    for svc in HELM_SERVICES:
+        name = svc["name"]
+        try:
+            current = get_helm_current_version(svc["app_file"], svc.get("source_index"))
+            if not current:
+                log.warning("%s: could not read current version", name)
+                continue
+            latest = helm_latest_stable(svc["chart"], svc["repo_url"])
+            if not latest:
+                log.warning("%s: could not fetch latest version from Helm repo", name)
+                continue
+            if parse_version(current) >= parse_version(latest):
+                log.info("%s (helm): up to date (%s)", name, current)
+                continue
+            log.info("%s (helm): update available %s → %s", name, current, latest)
+            candidates.append(UpgradeCandidate(
+                name=name, kind="helm",
+                files=[svc["app_file"]],
+                current_version=current, latest_version=latest,
+                github_repo=svc.get("github_repo", ""),
+                github_release_prefix=svc.get("github_release_prefix", ""),
+                runbook=svc.get("runbook", ""),
+            ))
+        except Exception as e:
+            log.error("%s (helm): error during check: %s", name, e)
+    return candidates
+
+
+def check_image_services() -> list[UpgradeCandidate]:
+    candidates = []
+    for svc in IMAGE_SERVICES:
+        name = svc["name"]
+        try:
+            current, found_in = get_image_current_version(svc["image_files"], svc["image_pattern"])
+            if not current:
+                log.warning("%s: could not read current image tag", name)
+                continue
+
+            if svc["version_type"] == "ghcr":
+                raw_latest = github_latest_release(svc["github_repo"])
+                latest = raw_latest.lstrip("v") if raw_latest else None
+                # Preserve 'v' prefix style from current tag
+                if latest and current.startswith("v"):
+                    latest = "v" + latest
+            else:
+                latest = dockerhub_latest(svc["dockerhub_image"])
+
+            if not latest:
+                log.warning("%s: could not fetch latest image version", name)
+                continue
+
+            current_cmp = current.lstrip("v")
+            latest_cmp  = latest.lstrip("v")
+
+            if parse_version(current_cmp) >= parse_version(latest_cmp):
+                log.info("%s (image): up to date (%s)", name, current)
+                continue
+
+            log.info("%s (image): update available %s → %s", name, current, latest)
+            candidates.append(UpgradeCandidate(
+                name=name, kind="image",
+                files=[found_in] if found_in else svc["image_files"],
+                current_version=current, latest_version=latest,
+                github_repo=svc.get("github_repo", ""),
+                runbook=svc.get("runbook", ""),
+                image_pattern=svc["image_pattern"],
+            ))
+        except Exception as e:
+            log.error("%s (image): error during check: %s", name, e)
+    return candidates
 
 
 # ---------------------------------------------------------------------------
@@ -554,110 +754,77 @@ def notify_auto_pr(candidate: UpgradeCandidate, pr_url: Optional[str]) -> None:
 # ---------------------------------------------------------------------------
 
 def check_dependencies() -> None:
-    for dep in ["helm", "git"]:
-        result = subprocess.run(["which", dep], capture_output=True)
-        if result.returncode != 0:
-            log.error("Required tool not found: %s", dep)
-            sys.exit(1)
+    missing = [t for t in ["helm", "git"] if subprocess.run(
+        ["which", t], capture_output=True).returncode != 0]
+    if missing:
+        log.error("Required tools not found: %s", ", ".join(missing))
+        sys.exit(1)
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        log.error("ANTHROPIC_API_KEY is not set")
+    anthropic_key = _read_secret(SECRETS_DIR / "anthropic-api-key", "ANTHROPIC_API_KEY")
+    if not anthropic_key:
+        log.error("Anthropic API key not found (secret file or ANTHROPIC_API_KEY env var)")
         sys.exit(1)
 
 
 def main() -> None:
     check_dependencies()
 
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    anthropic_key = _read_secret(SECRETS_DIR / "anthropic-api-key", "ANTHROPIC_API_KEY")
+    client = anthropic.Anthropic(api_key=anthropic_key)
+
+    log.info("=== Upgrade Agent starting (DRY_RUN=%s) ===", DRY_RUN)
+    log.info("Checking %d Helm services and %d image services...",
+             len(HELM_SERVICES), len(IMAGE_SERVICES))
 
     candidates: list[UpgradeCandidate] = []
-
-    log.info("Checking %d services for updates...", len(SERVICES))
-
-    for svc in SERVICES:
-        name = svc["name"]
-        try:
-            current = get_current_version(svc["app_file"], svc.get("source_index"))
-            if not current:
-                log.warning("Could not read current version for %s", name)
-                continue
-
-            latest = get_latest_helm_version(svc["chart"], svc["repo_url"])
-            if not latest:
-                log.warning("Could not fetch latest version for %s", name)
-                continue
-
-            current_clean = current.lstrip("v")
-            latest_clean = latest.lstrip("v")
-
-            if parse_version(current_clean) >= parse_version(latest_clean):
-                log.info("%s: up to date (%s)", name, current)
-                continue
-
-            log.info("%s: update available %s → %s", name, current, latest)
-            candidates.append(UpgradeCandidate(
-                name=name,
-                app_file=svc["app_file"],
-                chart=svc["chart"],
-                repo_url=svc["repo_url"],
-                runbook=svc["runbook"],
-                github_repo=svc["github_repo"],
-                current_version=current,
-                latest_version=latest,
-                source_index=svc.get("source_index"),
-                github_release_prefix=svc.get("github_release_prefix", ""),
-            ))
-        except Exception as e:
-            log.error("Error checking %s: %s", name, e)
+    candidates.extend(check_helm_services())
+    candidates.extend(check_image_services())
 
     if not candidates:
-        log.info("All services are up to date. Nothing to do.")
-        send_telegram("✅ <b>Upgrade Agent</b>: All Helm charts are up to date.")
+        log.info("All services are up to date.")
+        notify_all_current()
         return
 
     log.info("Found %d update(s). Fetching release notes and asking Claude...", len(candidates))
 
     for c in candidates:
-        # Load runbook
-        runbook_path = REPO_ROOT / c.runbook
-        if runbook_path.exists():
-            c.runbook_content = runbook_path.read_text()[:10000]
-        else:
-            log.warning("Runbook not found: %s", c.runbook)
-            c.runbook_content = "(No runbook available)"
+        # Load runbook if available
+        if c.runbook:
+            runbook_path = REPO_ROOT / c.runbook
+            if runbook_path.exists():
+                c.runbook_content = runbook_path.read_text()[:10000]
 
-        # Fetch changelog
-        c.changelog = fetch_github_releases(
-            c.github_repo, c.current_version, c.latest_version, c.github_release_prefix
-        )
+        # Fetch release notes from GitHub
+        if c.github_repo:
+            c.changelog = fetch_release_notes(
+                c.github_repo, c.current_version, c.latest_version, c.github_release_prefix
+            )
 
-        # Ask Claude
-        log.info("Asking Claude about %s (%s → %s)...", c.name, c.current_version, c.latest_version)
+        # Claude decision
+        log.info("Asking Claude about %s (%s → %s)...",
+                 c.name, c.current_version, c.latest_version)
         try:
             c.decision, c.decision_reason = ask_claude(c, client)
         except Exception as e:
             log.error("Claude API error for %s: %s — defaulting to NOTIFY", c.name, e)
             c.decision = "NOTIFY"
-            c.decision_reason = f"Claude API unavailable: {e}"
-        log.info("%s decision: %s — %s", c.name, c.decision, c.decision_reason[:100])
+            c.decision_reason = f"Claude API unavailable ({e}) — manual review required."
 
-    # Act on decisions
+        log.info("%s → %s: %s", c.name, c.decision, c.decision_reason[:100])
+
+    # Act
+    auto_count = notify_count = 0
     for c in candidates:
         if c.decision == "AUTO":
-            log.info("Auto-upgrading %s...", c.name)
             pr_url = create_pr(c)
             notify_auto_pr(c, pr_url)
-
-        elif c.decision == "NOTIFY":
-            log.info("Sending manual review notification for %s...", c.name)
-            notify_manual_review(c)
-
+            auto_count += 1
         else:
-            log.info("Skipping %s (decision: %s)", c.name, c.decision)
+            notify_manual_review(c)
+            notify_count += 1
 
-    auto_count = sum(1 for c in candidates if c.decision == "AUTO")
-    notify_count = sum(1 for c in candidates if c.decision == "NOTIFY")
-    log.info("Done. Auto-PRs: %d, Manual notifications: %d", auto_count, notify_count)
+    log.info("=== Done. Auto-PRs: %d | Manual notifications: %d ===",
+             auto_count, notify_count)
 
 
 if __name__ == "__main__":
