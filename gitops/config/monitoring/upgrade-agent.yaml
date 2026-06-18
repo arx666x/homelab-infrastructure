@@ -78,19 +78,17 @@ spec:
                 - name: shared-bin
                   mountPath: /shared
 
-            - name: copy-script
+            - name: clone-repo
               image: bitnami/git:latest
               command:
                 - sh
                 - -c
                 - |
-                  # Clone the repo to get the latest version of the script
                   GITEA_TOKEN=$(cat /etc/upgrade-agent/secrets/gitea-token)
                   git clone --depth=1 \
                     "https://upgrade-agent:${GITEA_TOKEN}@gitea.reckeweg.io/achim/homelab-infrastructure.git" \
                     /shared/repo
-                  cp /shared/repo/scripts/upgrade-agent.py /shared/upgrade-agent.py
-                  echo "Script version: $(head -3 /shared/upgrade-agent.py)"
+                  echo "Cloned. Script: $(head -2 /shared/repo/scripts/upgrade-agent.py)"
               volumeMounts:
                 - name: shared-bin
                   mountPath: /shared
@@ -105,9 +103,10 @@ spec:
                 - sh
                 - -c
                 - |
+                  apt-get update -qq && apt-get install -y -qq git > /dev/null
                   pip install --quiet anthropic httpx pyyaml
                   cd /shared/repo
-                  python /shared/upgrade-agent.py
+                  python scripts/upgrade-agent.py
               env:
                 - name: PATH
                   value: "/shared:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
