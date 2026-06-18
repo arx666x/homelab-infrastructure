@@ -146,6 +146,79 @@ Keine values-Anpassungen nötig. Gateway API nicht im Einsatz, daher CRD-Entfern
 
 ---
 
+## Upgrade v40.3.0 → v41.0.0 (Proxy v3.7.4 → v3.7.5)
+
+**Datum:** 2026-06-18  
+**Scope:** Homelab k3s-Cluster (`reckeweg.io`)  
+**Namespace:** `traefik`  
+**Aktuell:** Chart v40.3.0 / Traefik Proxy v3.7.4  
+**Ziel:** Chart v41.0.0 / Traefik Proxy v3.7.5  
+**Risiko:** 🟢 Niedrig — Breaking Changes in Logging-Keys und `providers.file.content` betreffen uns nicht
+
+### Breaking Changes v40.3.0 → v41.0.0
+
+| Breaking Change | Änderung | Betrifft uns? |
+|----------------|----------|---------------|
+| Logging-Keys | `logs.general` → `log`, `logs.access` → `accessLog`, camelCased Filter-Keys | **Nein** — keine `logs.*` Values konfiguriert |
+| `providers.file.content` | String → Object | **Nein** — file Provider nicht im Einsatz |
+| Image registry/repository | Default → `null` (Auto-Resolution) | **Nein** — kein custom Image-Override |
+
+Unsere Values (`service`, `ports`, `ingressClass`, `core.defaultRuleSyntax`) sind nicht betroffen.
+
+### Durchführung
+
+**Schritt 1: CRDs vorab aktualisieren**
+
+```bash
+helm repo update
+helm show crds traefik/traefik --version 41.0.0 | \
+  kubectl apply --server-side --force-conflicts -f -
+```
+
+**Schritt 2: targetRevision in ArgoCD aktualisieren**
+
+```yaml
+# gitops/apps/traefik.yaml
+targetRevision: "41.0.0"
+```
+
+ArgoCD synct automatisch. Status prüfen:
+
+```bash
+argocd app get traefik
+argocd app wait traefik --health
+```
+
+**Schritt 3: Post-Upgrade-Verifikation**
+
+```bash
+# Traefik Proxy Version prüfen (erwartet: v3.7.5)
+kubectl -n traefik get deploy traefik -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+# Logs auf Errors prüfen
+kubectl -n traefik logs deploy/traefik --tail=100 | grep -iE "error|fatal"
+
+# Smoke-Tests
+curl -s -o /dev/null -w "%{http_code}" https://gitea.reckeweg.io
+curl -s -o /dev/null -w "%{http_code}" https://argocd.reckeweg.io
+```
+
+### Durchgeführte Änderungen
+
+**`gitops/apps/traefik.yaml`** — `targetRevision: 40.3.0` → `41.0.0`  
+Keine values-Anpassungen nötig. Breaking Changes in Logging-Keys und `providers.file.content` betreffen unsere minimale Konfiguration nicht.
+
+### Checkliste v40.3.0 → v41.0.0
+
+- [ ] CRDs vorab via `helm show crds | kubectl apply --server-side` aktualisiert
+- [ ] `targetRevision: 41.0.0` in `gitops/apps/traefik.yaml` gesetzt und committed
+- [ ] ArgoCD sync erfolgreich — Healthy & Synced
+- [ ] Traefik Pod läuft mit Proxy v3.7.5 Image
+- [ ] Keine Error-Logs
+- [ ] Smoke-Tests alle ✅
+
+---
+
 ## Upgrade v40.2.0 → v40.3.0 (Proxy v3.7.1 → v3.7.4)
 
 **Datum:** 2026-06-15  
