@@ -1,0 +1,45 @@
+name: Helm Chart Auto-Upgrade
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Monday 08:00 UTC
+  workflow_dispatch:      # Manual trigger from Gitea UI
+
+jobs:
+  upgrade:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITEA_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.email "upgrade-agent@reckeweg.io"
+          git config user.name "Upgrade Agent"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install anthropic httpx pyyaml
+
+      - name: Check helm is available
+        run: helm version --short
+
+      - name: Run upgrade agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_BASE_URL: https://gitea.reckeweg.io
+          GITEA_REPO: achim/homelab-infrastructure
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: "8677165142"
+          SMTP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          SMTP_USER: achim.reckeweg@gmail.com
+          NOTIFY_EMAIL: achim.reckeweg@gmail.com
+        run: python scripts/upgrade-agent.py
