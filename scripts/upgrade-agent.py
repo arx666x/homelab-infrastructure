@@ -188,14 +188,9 @@ IMAGE_SERVICES = [
         "github_repo": "apache/guacamole-server",
         "runbook": "",
     },
-    {
-        "name": "headlamp",
-        "image_files": ["gitops/config/headlamp/headlamp.yaml"],
-        "image_pattern": r"ghcr\.io/headlamp-k8s/headlamp:([^\s\"']+)",
-        "version_type": "ghcr",
-        "github_repo": "headlamp-k8s/headlamp",
-        "runbook": "",
-    },
+    # headlamp is excluded: we run a custom fork (gitea.reckeweg.io/achim/headlamp-longhorn)
+    # due to a plugin-loading issue (https://github.com/kubernetes-sigs/headlamp/issues/4863).
+    # Re-add once the upstream fix is confirmed and we switch back to the official image.
 ]
 
 # ---------------------------------------------------------------------------
@@ -283,17 +278,33 @@ def helm_latest_stable(chart: str, repo_url: str) -> Optional[str]:
         ["helm", "search", "repo", f"{alias}/{chart}", "--versions", "--output", "json"],
         capture_output=True, text=True, timeout=30
     )
-    if result.returncode != 0 or not result.stdout.strip():
+    if result.returncode == 0 and result.stdout.strip():
+        try:
+            entries = json.loads(result.stdout)
+            stable = [e for e in entries if not is_prerelease(e.get("version", ""))]
+            if not stable:
+                stable = entries
+            stable.sort(key=lambda e: parse_version(e.get("version", "0")), reverse=True)
+            if stable:
+                return stable[0].get("version")
+        except json.JSONDecodeError:
+            pass
+
+    # Fallback: helm show chart --repo (used by ArgoCD itself, works without repo add)
+    log.debug("helm search repo failed for %s, trying helm show chart --repo", chart)
+    result2 = subprocess.run(
+        ["helm", "show", "chart", chart, "--repo", repo_url],
+        capture_output=True, text=True, timeout=30
+    )
+    if result2.returncode != 0 or not result2.stdout.strip():
+        log.warning("helm show chart also failed for %s@%s: %s",
+                    chart, repo_url, result2.stderr.strip()[:120])
         return None
     try:
-        entries = json.loads(result.stdout)
-    except json.JSONDecodeError:
+        data = yaml.safe_load(result2.stdout)
+        return data.get("version")
+    except Exception:
         return None
-    stable = [e for e in entries if not is_prerelease(e.get("version", ""))]
-    if not stable:
-        stable = entries
-    stable.sort(key=lambda e: parse_version(e.get("version", "0")), reverse=True)
-    return stable[0].get("version") if stable else None
 
 
 # ---------------------------------------------------------------------------
