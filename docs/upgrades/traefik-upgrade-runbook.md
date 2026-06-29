@@ -146,6 +146,77 @@ Keine values-Anpassungen nötig. Gateway API nicht im Einsatz, daher CRD-Entfern
 
 ---
 
+## Upgrade v41.0.0 → v41.0.1 (Proxy v3.7.5 → v3.7.5)
+
+**Datum:** 2026-06-29  
+**Scope:** Homelab k3s-Cluster (`reckeweg.io`)  
+**Namespace:** `traefik`  
+**Aktuell:** Chart v41.0.0 / Traefik Proxy v3.7.5  
+**Ziel:** Chart v41.0.1 / Traefik Proxy v3.7.5  
+**Risiko:** 🟢 Niedrig — Patch-Release; kein Proxy-Update, nur Chart-Fixes
+
+### Änderungen v41.0.0 → v41.0.1
+
+| Bereich | Änderung | Betrifft uns? |
+|---------|----------|---------------|
+| IngressRoute | Fail-fast bei Uppercase-Keys (RFC 1123) | Zu prüfen nach Upgrade |
+| Hub | Hub v3.20.5 Support | Nein — Hub nicht im Einsatz |
+| Hub | Inline literal token in values depreciert | Nein — Hub nicht im Einsatz |
+
+### Durchführung
+
+**Schritt 1: CRDs vorab aktualisieren**
+
+```bash
+helm repo update
+helm show crds traefik/traefik --version 41.0.1 | \
+  kubectl apply --server-side --force-conflicts -f -
+```
+
+**Schritt 2: targetRevision in ArgoCD aktualisieren**
+
+```yaml
+# gitops/apps/traefik.yaml
+targetRevision: "41.0.1"
+```
+
+ArgoCD synct automatisch. Status prüfen:
+
+```bash
+argocd app get traefik
+argocd app wait traefik --health
+```
+
+**Schritt 3: Post-Upgrade-Verifikation**
+
+```bash
+# Traefik Proxy Version prüfen (erwartet: v3.7.5)
+kubectl -n traefik get deploy traefik -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+# Logs auf Errors prüfen — insbesondere RFC-1123-Violations
+kubectl -n traefik logs deploy/traefik --tail=100 | grep -iE "error|fatal"
+
+# Smoke-Tests
+curl -s -o /dev/null -w "%{http_code}" https://gitea.reckeweg.io
+curl -s -o /dev/null -w "%{http_code}" https://argocd.reckeweg.io
+```
+
+### Durchgeführte Änderungen
+
+**`gitops/apps/traefik.yaml`** — `targetRevision: 41.0.0` → `41.0.1`  
+Keine values-Anpassungen nötig.
+
+### Checkliste v41.0.0 → v41.0.1
+
+- [ ] CRDs vorab via `helm show crds | kubectl apply --server-side` aktualisiert
+- [ ] `targetRevision: 41.0.1` in `gitops/apps/traefik.yaml` gesetzt und committed
+- [ ] ArgoCD sync erfolgreich — Healthy & Synced
+- [ ] Traefik Pod läuft mit Proxy v3.7.5 Image
+- [ ] Keine Error-Logs (RFC-1123-Violations beachten)
+- [ ] Smoke-Tests alle ✅
+
+---
+
 ## Upgrade v40.3.0 → v41.0.0 (Proxy v3.7.4 → v3.7.5)
 
 **Datum:** 2026-06-18  
