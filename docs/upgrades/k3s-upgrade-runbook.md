@@ -13,6 +13,7 @@
 | v1.32.3   | v1.35.4   | 2026-05-04 | etcd 3.5→3.6 (Pflichtschritt über v1.32.11)         |
 | v1.35.4   | v1.36.0   | 2026-05-17 | 1 Hop, RPi-Kernel 6.18 iptables-Umstellung erforderlich |
 | v1.36.0   | v1.36.1   | 2026-05-18 | Patch-Release, bugfixes only, kein Sonderfall       |
+| v1.36.1   | v1.36.2   | 2026-05-29 | Patch-Release, bugfixes only, kein Sonderfall       |
 
 ---
 
@@ -32,6 +33,9 @@
 
 Der Raspberry Pi Kernel 6.18.x (rpt-rpi-2712) enthält kein `ip_tables`-Kernelmodul mehr.
 Flannel und kube-proxy brauchen aber iptables – ohne Fix stürzt k3s-agent beim Start ab.
+
+**Bestätigt weiterhin wirksam:** Bei Upgrade v1.36.1→v1.36.2 (2026-05-29) liefen die
+RPis bereits auf Kernel 6.18.34 und der nftables-Fix griff ohne Nacharbeit.
 
 **Gelöst im Playbook `update-pi-nodes.yml`:**
 - `apt install iptables` stellt das Paket sicher (war auf manchen Nodes nicht installiert)
@@ -237,13 +241,13 @@ Jede Runde folgt dem Standard-Ablauf (Master → Verify → Worker → Verify).
 ```bash
 # Binary auf Vorgängerversion zurücksetzen (Beispiel Master):
 sudo systemctl stop k3s
-VERSION_URL="v1.35.4%2Bk3s1"   # + muss URL-encoded werden
+VERSION_URL="v1.36.1%2Bk3s1"   # + muss URL-encoded werden
 sudo curl -sfL \
   "https://github.com/k3s-io/k3s/releases/download/${VERSION_URL}/k3s" \
   -o /usr/local/bin/k3s
 sudo chmod 755 /usr/local/bin/k3s
 # Unit-File aus Backup wiederherstellen:
-sudo cp /etc/systemd/system/k3s.service.bak-v1.36.0+k3s1 \
+sudo cp /etc/systemd/system/k3s.service.bak-v1.36.2+k3s1 \
         /etc/systemd/system/k3s.service
 sudo systemctl daemon-reload && sudo systemctl start k3s
 ```
