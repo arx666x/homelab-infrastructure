@@ -1,4 +1,4 @@
-# Runbook: kube-prometheus-stack Upgrade 55.5.0 → 86.2.3
+# Runbook: kube-prometheus-stack Upgrade 55.5.0 → 87.3.0
 
 **Umgebung:** homelab k3s-Cluster (`reckeweg.io`)  
 **Namespace:** `monitoring`  
@@ -42,7 +42,8 @@ Jeder Major-Bump kann CRD-Änderungen enthalten. Die Reihenfolge ist zwingend:
 | 15      | 84.5.0 → 85.1.3 | v0.90.1 (unverändert) | Distroless Images Default |
 | 16      | 85.1.3 → 85.3.3 | v0.90.1 (unverändert) | Maintenance (Grafana 12.4.1) |
 | 17      | 85.3.3 → 86.2.0 | **v0.91.0**           | CRD-Update + Prometheus 3.12 |
-| 18 (Ziel) | 86.2.0 → 86.2.3 | v0.91.0 (unverändert) | Maintenance (Grafana 12.4.5, kube-state-metrics 7.4.1) |
+| 18      | 86.2.0 → 86.2.3 | v0.91.0 (unverändert) | Maintenance (Grafana 12.4.5, kube-state-metrics 7.4.1) |
+| 19 (Ziel) | 86.2.3 → 87.3.0 | **v0.92.0**           | CRD-Update + Grafana 12.7.1 + kube-state-metrics 7.5.1 |
 
 > **Hinweis:** Zwischen den explizit genannten Breaking-Change-Versionen kann man
 > innerhalb einer Major-Linie (z. B. 55.x → 61.x) direkt springen, da dort keine
@@ -709,7 +710,7 @@ prometheusOperator:
 
 ---
 
-## Station 17 (Final): Chart 86.2.0 → 86.2.3 (Maintenance)
+## Station 17: Chart 86.2.0 → 86.2.3 (Maintenance)
 
 > ✅ **Abgeschlossen am 2026-06-15** — `targetRevision: "86.2.3"` in `gitops/apps/monitoring.yaml` gesetzt.
 
@@ -730,6 +731,54 @@ git add gitops/apps/monitoring.yaml
 git commit -m "kube-prometheus-stack upgrade 86.2.0 → 86.2.3 (Maintenance)"
 git push
 ```
+
+---
+
+## Station 18 (Final): Chart 86.2.3 → 87.3.0 (Operator v0.92.0)
+
+> ✅ **Abgeschlossen am 2026-06-29** — `targetRevision: "87.3.0"` in `gitops/apps/monitoring.yaml` gesetzt.
+
+### CRD-Update erforderlich: prometheus-operator v0.91.0 → v0.92.0
+
+Alle 10 CRDs werden aktualisiert — keine neuen CRD-Arten, nur Schema-Änderungen.
+
+**Highlights v0.92.0:**
+- `PrometheusTopologySharding` und `PrometheusShardRetentionPolicy` Feature Gates zu Beta promoted (jetzt standardmäßig aktiv)
+- URL-Validierung für OAuth2 `tokenUrl` und RemoteRead `url`
+- Neues Feld `staleSeriesCompactionThreshold` in TSDBSpec
+- Neues Feld `payload` im Webhook-Receiver für AlertmanagerConfig
+
+> **Hinweis:** `monitoring.yaml` hat `skipCrds: false` und `ServerSideApply=true` — ArgoCD managed die CRDs im Sync. Falls Konflikte auftreten, CRDs manuell pre-applyen (Schritt 18.1).
+
+### Schritt 18.1: CRDs für v0.92.0 (falls ArgoCD-Sync fehlschlägt)
+
+```bash
+BASE="https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.92.0/example/prometheus-operator-crd"
+for crd in alertmanagerconfigs alertmanagers podmonitors probes prometheusagents prometheuses prometheusrules scrapeconfigs servicemonitors thanosrulers; do
+  kubectl apply --server-side --force-conflicts -f "${BASE}/monitoring.coreos.com_${crd}.yaml"
+done
+```
+
+### Schritt 18.2: Ziel in Git setzen
+
+```bash
+# targetRevision: "87.3.0"
+git add gitops/apps/monitoring.yaml
+git commit -m "kube-prometheus-stack upgrade 86.2.3 → 87.3.0 (operator v0.92.0)"
+git push
+
+argocd app sync kube-prometheus-stack --timeout 300
+argocd app wait kube-prometheus-stack --health --timeout 300
+```
+
+### Komponentenupdates in 87.x
+
+| Komponente | Alt | Neu |
+|---|---|---|
+| prometheus-operator | v0.91.0 | **v0.92.0** |
+| Grafana (chart) | 12.4.5 | **12.7.1** |
+| kube-state-metrics (chart) | 7.4.1 | **7.5.1** |
+| Prometheus Node Exporter | 4.55.0 | 4.55.0 |
 
 ---
 
@@ -762,14 +811,14 @@ kubectl get alertmanager -n monitoring
 argocd app get kube-prometheus-stack
 ```
 
-**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 86.2.3:**
-- Prometheus-Operator: `v0.91.0`
-- Prometheus: `3.12.0` (Distroless-Image)
+**Erwartete Ergebnisse nach erfolgreichem Upgrade auf 87.3.0:**
+- Prometheus-Operator: `v0.92.0`
+- Prometheus: `3.x` (Distroless-Image)
 - Alertmanager: `v0.32.2`
-- Grafana: `12.4.5`, HTTP Status: `200`
-- kube-state-metrics: `7.4.1`
+- Grafana: `12.7.1`, HTTP Status: `200`
+- kube-state-metrics: `7.5.1`
 - Alle 10 CRDs: `Healthy`
-- ArgoCD: `Synced to 86.2.3`, `Health Status: Healthy`
+- ArgoCD: `Synced to 87.3.0`, `Health Status: Healthy`
 
 ### Auto-Sync wieder aktivieren (optional)
 
