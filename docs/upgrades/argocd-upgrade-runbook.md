@@ -737,6 +737,7 @@ argocd version --client
 | Datum | Von | Auf | Ergebnis | Besonderheiten |
 |---|---|---|---|---|
 | 2026-05-18 | 3.3.9 | 3.4.1 | ✅ | Kein Handlungsbedarf; CLI via brew (3.4.2) |
+| 2026-06-29 | 3.4.3 | 3.4.4 | ✅ | Patch-Release; kein Breaking Change; Bugfixes Application Controller & UI |
 
 ---
 
@@ -761,6 +762,35 @@ kubectl rollout status statefulset/argocd-application-controller -n argocd --tim
 kubectl get deployment argocd-server -n argocd \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
 # Erwartung: quay.io/argoproj/argocd:v3.4.3
+
+# CLI (via brew, sobald Paket verfügbar)
+brew upgrade argocd
+argocd version --client
+```
+
+---
+
+## Phase 11: Patch-Hop 3.4.3 → 3.4.4
+
+**Durchgeführt:** 2026-06-29  
+**Status:** ✅ Erfolgreich
+
+Patch-Release — kein Breaking Change. Relevante Fixes: RBAC-Regression bei project-scoped Resources in Multi-Namespace-Setups, Race Condition im Cluster Informer, Diff-Fehler bei neuen Objekten, Dex-Passwort-Parsing mit Sonderzeichen.
+
+```bash
+kubectl apply -n argocd \
+  --server-side \
+  --force-conflicts \
+  -f "https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.4/manifests/install.yaml"
+
+kubectl rollout status deployment/argocd-server              -n argocd --timeout=300s
+kubectl rollout status deployment/argocd-repo-server         -n argocd --timeout=300s
+kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout=300s
+
+# Version bestätigen
+kubectl get deployment argocd-server -n argocd \
+  -o jsonpath='{.spec.template.spec.containers[0].image}'
+# Erwartung: quay.io/argoproj/argocd:v3.4.4
 
 # CLI (via brew, sobald Paket verfügbar)
 brew upgrade argocd
