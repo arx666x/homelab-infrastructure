@@ -2,7 +2,7 @@
 
 **Ziel:** KubeVirt v1.3.1 → v1.8.2 | CDI v1.59.0 → v1.65.0  
 **Methode:** Schrittweise über Minor-Versionen, GitOps via ArgoCD  
-**Letzte Aktualisierung:** 2026-06-14 (Schritt 6: v1.8.2 → v1.8.3)
+**Letzte Aktualisierung:** 2026-06-29 (Schritt 7: v1.8.3 → v1.8.4)
 
 ---
 
@@ -24,7 +24,8 @@
 | 3 | v1.5.2 → **v1.6.5** | v1.61.5 → **v1.63.1** | ✅ abgeschlossen |
 | 4 | v1.6.5 → **v1.7.3** | v1.63.1 → **v1.65.0** | ✅ abgeschlossen |
 | 5 | v1.7.3 → **v1.8.2** | v1.65.0 (keine Änderung) | ✅ abgeschlossen |
-| 6 | v1.8.2 → **v1.8.3** | v1.65.0 (keine Änderung) | 🔄 aktuell |
+| 6 | v1.8.2 → **v1.8.3** | v1.65.0 (keine Änderung) | ✅ abgeschlossen |
+| 7 | v1.8.3 → **v1.8.4** | v1.65.0 (keine Änderung) | 🔄 aktuell |
 
 > **Warum diese Patch-Versionen?**  
 > Immer die letzte verfügbare Patch-Version innerhalb eines Minor-Zweigs –
@@ -457,6 +458,56 @@ kubectl get pods -n kubevirt -o wide
 
 ---
 
+## Schritt 7: v1.8.4 / CDI v1.65.0 (Patch-Release, 2026-06-29)
+
+Reiner Bugfix/Security-Patch, keine Breaking Changes.
+
+> **Kritischer Bug-Fix:**
+> - gRPC-Connection-Leak in `virt-handler` (`GetLauncherClient`) behoben –
+>   verursachte unbegrenztes Memory-Wachstum, Socket-Akkumulation und Goroutine-Leaks.
+>   Relevant für Langzeitbetrieb.
+>
+> **Security:**
+> - `moby/spdystream` v0.5.0 → v0.5.1 (CVE-2026-35469 gepatcht)
+>
+> **Weitere Fixes:**
+> - Fehlende Metriken, Recording Rules und Alerts für Virtualisierungskomponenten ergänzt
+> - CPU Feature Detection (node-labeller) verbessert
+
+### 7a. Datei anpassen
+
+**`gitops/config/kubevirt/kustomization.yaml`**
+```yaml
+resources:
+  - https://github.com/kubevirt/kubevirt/releases/download/v1.8.4/kubevirt-operator.yaml
+  - kubevirt-cr.yaml
+```
+
+### 7b. Commit & Push
+
+```bash
+git add gitops/config/kubevirt/kustomization.yaml
+git commit -m "chore: upgrade KubeVirt v1.8.3→v1.8.4"
+git push
+```
+
+### 7c. ArgoCD sync / kubectl apply
+
+```bash
+argocd app sync kubevirt-operator
+# oder bei abgelaufener Session:
+kubectl apply -k gitops/config/kubevirt/
+```
+
+### 7d. Verify
+
+```bash
+until [ "$(kubectl get kubevirt kubevirt -n kubevirt -o jsonpath='{.status.observedKubeVirtVersion}')" = "v1.8.4" ]; do sleep 5; done && echo "v1.8.4 deployed"
+kubectl get pods -n kubevirt -o wide
+```
+
+---
+
 ## Troubleshooting
 
 ### ArgoCD OutOfSync nach Upgrade
@@ -509,7 +560,8 @@ Upgrade-Abschluss gefixt. Reihenfolge dann:
 | KubeVirt Operator | v1.6.5 | `https://github.com/kubevirt/kubevirt/releases/download/v1.6.5/kubevirt-operator.yaml` |
 | KubeVirt Operator | v1.7.3 | `https://github.com/kubevirt/kubevirt/releases/download/v1.7.3/kubevirt-operator.yaml` |
 | KubeVirt Operator | v1.8.2 | `https://github.com/kubevirt/kubevirt/releases/download/v1.8.2/kubevirt-operator.yaml` |
-| KubeVirt Operator | **v1.8.3** | `https://github.com/kubevirt/kubevirt/releases/download/v1.8.3/kubevirt-operator.yaml` |
+| KubeVirt Operator | v1.8.3 | `https://github.com/kubevirt/kubevirt/releases/download/v1.8.3/kubevirt-operator.yaml` |
+| KubeVirt Operator | **v1.8.4** | `https://github.com/kubevirt/kubevirt/releases/download/v1.8.4/kubevirt-operator.yaml` |
 | CDI Operator | v1.60.5 | `https://github.com/kubevirt/containerized-data-importer/releases/download/v1.60.5/cdi-operator.yaml` |
 | CDI Operator | v1.61.5 | `https://github.com/kubevirt/containerized-data-importer/releases/download/v1.61.5/cdi-operator.yaml` |
 | CDI Operator | v1.63.1 | `https://github.com/kubevirt/containerized-data-importer/releases/download/v1.63.1/cdi-operator.yaml` |
