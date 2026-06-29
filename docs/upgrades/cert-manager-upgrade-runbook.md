@@ -1,11 +1,11 @@
-# cert-manager Upgrade Runbook: v1.13.3 → v1.20.2
+# cert-manager Upgrade Runbook: v1.13.3 → v1.20.3
 
-**Datum:** 2026-05-03 (zuletzt aktualisiert)  
+**Datum:** 2026-06-29 (zuletzt aktualisiert)  
 **Autor:** Achim Reckeweg  
 **Cluster:** reckeweg.io homelab k3s  
 **Namespace:** `cert-manager`  
 **Install-Methode:** ArgoCD GitOps (Helm Chart via `charts.jetstack.io`)  
-**Zielversion:** v1.20.2  
+**Zielversion:** v1.20.3  
 
 ---
 
@@ -14,7 +14,7 @@
 | | |
 |---|---|
 | **Ausgangversion** | v1.13.3 |
-| **Zielversion** | v1.20.2 |
+| **Zielversion** | v1.20.3 |
 | **Upgrade-Strategie** | Minor-by-Minor via Git-Commit → ArgoCD Auto-Sync |
 | **ArgoCD Application** | `argocd/cert-manager` |
 | **ClusterIssuers** | `letsencrypt-prod` (Cloudflare DNS-01), `selfsigned-issuer`, `ca-issuer` |
@@ -38,12 +38,16 @@
 - Fix für unnötige Certificate-Renewals wenn `kind`/`group` in `issuerRef` beim Upgrade auf 1.19.x weggelassen wurde
 - Helm-Fix: ungültiges YAML wenn `webhook.config` und `webhook.volumes` gleichzeitig definiert sind
 
+### Warum v1.20.3?
+
+- Patch-Release mit Bugfixes und Dependency-Updates, keine Breaking Changes.
+
 ---
 
 ## Upgrade-Pfad
 
 ```
-v1.13.3 → v1.14.7 → v1.15.5 → v1.16.5 → v1.17.4 → v1.18.6 → v1.19.4 → v1.20.2
+v1.13.3 → v1.14.7 → v1.15.5 → v1.16.5 → v1.17.4 → v1.18.6 → v1.19.4 → v1.20.2 → v1.20.3
 ```
 
 Jeder Schritt = ein Git-Commit + ArgoCD-Sync + Validierung.
@@ -76,6 +80,7 @@ Jeder Schritt = ein Git-Commit + ArgoCD-Sync + Validierung.
 - Bugfix: Certificate-Renewals die durch fehlende `kind`/`group` in `issuerRef` beim Upgrade auf 1.19.x ausgelöst wurden, sind nun vollständig behoben.
 - Direkter Schritt von v1.19.4 → v1.20.2 möglich — kein weiteres Minor-Stepping nötig.
 - Go 1.26.2 mit Dependency-Updates für gemeldete Vulnerabilities.
+- **v1.20.3 (Patch):** Keine Breaking Changes. Patch-Release mit Bugfixes und Dependency-Updates.
 
 ---
 
@@ -235,7 +240,7 @@ validate
 
 ---
 
-## Schritt 7: v1.19.4 → v1.20.2 (Ziel)
+## Schritt 7: v1.19.4 → v1.20.2
 
 ```bash
 sed -i '' 's/targetRevision: v1.19.4/targetRevision: v1.20.2/' gitops/apps/cert-manager.yaml
@@ -251,22 +256,38 @@ validate
 
 ---
 
-## Post-Upgrade-Validierung (nach Schritt 7)
+## Schritt 8: v1.20.2 → v1.20.3 (Ziel) ✓ 2026-06-29
+
+```bash
+sed -i '' 's/targetRevision: v1.20.2/targetRevision: v1.20.3/' gitops/apps/cert-manager.yaml
+grep targetRevision gitops/apps/cert-manager.yaml
+
+git add gitops/apps/cert-manager.yaml
+git commit -m "chore: upgrade cert-manager v1.20.2 → v1.20.3"
+git push
+
+wait_argocd v1.20.3
+validate
+```
+
+---
+
+## Post-Upgrade-Validierung (nach Schritt 8)
 
 ### Image-Version bestätigen
 
 ```bash
 kubectl -n cert-manager get pods \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
-# Alle Pods: ...v1.20.2
+# Alle Pods: ...v1.20.3
 
 kubectl -n cert-manager get deployment cert-manager \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
-# Erwartet: quay.io/jetstack/cert-manager-controller:v1.20.2
+# Erwartet: quay.io/jetstack/cert-manager-controller:v1.20.3
 
 kubectl -n cert-manager get deployment cert-manager-webhook \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
-# Erwartet: quay.io/jetstack/cert-manager-webhook:v1.20.2
+# Erwartet: quay.io/jetstack/cert-manager-webhook:v1.20.3
 ```
 
 ### ArgoCD Application final prüfen
@@ -314,7 +335,7 @@ Label `path` wurde durch `action` ersetzt. Folgende Queries in Grafana prüfen:
 Nach erfolgreichem Upgrade die Bootstrap-Version konsistent halten:
 
 ```bash
-sed -i '' 's|cert-manager/releases/download/v1.19.4|cert-manager/releases/download/v1.20.2|' deploy-direct.sh
+sed -i '' 's|cert-manager/releases/download/v1.19.4|cert-manager/releases/download/v1.20.3|' deploy-direct.sh
 grep "releases/download" deploy-direct.sh
 ```
 
@@ -326,13 +347,13 @@ grep "releases/download" deploy-direct.sh
 
 ## Rollback
 
-Im Fehlerfall auf die letzte funktionierende Version zurückkehren — Beispiel Rollback von Schritt 7:
+Im Fehlerfall auf die letzte funktionierende Version zurückkehren — Beispiel Rollback von Schritt 8:
 
 ```bash
-sed -i '' 's/targetRevision: v1.20.2/targetRevision: v1.19.4/' gitops/apps/cert-manager.yaml
+sed -i '' 's/targetRevision: v1.20.3/targetRevision: v1.20.2/' gitops/apps/cert-manager.yaml
 
 git add gitops/apps/cert-manager.yaml
-git commit -m "revert: cert-manager zurück auf v1.19.4"
+git commit -m "revert: cert-manager zurück auf v1.20.2"
 git push
 ```
 
