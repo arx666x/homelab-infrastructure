@@ -5,6 +5,10 @@
 **Namespace:** `mcp`
 **Projekt:** https://github.com/containers/kubernetes-mcp-server
 
+**Referenzen:**
+- https://github.com/containers/kubernetes-mcp-server/blob/main/docs/getting-started-kubernetes.md
+- https://github.com/containers/kubernetes-mcp-server/blob/main/docs/getting-started-claude-code.md
+
 ---
 
 ## Architektur
