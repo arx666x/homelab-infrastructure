@@ -67,6 +67,23 @@ und muss separat (Passwort-Manager) hinterlegt werden, siehe unten.
 
 ---
 
+## Pi-hole DNS-Eintrag
+
+Wie bei allen anderen `*.reckeweg.io`-Services zeigt auch `k8s-mcp.reckeweg.io` auf die
+feste Traefik-LoadBalancer-IP (MetalLB Pool `192.168.20.100-120`):
+
+Pi-hole → **Local DNS → DNS Records**:
+
+| Domain | IP |
+|---|---|
+| `k8s-mcp.reckeweg.io` | `192.168.20.100` |
+
+Ohne diesen Eintrag löst der Hostname im Heimnetz nicht auf (Let's Encrypt/HTTP-01
+braucht die öffentliche DNS-Auflösung nur für die Zertifikatsausstellung, nicht für den
+eigentlichen Zugriff aus dem LAN).
+
+---
+
 ## Deployment
 
 Kein manuelles `kubectl apply` nötig – ArgoCD deployt automatisch nach dem Git-Push
