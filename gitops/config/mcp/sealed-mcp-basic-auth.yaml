@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: mcp-basic-auth
+  namespace: mcp
+spec:
+  encryptedData:
+    users: AgB8hNARMHLdJPc75eWjBEanTTwavF/+6u/V77pwBhXOFrgq64UXuLAoU1gba2Sx/Fy192ZsdX3CHt+M4TUZ1Kp8slFxjCQdX8QStcKY8oCgadWMyC/ot3h6mKnfStKoBj3dgJA2ROhpNLq55dy0bpzvvo125vKEvhTDP50DOkLiZ4+HAzacqz+O7WJ78dB5Za+FiqyR/0ZxdNuvK721JobwHZe7gzm1m+CFdeIiJAVLKeF+kt9Q0jFHoMdUGx/kHhFlMYG0AG7vURAKg8EmpJzBQZ3gB5tIB9UEp2hZ9V2SsMSMkVB6FakxHYXIF152VHXyfFjdPp2czX0voJ8MhE6BgKLscxr7S7jCEch25tevcHjN4Aguzhsjt8efUg33hv1vg/VlYAFB7+pvhUvC1Q4tO+6GcOEP38Bw9bXpkAP7qSJPE9iIX8I7U7sehkgiljKF9NIqgAfOiZZ+x42GXlRdZdrGag/hMsfl6A/7MfwpVzCc+UWQ7Erlq96zd9qXZmGypQudDVE5YVOdZIbBIbFcrIoZ3oR7OaNNOxZOgFsSfCH6DkoOSi/irI+BkkfSPSW7tFiEcHXeW7FCjZmzLaHGDbN1pXZLVODqWnb+5X6kfPEeI0R4H9L6JwbpXjzdzaqiadUgqz7fGBcD3Caf53wD9tDMIEqcK0Rthos9Jbi0A0V/1E40k+nhb9jHMvuXoZKKpmrrytgxnFNevqoEwHCvXcqp6GmOdIqwG56XA6lLaLUOtJNx2EpJeJJdBu81Js65Mg4J71q6FO6ecL1SrC2WgT4rPJ4=
+  template:
+    metadata:
+      name: mcp-basic-auth
+      namespace: mcp

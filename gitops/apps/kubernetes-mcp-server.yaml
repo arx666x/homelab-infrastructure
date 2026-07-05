@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubernetes-mcp-server
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  sources:
+    - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
+      targetRevision: HEAD
+      path: gitops/config/mcp
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mcp
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

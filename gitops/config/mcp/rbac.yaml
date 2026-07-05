@@ -1,0 +1,38 @@
+# =============================================================================
+# kubernetes-mcp-server - Namespace & RBAC
+# Read-only ServiceAccount, gebunden an die eingebaute ClusterRole "view".
+# "view" schliesst das Lesen von Secret-Inhalten explizit aus.
+# =============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-viewer
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-viewer-view
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: mcp-viewer
+    namespace: mcp
