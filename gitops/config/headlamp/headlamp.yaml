@@ -1,7 +1,9 @@
 # =============================================================================
 # Headlamp - Kubernetes UI
 # mit Longhorn + Cert-Manager Plugin via Init-Container
-# Longhorn Plugin: eigener Fork mit Dashboard-Fix (gitea.reckeweg.io)
+# Longhorn Plugin: offizielles Plugin von Giant Swarm (github.com/giantswarm/headlamp-longhorn)
+# Der :namespace-Route-Crash (Grund für den frueheren Fork) wurde in Headlamp
+# selbst gefixt (PR kubernetes-sigs/headlamp#5679, ausgeliefert mit v0.43.0)
 # URL: https://headlamp.reckeweg.io
 # =============================================================================
 
@@ -31,19 +33,19 @@ spec:
 
       initContainers:
         # -----------------------------------------------------------------
-        # Plugin 1: Longhorn
-        # Eigener Fork mit Fix: :namespace aus Detail-Routes entfernt
-        # https://gitea.reckeweg.io/achim/headlamp-longhorn
+        # Plugin 1: Longhorn (offizielles Plugin, Giant Swarm)
+        # https://github.com/giantswarm/headlamp-longhorn
         # -----------------------------------------------------------------
         - name: install-longhorn-plugin
-          image: gitea.reckeweg.io/achim/headlamp-longhorn:latest
+          image: gsoci.azurecr.io/giantswarm/headlamp-longhorn:0.1.1
           imagePullPolicy: Always
           command:
             - sh
             - -c
             - |
               echo ">>> Installiere Longhorn Plugin..."
-              cp -r /plugins/headlamp-longhorn /headlamp/plugins/
+              mkdir -p /headlamp/plugins/headlamp-longhorn
+              cp -r /plugins/headlamp-longhorn/* /headlamp/plugins/headlamp-longhorn/
               echo ">>> Longhorn Plugin installiert."
           volumeMounts:
             - name: plugins
@@ -79,7 +81,7 @@ spec:
         # Die 404s fuer fehlende Locale-Dateien sind kosmetisch (fallback: en)
         # -----------------------------------------------------------------
         - name: fix-static-plugins
-          image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
+          image: ghcr.io/headlamp-k8s/headlamp:v0.43.0
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -97,10 +99,13 @@ spec:
 
       containers:
         - name: headlamp
-          image: ghcr.io/headlamp-k8s/headlamp:v0.40.1
+          image: ghcr.io/headlamp-k8s/headlamp:v0.43.0
           args:
             - "-in-cluster"
             - "-plugins-dir=/headlamp/plugins"
+            # Session-Cookie 1 Jahr gueltig statt Default 24h (passend zum
+            # 1-Jahres-Token aus headlamp-token.sh) - verfuegbar seit v0.41.0
+            - "-session-ttl=31536000"
           ports:
             - containerPort: 4466
               name: http
