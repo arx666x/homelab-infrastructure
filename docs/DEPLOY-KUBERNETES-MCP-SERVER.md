@@ -17,7 +17,6 @@
 Claude Desktop (Mac)
    └─ mcp-remote (lokale stdio-Bridge, via npx)
         └─ HTTPS + Basic-Auth ───────────► k8s-mcp.reckeweg.io (Traefik Ingress)
-                                              ├─ Middleware: IP-Allowlist (192.168.11.0/24)
                                               ├─ Middleware: Basic-Auth (Sealed Secret)
                                               └─ kubernetes-mcp-server Pod
                                                     ├─ ServiceAccount: mcp-viewer
@@ -43,7 +42,7 @@ ausschließlich über die ClusterRoleBinding auf die eingebaute `view`-Rolle.
 |---|---|
 | `gitops/config/mcp/rbac.yaml` | Namespace, ServiceAccount `mcp-viewer`, ClusterRoleBinding auf `view` |
 | `gitops/config/mcp/deployment.yaml` | Deployment (`--read-only`, Port 8080), Service |
-| `gitops/config/mcp/ingress.yaml` | Traefik Middlewares (IP-Allowlist, Basic-Auth), Certificate, Ingress |
+| `gitops/config/mcp/ingress.yaml` | Traefik Middleware (Basic-Auth), Certificate, Ingress |
 | `gitops/config/mcp/sealed-mcp-basic-auth.yaml` | SealedSecret mit htpasswd-Credentials für Basic-Auth |
 | `gitops/apps/kubernetes-mcp-server.yaml` | ArgoCD Application |
 
@@ -53,17 +52,21 @@ Sync erfolgt automatisch über `gitops/argocd/root-app.yaml` (App-of-Apps, `dire
 
 ## Sicherheitsmodell
 
-Zwei unabhängige Schutzschichten vor dem MCP-Server, zusätzlich zur RBAC-Einschränkung:
+Drei unabhängige Schutzschichten vor dem MCP-Server:
 
-1. **Netzwerk:** Traefik `IPAllowList`-Middleware erlaubt nur Quell-IPs aus `192.168.11.0/24`
-   (Heimnetz-VLAN). Von außerhalb ist der Hostname zwar öffentlich auflösbar
-   (Let's Encrypt benötigt das für die Zertifikatsausstellung), aber Anfragen aus anderen
-   Quell-IPs werden von Traefik mit 403 abgelehnt.
-2. **Basic-Auth:** Zusätzlich verlangt Traefik gültige Basic-Auth-Credentials
-   (`gitops/config/mcp/sealed-mcp-basic-auth.yaml`).
-3. **RBAC:** Selbst bei kompromittierten Credentials ist der Zugriff auf die eingebaute
+1. **Basic-Auth:** Traefik verlangt gültige Basic-Auth-Credentials
+   (`gitops/config/mcp/sealed-mcp-basic-auth.yaml`), bevor eine Anfrage überhaupt den
+   Pod erreicht.
+2. **RBAC:** Selbst bei kompromittierten Credentials ist der Zugriff auf die eingebaute
    `view`-ClusterRole beschränkt – kein Schreibzugriff, keine Secret-Inhalte lesbar.
-4. **`--read-only`-Flag:** Zusätzliche Absicherung auf Anwendungsebene, unabhängig von RBAC.
+3. **`--read-only`-Flag:** Zusätzliche Absicherung auf Anwendungsebene, unabhängig von RBAC.
+
+Auf eine Traefik-`IPAllowList`-Middleware wurde bewusst verzichtet: Externer Zugriff
+außerhalb des Heimnetzes ist ohnehin nur per VPN möglich, eine zusätzliche
+IP-Einschränkung auf Ingress-Ebene bringt hier keinen echten Mehrwert. Sie hätte zudem
+mit dem clusterweiten Traefik-Service (`externalTrafficPolicy: Cluster`, siehe
+Troubleshooting-Hinweis unten) zuverlässig zu False-Positive-403-Fehlern geführt, da
+kube-proxy bei node-übergreifendem Forwarding die echte Quell-IP per SNAT ersetzt.
 
 Die Basic-Auth-Zugangsdaten (Username `claude`) liegen **nicht** im Git-Repo im Klartext –
 nur die von `kubeseal` verschlüsselte Fassung. Das Passwort selbst wurde einmalig generiert
@@ -166,7 +169,7 @@ Desktop-App. Für Claude Desktop (unsere Konfiguration über
    ~/Library/Logs/Claude/mcp-server-k8s-homelab.log
    ~/Library/Logs/Claude/mcp.log
    ```
-   Hier landen auch Fehler von `mcp-remote` selbst (z. B. 401/403 von Traefik bei
+   Hier landen auch Fehler von `mcp-remote` selbst (z. B. 401 von Traefik bei
    falschem Basic-Auth-Base64-Wert, DNS-Fehler falls der Pi-hole-Eintrag fehlt, etc.).
 
 ---
@@ -226,8 +229,14 @@ kubectl describe certificate k8s-mcp-tls -n mcp
 
 # Ingress / Middlewares prüfen
 kubectl get ingress -n mcp
-kubectl get middleware -n mcp
+kubectl get middleware.traefik.io -n mcp
 
-# Von innerhalb des Heimnetzes testen (401 = Basic-Auth greift, 403 = IP-Allowlist greift)
+# Testen (401 = Basic-Auth greift, Endpoint erreichbar)
 curl -i https://k8s-mcp.reckeweg.io/mcp
 ```
+
+**Hinweis:** Es gibt sowohl `middlewares.traefik.io` als auch das ältere Alias
+`middlewares.traefik.containo.us` als CRD im Cluster. `kubectl get middleware` ohne
+API-Gruppen-Suffix kann je nach Cluster auf die falsche Gruppe auflösen und
+"not found" liefern, obwohl die Ressource existiert – im Zweifel `middleware.traefik.io`
+explizit angeben.
