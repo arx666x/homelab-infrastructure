@@ -142,9 +142,32 @@ Das Passwort selbst wurde beim Erstellen der SealedSecret generiert und dir sepa
 mitgeteilt – **nicht im Repo gespeichert**. Falls verloren: Passwort neu generieren und
 Secret neu versiegeln (siehe unten).
 
-Nach Speichern: Claude Desktop neu starten. Der Connector erscheint dann unter
-**Settings → Connectors** als `k8s-homelab` mit ausschließlich lesenden Tools
-(`--read-only`, ClusterRole `view`).
+Nach Speichern: Claude Desktop **komplett beenden** (⌘Q, nicht nur das Fenster
+schließen) und neu öffnen – die App liest `claude_desktop_config.json` nur beim Start ein.
+Der Connector erscheint dann unter **Settings → Connectors** als `k8s-homelab` mit
+ausschließlich lesenden Tools (`--read-only`, ClusterRole `view`).
+
+---
+
+## Verbindung prüfen
+
+**`claude mcp list` funktioniert hier NICHT** – das ist ein Befehl der Claude Code CLI
+(`npm install -g @anthropic-ai/claude-code`), einem separaten Terminal-Tool. Die
+`getting-started-claude-code.md`-Referenz oben bezieht sich darauf, nicht auf die
+Desktop-App. Für Claude Desktop (unsere Konfiguration über
+`claude_desktop_config.json`) stattdessen:
+
+1. **Settings → Developer** (bzw. **Connectors**, je nach App-Version) – zeigt
+   `k8s-homelab` mit Status (running/error) und ggf. einer kurzen Fehlermeldung.
+2. **Werkzeug-Icon im Chat-Eingabefeld** – sobald die Verbindung steht, tauchen dort die
+   vom Server bereitgestellten (Read-only-)Tools auf.
+3. **Logs** bei Verbindungsproblemen:
+   ```
+   ~/Library/Logs/Claude/mcp-server-k8s-homelab.log
+   ~/Library/Logs/Claude/mcp.log
+   ```
+   Hier landen auch Fehler von `mcp-remote` selbst (z. B. 401/403 von Traefik bei
+   falschem Basic-Auth-Base64-Wert, DNS-Fehler falls der Pi-hole-Eintrag fehlt, etc.).
 
 ---
 
