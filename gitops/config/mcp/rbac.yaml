@@ -36,3 +36,37 @@ subjects:
   - kind: ServiceAccount
     name: mcp-viewer
     namespace: mcp
+
+---
+# "view" deckt zwar metrics.k8s.io (nodes/pods) ab, aber nicht die core-v1 Node-Objekte
+# selbst (Conditions, Capacity/Allocatable) oder das nodes/metrics-Subresource
+# (kubelet cAdvisor-Metriken). Eigene ClusterRole dafuer, statt "view" aufzuweichen.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-viewer-nodes
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["nodes/metrics"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-viewer-nodes
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mcp-viewer-nodes
+subjects:
+  - kind: ServiceAccount
+    name: mcp-viewer
+    namespace: mcp

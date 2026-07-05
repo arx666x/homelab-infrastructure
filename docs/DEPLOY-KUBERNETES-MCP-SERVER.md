@@ -40,7 +40,7 @@ ausschließlich über die ClusterRoleBinding auf die eingebaute `view`-Rolle.
 
 | Datei | Inhalt |
 |---|---|
-| `gitops/config/mcp/rbac.yaml` | Namespace, ServiceAccount `mcp-viewer`, ClusterRoleBinding auf `view` |
+| `gitops/config/mcp/rbac.yaml` | Namespace, ServiceAccount `mcp-viewer`, ClusterRoleBinding auf `view`, plus ClusterRole `mcp-viewer-nodes` (Node-Metriken) |
 | `gitops/config/mcp/deployment.yaml` | Deployment (`--read-only`, Port 8080), Service |
 | `gitops/config/mcp/ingress.yaml` | Traefik Middleware (Basic-Auth), Certificate, Ingress |
 | `gitops/config/mcp/sealed-mcp-basic-auth.yaml` | SealedSecret mit htpasswd-Credentials für Basic-Auth |
@@ -59,6 +59,10 @@ Drei unabhängige Schutzschichten vor dem MCP-Server:
    Pod erreicht.
 2. **RBAC:** Selbst bei kompromittierten Credentials ist der Zugriff auf die eingebaute
    `view`-ClusterRole beschränkt – kein Schreibzugriff, keine Secret-Inhalte lesbar.
+   Zusätzlich gibt es die schlanke ClusterRole `mcp-viewer-nodes` (`get`/`list` auf
+   `nodes`, `get` auf `nodes/metrics`), damit Node-CPU/Memory/Conditions lesbar sind –
+   `view` deckt zwar `metrics.k8s.io` (Pods/Nodes) ab, aber nicht die core-v1
+   Node-Objekte selbst oder das `nodes/metrics`-Subresource.
 3. **`--read-only`-Flag:** Zusätzliche Absicherung auf Anwendungsebene, unabhängig von RBAC.
 
 Auf eine Traefik-`IPAllowList`-Middleware wurde bewusst verzichtet: Externer Zugriff
@@ -220,8 +224,10 @@ kubectl get pods -n mcp
 kubectl logs -n mcp deployment/kubernetes-mcp-server
 
 # RBAC prüfen
-kubectl get clusterrolebinding mcp-viewer-view -o yaml
+kubectl get clusterrolebinding mcp-viewer-view mcp-viewer-nodes -o yaml
 kubectl auth can-i --list --as=system:serviceaccount:mcp:mcp-viewer
+kubectl auth can-i get nodes --as=system:serviceaccount:mcp:mcp-viewer
+kubectl auth can-i get nodes/metrics --as=system:serviceaccount:mcp:mcp-viewer
 
 # Zertifikat prüfen
 kubectl get certificate -n mcp
