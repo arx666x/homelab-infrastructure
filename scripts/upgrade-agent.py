@@ -678,6 +678,16 @@ def notify_manual_review(c: UpgradeCandidate) -> None:
 def notify_auto_pr(c: UpgradeCandidate, pr_url: Optional[str]) -> None:
     bump = version_bump_type(c.current_version, c.latest_version)
     link = pr_url or "(PR creation failed — check logs)"
+    subject = f"[Homelab] ✅ Auto-upgrade PR: {c.name} {c.latest_version}"
+    body = (
+        f"Service:  {c.name}\n"
+        f"Type:     {c.kind}\n"
+        f"Bump:     {bump} ({c.current_version} → {c.latest_version})\n\n"
+        f"Assessment: {c.decision_reason}\n\n"
+        f"PR: {link}\n\n"
+        f"Review and merge when ready — or close to skip this version."
+    )
+    send_email(subject, body)
     send_telegram(
         f"<b>✅ Auto-upgrade PR created</b>\n"
         f"<b>{c.name}</b>: {c.current_version} → {c.latest_version} ({bump})\n"

@@ -217,13 +217,27 @@ data:
                         "revision": src.get("targetRevision", "unknown"),
                     })
     
+            # Deployed images from ArgoCD status (useful for kustomize apps)
+            summary_images = item.get("status", {}).get("summary", {}).get("images", [])
+            # Extract just the tag part: "ghcr.io/foo/bar:v1.2.3" → "v1.2.3"
+            # Skip images without a pinned tag (latest, sha256, etc.)
+            image_versions = []
+            for img in summary_images:
+                if ":" in img:
+                    tag = img.rsplit(":", 1)[1]
+                    if tag and tag != "latest" and not tag.startswith("sha256"):
+                        name_part = img.rsplit("/", 1)[-1].rsplit(":", 1)[0]
+                        image_versions.append(f"{name_part}:{tag}")
+            deployed_versions = ", ".join(image_versions) if image_versions else "—"
+
             apps.append({
-                "name":          name,
-                "helm_sources":  helm_sources,
-                "sync_status":   sync_status,
-                "health_status": health_status,
-                "is_helm":       len(helm_sources) > 0,
+                "name":              name,
+                "helm_sources":      helm_sources,
+                "sync_status":       sync_status,
+                "health_status":     health_status,
+                "is_helm":           len(helm_sources) > 0,
                 "is_kustomize_only": name in KUSTOMIZE_ONLY_APPS or len(helm_sources) == 0,
+                "deployed_versions": deployed_versions,
             })
     
         return sorted(apps, key=lambda a: a["name"])
@@ -471,13 +485,14 @@ data:
                     icon = STATE_ICON.get(state, "?")
                     print(f"  {icon}  {name:35s} {revision:15s} → {latest_ver or '?':15s} [{state}]")
             else:
-                # Git/Kustomize App – nur Status
+                # Git/Kustomize App – Status + deployed image versions
+                deployed = app.get("deployed_versions", "—")
                 extra = f"{health_icon} {health} | {sync}"
-                kustomize_rows.append(row_html(name, "Git/Kustomize", "—", "—", extra, "git"))
-                print(f"  G  {name:35s} {sync} / {health}")
+                kustomize_rows.append(row_html(name, "Git/Kustomize", deployed, "—", extra, "git"))
+                print(f"  G  {name:35s} {deployed:30s} {sync} / {health}")
     
         sections.append(("ArgoCD Apps – Helm Charts", helm_rows))
-        sections.append(("ArgoCD Apps – Git/Kustomize (kein Versionsvergleich)", kustomize_rows))
+        sections.append(("ArgoCD Apps – Git/Kustomize (deployed Images)", kustomize_rows))
     
         # ------------------------------------------------------------------
         # 2. System-Komponenten via GitHub
