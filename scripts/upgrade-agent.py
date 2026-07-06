@@ -518,8 +518,74 @@ def apply_version_change(work_dir: Path, c: UpgradeCandidate) -> None:
             path.write_text(updated)
 
 
+def _clone_repo(gitea_token: str, work_dir: Path) -> Optional[Path]:
+    """Clone repo into work_dir/repo. Returns repo_dir or None on failure."""
+    https_url = f"https://upgrade-agent:{gitea_token}@{GITEA_BASE_URL.removeprefix('https://')}/{GITEA_REPO}.git"
+    log.info("Cloning repo...")
+    result = subprocess.run(
+        ["git", "clone", "--depth=1", https_url, str(work_dir / "repo")],
+        capture_output=True, text=True, timeout=120
+    )
+    if result.returncode != 0:
+        log.error("git clone failed: %s", result.stderr.strip())
+        return None
+    repo_dir = work_dir / "repo"
+    git = ["git", "-C", str(repo_dir)]
+    subprocess.run(git + ["config", "user.email", "upgrade-agent@reckeweg.io"], check=True, capture_output=True)
+    subprocess.run(git + ["config", "user.name", "Upgrade Agent"], check=True, capture_output=True)
+    return repo_dir
+
+
+def commit_to_main(c: UpgradeCandidate) -> bool:
+    """Clone repo, apply change, commit directly to main, push. ArgoCD auto-deploys."""
+    gitea_token = _read_secret(SECRETS_DIR / "gitea-token", "GITEA_TOKEN")
+    if not gitea_token and not DRY_RUN:
+        log.error("GITEA_TOKEN not available — skipping auto-upgrade for %s", c.name)
+        return False
+
+    bump = version_bump_type(c.current_version, c.latest_version)
+
+    if DRY_RUN:
+        log.info("[DRY RUN] Would commit %s %s → %s directly to main", c.name, c.current_version, c.latest_version)
+        return True
+
+    work_dir = Path(tempfile.mkdtemp(prefix="upgrade-agent-"))
+    try:
+        repo_dir = _clone_repo(gitea_token, work_dir)
+        if repo_dir is None:
+            return False
+
+        git = ["git", "-C", str(repo_dir)]
+
+        apply_version_change(repo_dir, c)
+
+        for rel_path in c.files:
+            subprocess.run(git + ["add", rel_path], check=True, capture_output=True)
+
+        commit_msg = (
+            f"chore: auto-upgrade {c.name} {c.current_version} → {c.latest_version}\n\n"
+            f"Auto-applied ({bump} bump) by upgrade-agent.\n"
+            f"Assessment: {c.decision_reason}"
+        )
+        subprocess.run(git + ["commit", "-m", commit_msg], check=True, capture_output=True)
+        result = subprocess.run(git + ["push", "origin", "main"], capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            log.error("git push to main failed for %s: %s", c.name, result.stderr.strip())
+            return False
+
+        log.info("Committed and pushed %s %s → %s to main", c.name, c.current_version, c.latest_version)
+        return True
+
+    except subprocess.CalledProcessError as e:
+        log.error("Git operation failed for %s: %s", c.name,
+                  e.stderr.decode() if e.stderr else str(e))
+        return False
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
 def create_pr(c: UpgradeCandidate) -> Optional[str]:
-    """Clone repo, apply change, push branch, open Gitea PR."""
+    """Clone repo, apply change, push branch, open Gitea PR for manual review."""
     gitea_token = _read_secret(SECRETS_DIR / "gitea-token", "GITEA_TOKEN")
     if not gitea_token and not DRY_RUN:
         log.error("GITEA_TOKEN not available — skipping PR for %s", c.name)
@@ -534,23 +600,11 @@ def create_pr(c: UpgradeCandidate) -> Optional[str]:
 
     work_dir = Path(tempfile.mkdtemp(prefix="upgrade-agent-"))
     try:
-        # Build HTTPS clone URL with embedded token
-        https_url = f"https://upgrade-agent:{gitea_token}@{GITEA_BASE_URL.removeprefix('https://')}/{GITEA_REPO}.git"
-
-        log.info("Cloning repo for %s...", c.name)
-        result = subprocess.run(
-            ["git", "clone", "--depth=1", https_url, str(work_dir / "repo")],
-            capture_output=True, text=True, timeout=120
-        )
-        if result.returncode != 0:
-            log.error("git clone failed: %s", result.stderr.strip())
+        repo_dir = _clone_repo(gitea_token, work_dir)
+        if repo_dir is None:
             return None
 
-        repo_dir = work_dir / "repo"
         git = ["git", "-C", str(repo_dir)]
-
-        subprocess.run(git + ["config", "user.email", "upgrade-agent@reckeweg.io"], check=True, capture_output=True)
-        subprocess.run(git + ["config", "user.name", "Upgrade Agent"], check=True, capture_output=True)
         subprocess.run(git + ["checkout", "-b", branch], check=True, capture_output=True)
 
         apply_version_change(repo_dir, c)
@@ -560,7 +614,7 @@ def create_pr(c: UpgradeCandidate) -> Optional[str]:
 
         commit_msg = (
             f"chore: upgrade {c.name} {c.current_version} → {c.latest_version}\n\n"
-            f"Auto-upgrade ({bump} bump) by upgrade-agent.\n"
+            f"Manual review required ({bump} bump) — created by upgrade-agent.\n"
             f"Assessment: {c.decision_reason}"
         )
         subprocess.run(git + ["commit", "-m", commit_msg], check=True, capture_output=True)
@@ -574,8 +628,9 @@ def create_pr(c: UpgradeCandidate) -> Optional[str]:
         shutil.rmtree(work_dir, ignore_errors=True)
 
     # Create Gitea PR via API
+    runbook_url = f"{GITEA_BASE_URL}/{GITEA_REPO}/src/branch/main/{c.runbook}" if c.runbook else None
     pr_body = (
-        f"## Auto-Upgrade: {c.name}\n\n"
+        f"## Manual Upgrade Required: {c.name}\n\n"
         f"| Field | Value |\n|---|---|\n"
         f"| Type | `{c.kind}` |\n"
         f"| Bump | **{bump}** |\n"
@@ -583,7 +638,8 @@ def create_pr(c: UpgradeCandidate) -> Optional[str]:
         f"| To | `{c.latest_version}` |\n"
         f"| Files | {', '.join(f'`{f}`' for f in c.files)} |\n\n"
         f"**Claude assessment:** {c.decision_reason}\n\n"
-        f"---\n_Auto-created by upgrade-agent. Review, test, merge or close._"
+        + (f"**Runbook:** {runbook_url}\n\n" if runbook_url else "")
+        + f"---\n_Created by upgrade-agent. Review runbook, test, merge or close._"
     )
     api_url = f"{GITEA_BASE_URL}/api/v1/repos/{GITEA_REPO}/pulls"
     try:
@@ -591,7 +647,7 @@ def create_pr(c: UpgradeCandidate) -> Optional[str]:
             api_url,
             headers={"Authorization": f"token {gitea_token}", "Content-Type": "application/json"},
             json={
-                "title": f"chore: upgrade {c.name} to {c.latest_version}",
+                "title": f"chore: upgrade {c.name} to {c.latest_version} (manual review)",
                 "body": pr_body,
                 "head": branch,
                 "base": "main",
@@ -653,45 +709,48 @@ def send_email(subject: str, body: str) -> None:
         log.warning("Email send failed: %s", e)
 
 
-def notify_manual_review(c: UpgradeCandidate) -> None:
+def notify_manual_review(c: UpgradeCandidate, pr_url: Optional[str]) -> None:
     bump = version_bump_type(c.current_version, c.latest_version)
     runbook_url = f"{GITEA_BASE_URL}/{GITEA_REPO}/src/branch/main/{c.runbook}" if c.runbook else "(no runbook)"
-    subject = f"[Homelab] Manual upgrade needed: {c.name} {c.latest_version}"
+    pr_link = pr_url or "(PR creation failed — check logs)"
+    subject = f"[Homelab] 🔔 Manual upgrade needed: {c.name} {c.latest_version}"
     body = (
         f"Service:  {c.name}\n"
         f"Type:     {c.kind}\n"
         f"Bump:     {bump} ({c.current_version} → {c.latest_version})\n\n"
         f"Reason:   {c.decision_reason}\n\n"
+        f"PR:       {pr_link}\n"
         f"Runbook:  {runbook_url}\n\n"
         f"Release notes:\n{c.changelog[:1500]}"
     )
     tg = (
         f"<b>🔔 Manual upgrade needed</b>\n"
         f"<b>{c.name}</b>: {c.current_version} → {c.latest_version} ({bump})\n"
-        f"<i>{c.decision_reason[:300]}</i>"
+        f"<i>{c.decision_reason[:300]}</i>\n"
+        f"PR: {pr_link}"
         + (f"\nRunbook: {runbook_url}" if c.runbook else "")
     )
     send_email(subject, body)
     send_telegram(tg)
 
 
-def notify_auto_pr(c: UpgradeCandidate, pr_url: Optional[str]) -> None:
+def notify_auto_applied(c: UpgradeCandidate, success: bool) -> None:
     bump = version_bump_type(c.current_version, c.latest_version)
-    link = pr_url or "(PR creation failed — check logs)"
-    subject = f"[Homelab] ✅ Auto-upgrade PR: {c.name} {c.latest_version}"
+    status = "applied to main — ArgoCD will auto-deploy" if success else "FAILED — check upgrade-agent logs"
+    subject = f"[Homelab] ✅ Auto-upgrade applied: {c.name} {c.latest_version}"
     body = (
         f"Service:  {c.name}\n"
         f"Type:     {c.kind}\n"
         f"Bump:     {bump} ({c.current_version} → {c.latest_version})\n\n"
-        f"Assessment: {c.decision_reason}\n\n"
-        f"PR: {link}\n\n"
-        f"Review and merge when ready — or close to skip this version."
+        f"Status:   {status}\n\n"
+        f"Assessment: {c.decision_reason}"
     )
     send_email(subject, body)
     send_telegram(
-        f"<b>✅ Auto-upgrade PR created</b>\n"
+        f"<b>✅ Auto-upgrade applied</b>\n"
         f"<b>{c.name}</b>: {c.current_version} → {c.latest_version} ({bump})\n"
-        f"<i>{c.decision_reason[:200]}</i>\nPR: {link}"
+        f"<i>{c.decision_reason[:200]}</i>\n"
+        f"{'ArgoCD will sync shortly.' if success else '⚠️ Commit failed — check logs.'}"
     )
 
 
@@ -844,14 +903,15 @@ def main() -> None:
     auto_count = notify_count = 0
     for c in candidates:
         if c.decision == "AUTO":
-            pr_url = create_pr(c)
-            notify_auto_pr(c, pr_url)
+            success = commit_to_main(c)
+            notify_auto_applied(c, success)
             auto_count += 1
         else:
-            notify_manual_review(c)
+            pr_url = create_pr(c)
+            notify_manual_review(c, pr_url)
             notify_count += 1
 
-    log.info("=== Done. Auto-PRs: %d | Manual notifications: %d ===",
+    log.info("=== Done. Auto-applied: %d | Manual review PRs: %d ===",
              auto_count, notify_count)
 
 
