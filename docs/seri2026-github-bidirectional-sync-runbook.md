@@ -161,6 +161,16 @@ Open-Source-Projekt: Branch → PR → Review → Merge auf `main`. Die Merge-Me
 Ruleset-Regeln oben schränken die Merge-Methode nicht zusätzlich ein, das Zusammenspiel
 ist unkritisch.
 
+> **Bekannte Einschränkung: Ruleset wird auf diesem Repo aktuell NICHT durchgesetzt.**
+> GitHub meldet beim Anlegen: *"Your rulesets won't be enforced on this private repository
+> until you move to GitHub Team organization account."* Rulesets (wie zuvor die klassischen
+> Branch Protection Rules) greifen bei **privaten Repos unter einem persönlichen Free-Account
+> nicht** – dafür ist mindestens GitHub Pro nötig (oder ein bezahlter Org-Plan, oder das Repo
+> müsste public sein). Das Ruleset bleibt trotzdem konfiguriert (aktiviert sich automatisch,
+> falls der Account später auf Pro upgraded wird oder das Repo public gestellt wird) – bis
+> dahin ist die "Golden Rule" für `seri.2026` **reine Konvention, keine technische Sperre**.
+> Direkte Pushes auf `main` sind also aktuell für jeden mit Write-Zugriff weiterhin möglich.
+
 ## Schritt 6: Rücksync GitHub → Gitea (manuell, bei Bedarf)
 
 Da Gitea primär bleiben soll (siehe bestehende Regel) und Gitea aus dem Homelab heraus keine
@@ -173,9 +183,12 @@ Script `sync-github-to-gitea.sh` (lokal ausführen, sooft ein PR auf GitHub geme
 #!/bin/bash
 set -euo pipefail
 
+SP_TOKEN="${SP_TOKEN:?SP_TOKEN env var required (GitHub PAT von achim-reckeweg-sp, Scope: repo)}"
+SP_URL="https://x-access-token:${SP_TOKEN}@github.com/achim-reckeweg-sp/seri.2026.git"
+
 cd ~/dev/seri.2026   # lokaler Checkout, origin = Gitea
 
-git remote add sp-github https://github.com/achim-reckeweg-sp/seri.2026.git 2>/dev/null || true
+git remote add sp-github "$SP_URL" 2>/dev/null || git remote set-url sp-github "$SP_URL"
 
 git fetch sp-github main
 git checkout main
@@ -190,6 +203,15 @@ git push origin main
 
 Bei Merge-Konflikten (beide Seiten haben dieselbe Stelle geändert) löst `git merge` das wie
 gewohnt lokal auf – anschließend normal `git add`/`git commit`/`git push origin main`.
+
+> **Warum das PAT im Skript nötig ist:** `seri.2026` ist auf GitHub privat. Ein `git fetch`
+> ohne Zugangsdaten liefert dort nicht etwa "403 Forbidden", sondern bewusst
+> `remote: Repository not found` – GitHub verschleiert so die Existenz privater Repos
+> gegenüber nicht-authentifizierten Anfragen. Ohne `SP_TOKEN` schlägt das Skript deshalb fehl,
+> obwohl das Repo existiert und erreichbar ist. Der Token landet dabei in der lokalen
+> `.git/config` (sichtbar über `git remote -v`) – für ein rein lokal genutztes Skript
+> unkritisch, alternativ ginge auch `git config --global credential.helper osxkeychain` mit
+> einmaliger interaktiver Anmeldung (siehe `github-access.md` in seri-k8s).
 
 ---
 
