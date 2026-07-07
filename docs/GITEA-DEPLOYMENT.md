@@ -1,5 +1,13 @@
 # Gitea Deployment - SERI Homelab
 
+> **Historisch / überholt:** Dieses Dokument beschreibt den ursprünglichen Neuaufbau auf
+> Chart 12.4.0 und referenziert `gitops/config/gitea/actions-values.yaml` /
+> `gitops/config/gitea/actions/`, die inzwischen entfernt wurden (Config liegt aktuell unter
+> `gitops/config/gitea-actions/values.yaml`, siehe `gitops/apps/gitea/gitea-actions.yaml`).
+> Für den aktuellen Stand und die Upgrade-Historie siehe
+> [docs/upgrades/gitea.md](upgrades/gitea.md) und
+> [docs/upgrades/gitea-actions-runner.md](upgrades/gitea-actions-runner.md).
+
 ## Zielstruktur im Repo
 
 ```

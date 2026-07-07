@@ -102,10 +102,9 @@ Einstufung keinen Cluster-spezifischen Kontext.
 
 ## Bekannte Lücken (Stand 2026-07-07)
 
-- **WordPress** (`docs/upgrades/wordpress.md`): läuft produktiv im Cluster,
-  ist aber weder als ArgoCD-App noch als Manifest in diesem oder im
-  `seri-k8s`-Repo auffindbar. Kein automatischer Check möglich, bis die Quelle
-  geklärt/nach `gitops/` migriert ist.
+- **WordPress** (`docs/upgrades/wordpress.md`): läuft produktiv im Cluster, ist
+  aber absichtlich manuell installiert und **nicht** in GitOps/ArgoCD verwaltet
+  — kein Migrations-Kandidat, kein automatischer Check vorgesehen.
 - **local-path-provisioner**, **k3s**, **ArgoCD**, **KubeVirt/CDI**,
   **Windows-AD-VM**: nicht über den Helm-/Image-Mechanismus des Checkers
   automatisierbar (Ansible-, Operator- bzw. Gast-OS-verwaltet). Ihre Runbooks

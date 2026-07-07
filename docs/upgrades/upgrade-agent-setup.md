@@ -79,12 +79,14 @@ git push origin main
 | homeassistant | `gitops/config/homeassistant/deployment.yaml` | GitHub Releases | `homeassistant.md` |
 | guacamole | `gitops/config/guacamole/guacamole.yaml` | Docker Hub | `guacamole.md` |
 | guacd | `gitops/config/guacamole/guacd.yaml` | Docker Hub | `guacamole.md` |
+| headlamp | `gitops/config/headlamp/headlamp.yaml` | GitHub Releases | `headlamp.md` |
 
-Hinweis: `headlamp` ist in `scripts/upgrade-agent.py` aktuell **nicht** in `IMAGE_SERVICES`
-eingetragen (auskommentiert) — der Ausschlussgrund (Fork wegen Plugin-Bug) ist seit
-`be0cae3` (2026-07-05, Wechsel zurück auf offizielles Image v0.43.0) überholt, die
-automatische Prüfung wurde aber noch nicht wieder aktiviert. Siehe
-[headlamp.md](headlamp.md).
+Hinweis: Die automatische Prüfung für `headlamp` war seit dem Fork-Workaround
+(`gitea.reckeweg.io/achim/headlamp-longhorn`, wegen kubernetes-sigs/headlamp#4863)
+deaktiviert und wurde nach dem Wechsel zurück auf das offizielle Image v0.43.0
+(`be0cae3`, 2026-07-05) am 2026-07-07 in `scripts/upgrade-agent.py` wieder
+aktiviert. Überwacht wird nur das Haupt-Image (`ghcr.io/headlamp-k8s/headlamp`),
+nicht die Plugin-Sidecars.
 
 ## Manueller Test
 

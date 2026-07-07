@@ -3,16 +3,16 @@
 ## Metadaten
 - **Namespace:** `wordpress`
 - **Aktuelle Version:** `wordpress:6.4-apache` (Docker-Image-Tag, per Live-Cluster-Inspektion am 2026-07-07 bestätigt); MySQL 8.0 (`mysql:8.0`)
-- **Quelle:** unbekannt — nicht in `gitops/` oder ArgoCD verwaltet; Kustomize-Label (`managed-by=kustomize`) deutet auf ursprüngliche kubectl/kustomize-Anwendung aus einem nicht auffindbaren Verzeichnis hin
-- **ArgoCD App-Name:** — (keine ArgoCD-Application vorhanden)
-- **Versions-Check-Quelle:** aktuell keine — müsste zuerst durch Wiederherstellung der Kustomize-Quelle oder Migration in `gitops/apps/` nachgerüstet werden
-- **Major/Minor-Kriterium:** n/a, bis Quelle geklärt ist
+- **Quelle:** Manuell installiert (kubectl/kustomize direkt gegen den Cluster, `managed-by=kustomize`-Label). **Bewusst nicht in GitOps/ArgoCD verwaltet** — dieser Dienst gehört nicht ins Tracking dieses Repos.
+- **ArgoCD App-Name:** — (keine ArgoCD-Application, absichtlich)
+- **Versions-Check-Quelle:** keine — läuft außerhalb des homelab-version-checkers, kein automatischer Check vorgesehen
+- **Major/Minor-Kriterium:** n/a — Upgrades erfolgen ausschließlich manuell, nach Bedarf
 
 ## Changelog
 
 | Datum | Von → Nach | Typ | Ausführung | Status | Begründung | Notiz |
 |---|---|---|---|---|---|---|
-| unbekannt | ... | ... | ... | ... | Historie vor Einführung des strukturierten Runbooks nicht vollständig rekonstruierbar | — |
+| unbekannt | ... | ... | ... | ... | Historie vor Einführung des strukturierten Runbooks nicht rekonstruierbar (Deployment liegt außerhalb von Git) | — |
 
 ### Reklassifizierungen (Minor → Major)
 
@@ -21,7 +21,7 @@
 
 ## Manuelle Vorgehensweise (bei Major/Breaking Change)
 
-**Es gibt aktuell keine GitOps-/Kustomize-Quelle, die diese Deployments deklarativ verwaltet.** Die folgende Vorgehensweise ist generischer, imperativer kubectl-Fallback für ein unmanaged Deployment — kein chart- oder kustomize-spezifisches Verfahren, da keines auffindbar ist.
+Es gibt bewusst keine GitOps-/Kustomize-Quelle in diesem Repo für diese Deployments — Upgrades laufen ausschließlich imperativ per `kubectl`.
 
 1. **Vorbereitung / Backup**
    ```bash
@@ -37,7 +37,7 @@
    kubectl -n wordpress get pvc
    ```
 
-2. **Image-Tag aktualisieren (imperativ, da keine Git-Quelle bekannt)**
+2. **Image-Tag aktualisieren**
    ```bash
    kubectl -n wordpress set image deployment/wordpress wordpress=wordpress:<neue-version>-apache
    kubectl -n wordpress rollout status deployment/wordpress
@@ -58,10 +58,8 @@
 
 ## Bekannte Stolperfallen / Lessons Learned
 
-- **KRITISCH — fehlende GitOps-Anbindung:** Dieser Dienst läuft produktiv (bestätigt unter `https://wordpress.reckeweg.io`, referenziert als Smoke-Test-URL in `docs/upgrades/traefik.md`), ist aber **nirgendwo als Quellcode auffindbar** — weder als ArgoCD-Application (`gitops/apps/`) in diesem Repo, noch als YAML/Kustomize-Overlay in diesem Repo oder in `seri-k8s`. Das Label `managed-by=kustomize` auf den laufenden Deployments beweist, dass ursprünglich ein Kustomize-Verzeichnis existiert haben muss — dessen Ablageort ist aber verloren oder nie eingecheckt worden.
-- Exhaustive Suchen durchgeführt (2026-07-07): `git log --all --oneline -i --grep="wordpress"` in diesem Repo → keine Treffer. `grep -ril "wordpress" .` über dieses Repo → nur der Smoke-Test-Verweis in `traefik.md`. Beide Suchen auch gegen `seri-k8s` (separates, unabhängiges Repo) negativ.
-- **Handlungsbedarf für den Nutzer:** Vor dem nächsten Upgrade-Versuch muss geklärt werden, woher dieses Deployment ursprünglich kam — z.B. ein lokales Verzeichnis auf einer anderen Maschine, ein gelöschter/nicht gepushter Branch, oder eine rein manuelle `kubectl apply -k`-Anwendung ohne Versionskontrolle. Bis dahin ist jedes Upgrade ein Blindflug ohne Rollback-Garantie über Git hinaus.
-- Empfehlung: Sobald die Quelle rekonstruiert oder neu aufgesetzt ist, als ArgoCD-Application unter `gitops/apps/wordpress.yaml` migrieren, damit künftige Upgrades denselben strukturierten Prozess wie die anderen Dienste durchlaufen können.
+- **Absichtlich nicht in GitOps verwaltet.** Dieser Dienst läuft produktiv (bestätigt unter `https://wordpress.reckeweg.io`, referenziert als Smoke-Test-URL in `docs/upgrades/traefik.md`), ist aber weder als ArgoCD-Application noch als YAML/Kustomize-Overlay in diesem oder im `seri-k8s`-Repo hinterlegt — das ist beabsichtigt, kein Versehen. Kein automatischer Check, kein ArgoCD-Self-Heal, kein Git-Rollback.
+- Da nichts in Git liegt, ersetzt dieses Runbook die fehlende deklarative Quelle durch eine rein imperative Vorgehensweise (kubectl `set image` / `rollout undo`). Vor jedem Upgrade unbedingt Backup + DB-Dump anlegen (siehe oben), da es keinen anderen Wiederherstellungsweg gibt.
 
 ## Rollback-Plan
 
@@ -86,6 +84,6 @@ kubectl -n wordpress exec -i deployment/mysql -- \
 
 ## Referenzen
 
-- GitHub Releases: n/a (kein spezifisches Repo bekannt — offizielles WordPress-Docker-Image: https://hub.docker.com/_/wordpress, MySQL: https://hub.docker.com/_/mysql)
+- GitHub Releases: n/a (kein spezifisches Repo — offizielles WordPress-Docker-Image: https://hub.docker.com/_/wordpress, MySQL: https://hub.docker.com/_/mysql)
 - Interne Doku/Slides: keine bekannt
 - Querverweis: `docs/upgrades/traefik.md` (Smoke-Test-URL `https://wordpress.reckeweg.io`)

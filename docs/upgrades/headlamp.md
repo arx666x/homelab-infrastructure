@@ -5,7 +5,7 @@
 - **Aktuelle Version:** `v0.43.0` (Image `ghcr.io/headlamp-k8s/headlamp:v0.43.0`)
 - **Quelle:** Container-Image `ghcr.io/headlamp-k8s/headlamp` (kein Helm-Chart — direkte Kubernetes-Manifeste); Releases unter https://github.com/kubernetes-sigs/headlamp/releases
 - **ArgoCD App-Name:** `headlamp` (Namespace `headlamp`, Pfad `gitops/config/headlamp`, kein sync-wave-Annotation gesetzt)
-- **Versions-Check-Quelle:** Aktuell **nicht** über den automatisierten Upgrade-Agent abgedeckt — siehe „Bekannte Stolperfallen" unten. Manuell: Image-Tag in `gitops/config/headlamp/headlamp.yaml` (zwei Stellen: Hauptcontainer `headlamp` und Init-Container `fix-static-plugins`) gegen https://github.com/kubernetes-sigs/headlamp/releases prüfen
+- **Versions-Check-Quelle:** Seit 2026-07-07 über den `homelab-version-checker` (`scripts/upgrade-agent.py`, `IMAGE_SERVICES`) abgedeckt — GitHub-Releases-Vergleich gegen `kubernetes-sigs/headlamp`, geprüft wird nur das Haupt-Image `ghcr.io/headlamp-k8s/headlamp` in `gitops/config/headlamp/headlamp.yaml`. Die beiden Plugin-Sidecar-Images (Longhorn, Cert-Manager) werden davon **nicht** erfasst und müssen bei einem Headlamp-Core-Upgrade weiterhin manuell auf Kompatibilität geprüft werden.
 - **Major/Minor-Kriterium:** Kein Helm-Chart, daher keine Chart/App-Kopplung wie bei Gitea. Risiko liegt stattdessen bei den zwei Init-Container-Plugins (Longhorn, Cert-Manager), die unabhängig vom Headlamp-Core versioniert sind und bei Headlamp-Core-Upgrades auf Kompatibilität geprüft werden müssen (siehe Lessons Learned zum Longhorn-Plugin-Fork).
 
 ## Changelog
@@ -115,13 +115,12 @@ Neuen Token bei Bedarf erzeugen: `bash scripts/headlamp-token.sh`
   Plugin ist der bevorzugte, wartungsfreie Weg. Der Fork sollte nur reaktiviert werden, falls ein
   zukünftiges Headlamp-Upgrade den `:namespace`-Bug erneut einführt (unwahrscheinlich, aber bei
   Downgrades unter v0.43.0 zu beachten).
-- **Der automatisierte Upgrade-Agent kennt Headlamp aktuell nicht.** In `scripts/upgrade-agent.py`
-  wurde der Headlamp-Eintrag in `IMAGE_SERVICES` mit Commit `2f3145f` (2026-06-18) explizit
-  auskommentiert, mit der Begründung "wir nutzen einen eigenen Fork, Re-add erst nach Bestätigung
-  des Upstream-Fixes". Der Upstream-Fix ist seit `be0cae3` (2026-07-05) bestätigt und der Fork
-  bereits abgelöst — der Kommentar in `upgrade-agent.py` ist damit **veraltet** und Headlamp fehlt
-  seither in der automatischen Versionsprüfung. Dies sollte nachgezogen werden (Headlamp wieder in
-  `IMAGE_SERVICES` aufnehmen), ist aber außerhalb des Scopes dieses Runbooks.
+- **Automatisierte Versionsprüfung war zwischenzeitlich deaktiviert.** In `scripts/upgrade-agent.py`
+  wurde der Headlamp-Eintrag in `IMAGE_SERVICES` mit Commit `2f3145f` (2026-06-18) auskommentiert,
+  mit der Begründung "wir nutzen einen eigenen Fork, Re-add erst nach Bestätigung des
+  Upstream-Fixes". Der Upstream-Fix ist seit `be0cae3` (2026-07-05) bestätigt und der Fork bereits
+  abgelöst — Headlamp wurde daher am 2026-07-07 wieder in `IMAGE_SERVICES` aufgenommen (nur das
+  Haupt-Image, keine Plugin-Sidecars).
 - **Zwei Stellen für den Image-Tag:** Sowohl der Hauptcontainer `headlamp` als auch der
   Init-Container `fix-static-plugins` referenzieren dasselbe Headlamp-Image und müssen bei jedem
   Upgrade synchron gehalten werden — `fix-static-plugins` kopiert Static-Plugin-Assets aus dem

@@ -189,11 +189,14 @@ IMAGE_SERVICES = [
         "github_repo": "apache/guacamole-server",
         "runbook": "docs/upgrades/guacamole.md",
     },
-    # headlamp is excluded from automated checking: we switched back to the official
-    # image at v0.43.0 on 2026-07-05 (commit be0cae3, see docs/upgrades/headlamp.md),
-    # but automated version-checking was never re-enabled after the fork workaround
-    # (gitea.reckeweg.io/achim/headlamp-longhorn, for kubernetes-sigs/headlamp#4863)
-    # was retired. Re-add here once re-verified against the current image/plugin setup.
+    {
+        "name": "headlamp",
+        "image_files": ["gitops/config/headlamp/headlamp.yaml"],
+        "image_pattern": r"ghcr\.io/headlamp-k8s/headlamp:([^\s\"']+)",
+        "version_type": "ghcr",
+        "github_repo": "kubernetes-sigs/headlamp",
+        "runbook": "docs/upgrades/headlamp.md",
+    },
 ]
 
 # ---------------------------------------------------------------------------
