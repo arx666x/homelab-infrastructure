@@ -63,23 +63,28 @@ git push origin main
 
 | Service | App-Datei | Runbook |
 |---|---|---|
-| metrics-server | `gitops/apps/metrics-server.yaml` | `metrics-server-upgrade-runbook.md` |
-| longhorn | `gitops/apps/longhorn.yaml` | `longhorn-upgrade-runbook.md` |
-| metallb | `gitops/apps/metallb.yaml` | `metallb-upgrade-runbook.md` |
-| kube-prometheus-stack | `gitops/apps/monitoring.yaml` | `kube-prometheus-stack-upgrade-runbook.md` |
-| sealed-secrets | `gitops/apps/sealed-secrets.yaml` | `sealed-secrets-upgrade-runbook.md` |
-| traefik | `gitops/apps/traefik.yaml` | `traefik-upgrade-runbook.md` |
-| cert-manager | `gitops/apps/cert-manager.yaml` | `cert-manager-upgrade-runbook.md` |
+| metrics-server | `gitops/apps/metrics-server.yaml` | `metrics-server.md` |
+| longhorn | `gitops/apps/longhorn.yaml` | `longhorn.md` |
+| metallb | `gitops/apps/metallb.yaml` | `metallb.md` |
+| kube-prometheus-stack | `gitops/apps/monitoring.yaml` | `kube-prometheus-stack.md` |
+| sealed-secrets | `gitops/apps/sealed-secrets.yaml` | `sealed-secrets.md` |
+| traefik | `gitops/apps/traefik.yaml` | `traefik.md` |
+| cert-manager | `gitops/apps/cert-manager.yaml` | `cert-manager.md` |
 | loki-stack | `gitops/apps/loki.yaml` | — |
 
 ### Container Images (Git/Kustomize)
 
-| Service | Datei | Quelle |
-|---|---|---|
-| homeassistant | `gitops/config/homeassistant/deployment.yaml` | GitHub Releases |
-| guacamole | `gitops/config/guacamole/guacamole.yaml` | Docker Hub |
-| guacd | `gitops/config/guacamole/guacd.yaml` | Docker Hub |
-| headlamp | `gitops/config/headlamp/headlamp.yaml` | GitHub Releases |
+| Service | Datei | Quelle | Runbook |
+|---|---|---|---|
+| homeassistant | `gitops/config/homeassistant/deployment.yaml` | GitHub Releases | `homeassistant.md` |
+| guacamole | `gitops/config/guacamole/guacamole.yaml` | Docker Hub | `guacamole.md` |
+| guacd | `gitops/config/guacamole/guacd.yaml` | Docker Hub | `guacamole.md` |
+
+Hinweis: `headlamp` ist in `scripts/upgrade-agent.py` aktuell **nicht** in `IMAGE_SERVICES`
+eingetragen (auskommentiert) — der Ausschlussgrund (Fork wegen Plugin-Bug) ist seit
+`be0cae3` (2026-07-05, Wechsel zurück auf offizielles Image v0.43.0) überholt, die
+automatische Prüfung wurde aber noch nicht wieder aktiviert. Siehe
+[headlamp.md](headlamp.md).
 
 ## Manueller Test
 

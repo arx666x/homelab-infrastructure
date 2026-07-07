@@ -84,7 +84,7 @@ HELM_SERVICES = [
         "app_file": "gitops/apps/metrics-server.yaml",
         "chart": "metrics-server",
         "repo_url": "https://kubernetes-sigs.github.io/metrics-server/",
-        "runbook": "docs/upgrades/metrics-server-upgrade-runbook.md",
+        "runbook": "docs/upgrades/metrics-server.md",
         "github_repo": "kubernetes-sigs/metrics-server",
         "source_index": None,
     },
@@ -93,7 +93,7 @@ HELM_SERVICES = [
         "app_file": "gitops/apps/longhorn.yaml",
         "chart": "longhorn",
         "repo_url": "https://charts.longhorn.io",
-        "runbook": "docs/upgrades/longhorn-upgrade-runbook.md",
+        "runbook": "docs/upgrades/longhorn.md",
         "github_repo": "longhorn/longhorn",
         "source_index": None,
     },
@@ -102,7 +102,7 @@ HELM_SERVICES = [
         "app_file": "gitops/apps/metallb.yaml",
         "chart": "metallb",
         "repo_url": "https://metallb.github.io/metallb",
-        "runbook": "docs/upgrades/metallb-upgrade-runbook.md",
+        "runbook": "docs/upgrades/metallb.md",
         "github_repo": "metallb/metallb",
         "source_index": 0,
     },
@@ -111,7 +111,7 @@ HELM_SERVICES = [
         "app_file": "gitops/apps/monitoring.yaml",
         "chart": "kube-prometheus-stack",
         "repo_url": "https://prometheus-community.github.io/helm-charts",
-        "runbook": "docs/upgrades/kube-prometheus-stack-upgrade-runbook.md",
+        "runbook": "docs/upgrades/kube-prometheus-stack.md",
         "github_repo": "prometheus-community/helm-charts",
         "github_release_prefix": "kube-prometheus-stack-",
         "source_index": None,
@@ -121,7 +121,7 @@ HELM_SERVICES = [
         "app_file": "gitops/apps/sealed-secrets.yaml",
         "chart": "sealed-secrets",
         "repo_url": "https://bitnami.github.io/sealed-secrets",  # repo moved: bitnami-labs → bitnami
-        "runbook": "docs/upgrades/sealed-secrets-upgrade-runbook.md",
+        "runbook": "docs/upgrades/sealed-secrets.md",
         "github_repo": "bitnami/sealed-secrets",
         "github_release_prefix": "helm-v",  # tags: helm-v2.19.0 → chart 2.19.0
         "source_index": None,
@@ -131,7 +131,7 @@ HELM_SERVICES = [
         "app_file": "gitops/apps/traefik.yaml",
         "chart": "traefik",
         "repo_url": "https://traefik.github.io/charts",
-        "runbook": "docs/upgrades/traefik-upgrade-runbook.md",
+        "runbook": "docs/upgrades/traefik.md",
         "github_repo": "traefik/traefik-helm-chart",
         "source_index": None,
     },
@@ -140,7 +140,7 @@ HELM_SERVICES = [
         "app_file": "gitops/apps/cert-manager.yaml",
         "chart": "cert-manager",
         "repo_url": "https://charts.jetstack.io",
-        "runbook": "docs/upgrades/cert-manager-upgrade-runbook.md",
+        "runbook": "docs/upgrades/cert-manager.md",
         "github_repo": "cert-manager/cert-manager",
         "source_index": 0,
     },
@@ -169,7 +169,7 @@ IMAGE_SERVICES = [
         "image_pattern": r"ghcr\.io/home-assistant/home-assistant:([^\s\"']+)",
         "version_type": "ghcr",
         "github_repo": "home-assistant/core",
-        "runbook": "",
+        "runbook": "docs/upgrades/homeassistant.md",
     },
     {
         "name": "guacamole",
@@ -178,7 +178,7 @@ IMAGE_SERVICES = [
         "version_type": "dockerhub",
         "dockerhub_image": "guacamole/guacamole",
         "github_repo": "apache/guacamole-client",
-        "runbook": "",
+        "runbook": "docs/upgrades/guacamole.md",
     },
     {
         "name": "guacd",
@@ -187,11 +187,13 @@ IMAGE_SERVICES = [
         "version_type": "dockerhub",
         "dockerhub_image": "guacamole/guacd",
         "github_repo": "apache/guacamole-server",
-        "runbook": "",
+        "runbook": "docs/upgrades/guacamole.md",
     },
-    # headlamp is excluded: we run a custom fork (gitea.reckeweg.io/achim/headlamp-longhorn)
-    # due to a plugin-loading issue (https://github.com/kubernetes-sigs/headlamp/issues/4863).
-    # Re-add once the upstream fix is confirmed and we switch back to the official image.
+    # headlamp is excluded from automated checking: we switched back to the official
+    # image at v0.43.0 on 2026-07-05 (commit be0cae3, see docs/upgrades/headlamp.md),
+    # but automated version-checking was never re-enabled after the fork workaround
+    # (gitea.reckeweg.io/achim/headlamp-longhorn, for kubernetes-sigs/headlamp#4863)
+    # was retired. Re-add here once re-verified against the current image/plugin setup.
 ]
 
 # ---------------------------------------------------------------------------

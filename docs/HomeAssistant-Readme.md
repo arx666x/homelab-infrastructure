@@ -95,4 +95,4 @@ Neue Versionen: https://github.com/home-assistant/core/releases
 > **Kein `latest`-Tag verwenden** – ArgoCD würde keinen neuen Rollout triggern
 > da sich der Tag nicht ändert.
 
-Upgrade-Runbook: [docs/upgrades/homeassistant-upgrade-runbook.md](upgrades/homeassistant-upgrade-runbook.md)
+Upgrade-Runbook: [docs/upgrades/homeassistant.md](upgrades/homeassistant.md)
