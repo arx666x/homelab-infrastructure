@@ -1,0 +1,50 @@
+# =============================================================================
+# auditique-web - statische Astro-Seite, ausgeliefert über Nginx
+# Quelle & Dockerfile: git@git.reckeweg.io:susann/redesign.git
+# Neues Release: Tag "vX.Y.Z" im redesign-Repo pushen (baut & pusht das Image
+# via .gitea/workflows/build-and-push.yml), danach den Tag hier unten bei
+# "image:" nachziehen und committen - ArgoCD rollt automatisch aus.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auditique-web
+  namespace: auditique
+  labels:
+    app: auditique-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auditique-web
+  template:
+    metadata:
+      labels:
+        app: auditique-web
+    spec:
+      containers:
+        - name: auditique-web
+          image: gitea.reckeweg.io/susann/redesign:v0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
