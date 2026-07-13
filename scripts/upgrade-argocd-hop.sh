@@ -44,7 +44,7 @@ echo ""
 echo "=== 2/4 Restoring SSH known hosts ==="
 kubectl patch cm argocd-ssh-known-hosts-cm -n argocd \
   --type merge \
-  -p "{\"data\":{\"ssh_known_hosts\":\"${SSH_KEY}\"}}"
+  -p "{\"data\":{\"ssh_known_hosts\":$(echo "$SSH_KEY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}}"
 
 # --------------------------------------------------------------------
 # 3. Rollout abwarten

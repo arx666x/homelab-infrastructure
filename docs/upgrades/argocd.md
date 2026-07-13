@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** argocd
-- **Aktuelle Version:** 3.4.4
+- **Aktuelle Version:** 3.4.5
 - **Quelle:** GitHub Releases ([argoproj/argo-cd](https://github.com/argoproj/argo-cd/releases)) + `scripts/install-argocd.sh` / `scripts/upgrade-argocd-hop.sh`
 - **ArgoCD App-Name:** — (bootstrap via `scripts/install-argocd.sh`, nicht ArgoCD-App-verwaltet)
 - **Versions-Check-Quelle:** `homelab-version-checker` (CronJob, `gitops/config/monitoring/homelab-version-checker-v2.yaml`) fragt die GitHub-Releases-API für `argoproj/argo-cd` ab, sammelt **alle** stabilen Releases, sortiert nach SemVer und nimmt das höchste (siehe Stolperfalle zu parallelen Release-Branches). Die laufende Version wird aus dem Image-Tag von `deployment/argocd-server` gelesen.
@@ -21,6 +21,7 @@
 | 2026-05-18 | 3.4.1 → 3.4.2 | Minor (Patch) | Manuell | Abgeschlossen | Patch-Release, keine Breaking Changes, keine Config-Änderungen nötig | CLI via brew bereits aktuell |
 | 2026-06-14 | 3.4.2 → 3.4.3 | Minor (Patch) | Manuell | Abgeschlossen | Security-Fix dompurify CVE-2026-41240; sonst Bugfixes (Application Controller Race Condition, gitops-engine nil-pointer) | Nach diesem Hop trat das SSH-known-hosts-Problem auf (siehe Stolperfallen) |
 | 2026-06-29 | 3.4.3 → 3.4.4 | Minor (Patch) | Manuell | Abgeschlossen | Patch-Release, kein Breaking Change; Bugfixes Application Controller & UI (RBAC-Regression bei project-scoped Resources, Cluster-Informer Race Condition, Diff-Fehler bei neuen Objekten, Dex-Passwort-Parsing) | — |
+| 2026-07-13 | 3.4.4 → 3.4.5 | Minor (Patch) | Manuell (Script, SSH-Fix manuell nachgezogen) | Abgeschlossen | Patch-Release, kein Breaking Change; Bugfixes (Repo-Server Depth-Handling bei Multi-Source, SSA-Auth-Reconciliation, Auto-Sync-Regression bei manifest-generate-paths, UI zeigte gelöschte Ressourcen, Field-Clobbering bei "replace", Dex-Env-Var-Substitution) | `scripts/upgrade-argocd-hop.sh` scheiterte in Schritt 2/4 (SSH-known-hosts-Patch) an ungültigem JSON durch rohe Newlines in `ssh-keyscan`-Output — Notfall-Fix (python3 `json.dumps`) manuell angewandt, siehe Stolperfalle unten. NodeAffinity/Resources blieben durch Server-Side-Apply erhalten (anderer Field-Manager), Schritt 4 des Scripts war nicht nötig |
 
 ### Reklassifizierungen (Minor → Major)
 
@@ -305,6 +306,8 @@ kubectl get cm argocd-cm -n argocd -o yaml | grep -A5 "customizations.health"
     -o custom-columns='NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status'
   ```
   `scripts/upgrade-argocd-hop.sh` automatisiert diesen Fix bereits als Schritt 2/4 — bei manuellem Vorgehen ohne Script muss er jedes Mal erneut ausgeführt werden. Der dauerhafte Fix liegt in [`gitops/config/argocd/argocd-ssh-known-hosts-cm.yaml`](../../gitops/config/argocd/argocd-ssh-known-hosts-cm.yaml); ArgoCD stellt den ConfigMap danach automatisch aus Git wieder her, aber das Henne-Ei-Problem tritt beim nächsten Upgrade erneut auf.
+
+  **Bug in `scripts/upgrade-argocd-hop.sh` Schritt 2/4 (gefunden 2026-07-13):** Das Script baut den JSON-Patch per simpler String-Interpolation (`"{\"data\":{\"ssh_known_hosts\":\"${SSH_KEY}\"}}"`). `ssh-keyscan` liefert aber mehrzeiligen Output mit rohen Newlines, die in einem JSON-String nicht escaped sind → `Error from server (BadRequest): error decoding patch: invalid character '\n' in string literal`. Schritt 1 (Manifest-Apply) läuft davon unbeeinflusst durch, das Script bricht aber in Schritt 2 ab (`set -e`), Schritt 3/4 (Rollout-Wait, NodeAffinity/Resources) werden **nicht** ausgeführt. Workaround: den Notfall-Fix oben (mit `python3 -c 'import json...'` für korrektes Escaping) manuell ausführen, danach Rollout-Status und NodeAffinity/Resources manuell prüfen (Server-Side-Apply lässt von anderen Field-Managern gesetzte Felder wie NodeAffinity/Resources i. d. R. unangetastet, sicherheitshalber trotzdem verifizieren). **Fix:** `scripts/upgrade-argocd-hop.sh` wurde am 2026-07-13 auf dieselbe `python3 json.dumps`-Methode umgestellt.
 
 - **CrashLoopBackOff durch falschen Patch-Typ auf StatefulSet:** Ein Merge-Patch auf `spec.template.spec.containers[]` überschreibt den gesamten Container-Spec — `image`, `command`, `args` gehen verloren, tini startet ohne Argumente und crasht sofort (`tini (tini version 0.19.0) Usage: tini [OPTIONS] PROGRAM -- [ARGS] | --version`).
   - **Affinity:** immer Merge-Patch auf `spec.template.spec` (nie auf `containers[]`).
