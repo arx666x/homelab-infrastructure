@@ -91,17 +91,29 @@ print(r["id"] if isinstance(r, dict) else r)')"
 [ -n "$NEW_ID" ] && [ "$NEW_ID" != "None" ] \
   || { echo "[ERROR] certificate.create lieferte keine ID zurück." >&2; exit 1; }
 
+# system.general.config liefert ui_certificate als verschachteltes Objekt
+# zurück (nicht als reine ID) - live bestätigt am 2026-07-14, derselbe
+# Fehlerklasse wie bei NEW_ID: ein naiver print() hätte das Python-dict-repr
+# als "ID" an certificate.delete weitergereicht (führte zu
+# "[EINVAL] id: Input should be a valid integer" - Job schlug korrekt fehl,
+# nichts wurde gelöscht, aber trotzdem ein Bug).
 OLD_ID="$(midclt call system.general.config \
-  | python3 -c 'import json,sys; c=json.load(sys.stdin); print(c.get("ui_certificate") or "")' || true)"
+  | python3 -c 'import json,sys
+c = json.load(sys.stdin)
+v = c.get("ui_certificate")
+print(v.get("id") if isinstance(v, dict) else (v or ""))' || true)"
 
-midclt call system.general.update "$(python3 -c "import json,sys; print(json.dumps({'ui_certificate': int(sys.argv[1])}))" "$NEW_ID")"
+# Response enthält das Zertifikat inkl. Private Key im Klartext - NICHT nach
+# stdout durchreichen, das landet sonst im Cluster-Log-Aggregator (Loki).
+midclt call system.general.update "$(python3 -c "import json,sys; print(json.dumps({'ui_certificate': int(sys.argv[1])}))" "$NEW_ID")" >/dev/null
 
 # ui_restart trennt die aktuell laufende HTTPS-Session der Middleware –
 # das ist erwartet und KEIN Fehler.
-midclt call system.general.ui_restart || true
+midclt call system.general.ui_restart >/dev/null || true
 
 if [ -n "$OLD_ID" ] && [ "$OLD_ID" != "$NEW_ID" ]; then
-  midclt call certificate.delete "$OLD_ID" \
+  # certificate.delete ist ebenfalls ein Job - live bestätigt am 2026-07-14.
+  midclt call -j certificate.delete "$OLD_ID" >/dev/null \
     || echo "[WARN] Altes Zertifikat (id=$OLD_ID) konnte nicht automatisch gelöscht werden, bitte manuell in der UI prüfen." >&2
 fi
 
