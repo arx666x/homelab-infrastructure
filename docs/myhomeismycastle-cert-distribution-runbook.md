@@ -91,7 +91,7 @@ Control Panel → Security → Account:
 
 ```bash
 DSM_HOST=diskstation.reckeweg.io
-read -rsp "Passwort: " DSM_PASSWORD; echo
+printf "Passwort: "; read -rs DSM_PASSWORD; echo
 # -G/--data-urlencode ist Pflicht: Sonderzeichen im Passwort (%, &, +, #, ...)
 # machen sonst die Query-String-Interpretation auf DSM-Seite kaputt und
 # führen zu "400 - No such account or incorrect password", obwohl Account
@@ -107,9 +107,13 @@ SID=$(curl -sk -G "https://$DSM_HOST:5001/webapi/auth.cgi" \
 curl -sk "https://$DSM_HOST:5001/webapi/entry.cgi?api=SYNO.Core.Certificate&method=list&version=1&_sid=$SID" | jq .
 ```
 
-`read -rsp` fragt das Passwort maskiert ab, statt es als Klartext-Argument in
-die Shell-History zu schreiben. `$SID` und `$DSM_PASSWORD` bleiben nur in der
-aktuellen Shell-Sitzung; Terminal danach schließen, wenn fertig getestet.
+`printf`+`read -rs` fragt das Passwort maskiert ab, statt es als
+Klartext-Argument in die Shell-History zu schreiben (bewusst getrennt von
+`read`, weil `-p` in zsh "von Coprocess lesen" statt "Prompt anzeigen"
+bedeutet - unter zsh, dem macOS-Standard-Interactive-Shell, würde
+`read -rsp "..."  DSM_PASSWORD` sonst mit `read: -p: no coprocess`
+fehlschlagen). `$SID` und `$DSM_PASSWORD` bleiben nur in der aktuellen
+Shell-Sitzung; Terminal danach schließen, wenn fertig getestet.
 
 Wenn das eine Zertifikatsliste zurückgibt, funktioniert der Zugang. Kommt
 weiterhin `{"error":{"code":400},...}` zurück, obwohl Account und Passwort
