@@ -256,9 +256,9 @@ midclt call core.get_jobs '[["id","=",<job-id-aus-warn-meldung>]]'  # falls Clea
 
 ### 3.4 Caddy Custom App für Navidrome/Airsonic
 
-**Erledigt und live verifiziert am 2026-07-14** (TLS-Handshake auf beiden
-virtuellen Hosts liefert korrekt `CN=reckeweg.io`, Navidrome antwortet
-`302`, Airsonic `401` – beides normale App-Antworten, kein Proxy-Fehler).
+**Erledigt und live verifiziert am 2026-07-14** – inklusive Browser-Test:
+TrueNAS-UI, Navidrome und Airsonic sind alle drei per HTTPS erreichbar
+(TrueNAS-UI auf 443 direkt, Navidrome/Airsonic auf 8443 über Caddy).
 
 TrueNAS Apps → Discover Apps → Custom App akzeptiert eine Compose-YAML
 direkt 1:1 zum Einfügen (kein separates Formular). Jede TrueNAS-App läuft
@@ -287,9 +287,26 @@ navidrome.reckeweg.io:8443 {
 
 airsonic.reckeweg.io:8443 {
   tls /certs/fullchain.pem /certs/privkey.pem
-  reverse_proxy 192.168.11.53:6060
+  reverse_proxy 192.168.11.53:6060 {
+    header_up X-Forwarded-Port 8443
+  }
 }
 ```
+
+**`header_up X-Forwarded-Port 8443` bei Airsonic ist Pflicht, bei Navidrome
+nicht nötig** (live bestätigt am 2026-07-14): Airsonic-Advanced ist
+Spring-Boot-basiert und baut absolute Redirect-URLs (z.B. beim Login-
+Redirect nach `/ui/signin`) aus den `X-Forwarded-*`-Headern zusammen. Ohne
+explizites `X-Forwarded-Port` nimmt Spring den Default-Port des Schemas an
+(443 bei https) statt den Port aus `X-Forwarded-Host` zu übernehmen –
+Symptom: Redirect landet auf `https://airsonic.reckeweg.io/...` (ohne
+`:8443`), Browser verbindet dadurch auf Port 443 = direkt die TrueNAS-UI,
+zeigt deren Login-Seite statt Airsonic. Navidromes Redirect (`/app/`) ist
+ein relativer Pfad ohne Host/Port und ist von diesem Problem nicht
+betroffen. Bei künftigen Apps hinter Caddy: wenn ein Login-Redirect auf der
+falschen "Seite" landet, zuerst die `Location`-Header auf fehlenden Port
+prüfen (`curl -vk ... | grep -i location`), bevor man DNS/Zertifikat
+verdächtigt.
 
 Compose-Definition für die Custom App:
 
