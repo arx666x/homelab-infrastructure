@@ -73,8 +73,10 @@ print(json.dumps({
 PY
 )"
 
+# midclt call certificate.create gibt die neue ID direkt als JSON-Skalar
+# zurück (z.B. "42"), nicht als {"id": ...} - live bestätigt am 2026-07-14.
 NEW_ID="$(midclt call certificate.create "$PAYLOAD" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')"
+  | python3 -c 'import json,sys; print(json.load(sys.stdin))')"
 
 [ -n "$NEW_ID" ] && [ "$NEW_ID" != "None" ] \
   || { echo "[ERROR] certificate.create lieferte keine ID zurück." >&2; exit 1; }
