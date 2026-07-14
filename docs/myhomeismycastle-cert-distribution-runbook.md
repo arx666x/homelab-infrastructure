@@ -24,9 +24,10 @@ Caddy-Setup), plus die Rollout-Reihenfolge.
 | DSM Login-Allowlist/Auto-Block konfigurieren | **Du (DSM-UI)** | ✅ erledigt |
 | Altes Let's-Encrypt-Zertifikat auf DSM identifizieren/bereinigen | **Du (DSM-UI)** | ✅ erledigt |
 | Erster automatisierter Import via CronJob (diskstation) | Ich (Job-Test) | ✅ erledigt, 2026-07-14 |
-| TrueNAS Service-User anlegen | **Du (TrueNAS-UI)** | offen |
-| SSH-Public-Key auf musicbox installieren (command-restricted) | **Du (TrueNAS-Shell)** | offen |
-| Remote-Wrapper-Script per `scp` auf musicbox bringen | **Du** | offen |
+| TrueNAS Service-User anlegen | **Du (TrueNAS-UI)** | ✅ erledigt |
+| SSH-Public-Key auf musicbox installieren (command-restricted) | **Du (TrueNAS-Shell)** | ✅ erledigt |
+| Remote-Wrapper-Script installieren (Web-Shell, nicht scp - siehe 3.3) | **Du** | ✅ erledigt |
+| Erster automatisierter Import via CronJob (musicbox, TrueNAS-UI-Cert) | Ich (Job-Test) | ✅ erledigt, 2026-07-14 |
 | Caddy Custom App für Navidrome/Airsonic anlegen | **Du (TrueNAS-Apps-UI)** | offen |
 | `seal-all-secrets.sh` ausführen (DSM-Passwort eingeben) | **Du** | offen |
 | Manifeste + Sealed Secrets committen & pushen | **Du** (ich kann vorbereiten) | teilweise |
