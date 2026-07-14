@@ -92,7 +92,9 @@ data:
 
     # Bestehenden cert-manager-Eintrag suchen, um ihn zu aktualisieren statt
     # bei jedem Lauf einen neuen Zertifikats-Slot anzulegen.
-    CERT_ID="$(curl -sk "${BASE}/entry.cgi?api=SYNO.Core.Certificate&method=list&version=1&_sid=${SID}" \
+    # Listing läuft über die .CRT-Sub-API, nicht über SYNO.Core.Certificate
+    # selbst (das liefert bei method=list einen "103 method does not exist").
+    CERT_ID="$(curl -sk "${BASE}/entry.cgi?api=SYNO.Core.Certificate.CRT&method=list&version=1&_sid=${SID}" \
       | jq -r '.data.certificates[]? | select(.desc=="cert-manager") | .id' | head -n1)"
 
     IMPORT_URL="${BASE}/entry.cgi?api=SYNO.Core.Certificate&method=import&version=1&_sid=${SID}"

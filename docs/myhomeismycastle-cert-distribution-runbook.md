@@ -104,7 +104,7 @@ SID=$(curl -sk -G "https://$DSM_HOST:5001/webapi/auth.cgi" \
   --data-urlencode "passwd=$DSM_PASSWORD" \
   --data-urlencode "session=Certificate" \
   --data-urlencode "format=sid" | jq -r .data.sid)
-curl -sk "https://$DSM_HOST:5001/webapi/entry.cgi?api=SYNO.Core.Certificate&method=list&version=1&_sid=$SID" | jq .
+curl -sk "https://$DSM_HOST:5001/webapi/entry.cgi?api=SYNO.Core.Certificate.CRT&method=list&version=1&_sid=$SID" | jq .
 ```
 
 `printf`+`read -rs` fragt das Passwort maskiert ab, statt es als
@@ -266,6 +266,7 @@ oder (bei zweitem Lauf) `Fingerprint ... stimmt bereits überein, überspringe.`
 |---|---|---|
 | `Certificate` bleibt `READY: False` | Cloudflare-DNS-01-Propagation dauert / Token-Scope reicht nicht für Apex+Wildcard | `kubectl describe challenge -n cert-distribution`, DNS manuell mit `dig TXT _acme-challenge.reckeweg.io` prüfen |
 | DSM-Login schlägt fehl (`sid` leer) | Falscher Account, Auto-Block hat IP gesperrt, oder Account nicht in `administrators` | Control Panel → Security → Account-Log prüfen, Allowlist-Regel gegenprüfen |
+| DSM-API antwortet `{"error":{"code":103}}` | `method` existiert nicht für die aufgerufene API - z.B. `method=list` ist unter `SYNO.Core.Certificate` nicht gültig, sondern nur unter `SYNO.Core.Certificate.CRT` (Import/Delete vs. Listing sind zwei getrennte Sub-APIs) | Verfügbare Version/Pfad gegenprüfen: `curl -sk ".../query.cgi?api=SYNO.API.Info&version=1&method=query&query=<API-Name>" \| jq .` - liefert aber nur Versions-/Pfad-Info, nicht die gültigen Methoden; im Zweifel die tatsächlich benutzte API in `deploy-dsm.sh` mit der Control-Panel-Netzwerk-Konsole (Browser-DevTools beim manuellen Zertifikatsimport) abgleichen |
 | DSM-Import meldet Fehler zu `inter_cert` | Let's-Encrypt-Chain hat sich strukturell geändert (mehr/weniger PEM-Blöcke) | `awk`-Split in `common.sh` prüfen, `openssl crl2pkcs7 -nocrl -certfile /certs/tls.crt \| openssl pkcs7 -print_certs -noout` zur Diagnose |
 | SSH zu musicbox schlägt fehl | `authorized_keys`-Zeile fehlerhaft, User existiert nicht, Host-Key-Mismatch | `ssh -v` gegen den Key testen, `StrictHostKeyChecking=accept-new` im Script fängt Erstverbindung ab, nicht spätere Host-Key-Änderungen |
 | TrueNAS-Wrapper bricht mit "SAN nicht enthalten" ab | Wildcard-Cert enthält `musicbox.reckeweg.io` nicht (sollte durch `*.reckeweg.io` immer der Fall sein) | `openssl x509 -in tls.crt -noout -text \| grep DNS:` prüfen |
