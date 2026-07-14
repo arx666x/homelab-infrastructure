@@ -20,9 +20,10 @@ Caddy-Setup), plus die Rollout-Reihenfolge.
 | TrueNAS-SSH-Keypair generiert, Private Key versiegelt | Ich (Repo) | ✅ erledigt |
 | Remote-Wrapper-Script `truenas-cert-deploy.sh` geschrieben | Ich (Repo) | ✅ erledigt |
 | `seal-all-secrets.sh` um DSM-Credentials-Block erweitert | Ich (Repo) | ✅ erledigt |
-| DSM Service-Account anlegen | **Du (DSM-UI)** | offen |
-| DSM Login-Allowlist/Auto-Block konfigurieren | **Du (DSM-UI)** | offen |
-| Altes Let's-Encrypt-Zertifikat auf DSM identifizieren/bereinigen | **Du (DSM-UI)** | offen |
+| DSM Service-Account anlegen | **Du (DSM-UI)** | ✅ erledigt |
+| DSM Login-Allowlist/Auto-Block konfigurieren | **Du (DSM-UI)** | ✅ erledigt |
+| Altes Let's-Encrypt-Zertifikat auf DSM identifizieren/bereinigen | **Du (DSM-UI)** | ✅ erledigt |
+| Erster automatisierter Import via CronJob (diskstation) | Ich (Job-Test) | ✅ erledigt, 2026-07-14 |
 | TrueNAS Service-User anlegen | **Du (TrueNAS-UI)** | offen |
 | SSH-Public-Key auf musicbox installieren (command-restricted) | **Du (TrueNAS-Shell)** | offen |
 | Remote-Wrapper-Script per `scp` auf musicbox bringen | **Du** | offen |
@@ -121,10 +122,39 @@ stimmen: Account-Gruppenmitgliedschaft (`administrators`) und die
 Login-Allowlist aus 2.3 gegenprüfen – nicht jede Fehlerursache hinter Code
 400 ist tatsächlich ein falsches Passwort.
 
-Sobald das automatisierte Ausrollen (Schritt 6) einmal erfolgreich lief und
-`as_default=true` gesetzt wurde: altes Let's-Encrypt-Zertifikat aus Schritt
-2.1 in der UI löschen, DSMs eigenen Auto-Renew dafür deaktivieren/prüfen,
-dass kein zweiter Renewal-Mechanismus mehr aktiv ist.
+**Wichtige Korrektur gegenüber der ursprünglichen Annahme (bestätigt am
+2026-07-14):** `as_default=true` beim Import reicht bei einem **brandneuen**
+Zertifikats-Import NICHT aus, um "Systemstandard" (DSM Desktop Service,
+Port 5001 - das, was der Browser tatsächlich sieht) auf das neue Zertifikat
+umzustellen. Jeder Dienst in Systemsteuerung → Sicherheit → Zertifikat hat
+eine eigene, sticky Zertifikats-Zuordnung; `as_default` setzt nur das
+globale Standard-Flag, rebinded aber keine bereits explizit zugeordneten
+Dienste. Erst das **Löschen des alten Zertifikats** (`SYNO.Core.Certificate.CRT`,
+`method=delete`, `id=<alte-cert-id>`) löst automatisch einen DSM-Webserver-
+Neustart aus, bei dem verwaiste Dienst-Zuordnungen auf das neue Standard-
+Zertifikat gepatcht werden. Praktische Konsequenz: die Reihenfolge aus
+Schritt 2.1 ("erst testen, dann alten Cert löschen") funktioniert für den
+**allerersten** Cutover nicht wie gedacht - man muss den alten Cert löschen,
+BEVOR man im Browser sieht, ob es geklappt hat. Für **künftige automatische
+Renewals** ist das unkritisch: die Renewal-Läufe finden über `desc=cert-manager`
+denselben Zertifikats-Slot wieder und aktualisieren ihn per `id=`-Parameter
+in-place (kein neuer Slot, kein Rebind-Problem).
+
+Nach dem Löschen des alten Zertifikats: DSMs eigenen Auto-Renew dafür
+prüfen/deaktivieren, damit kein zweiter Renewal-Mechanismus mehr aktiv ist.
+
+**Chrome zeigt trotz gültigem Zertifikat "nicht sicher" an?** DevTools →
+Security-Tab (nicht Console!) prüfen. Wenn dort "Certificate: valid and
+trusted" und "Connection: secure" grün sind, aber unter "Resources" ein
+Hinweis auf "active content with certificate errors" erscheint: das ist
+eine **pro Origin gespeicherte Chrome-Berechtigung aus einer früheren
+Sitzung** (z.B. während der alte, abgelaufene Cert noch aktiv war), keine
+aktuelle Störung. Test: gleiche URL im Inkognito-Fenster öffnen - dort
+sollte keine Warnung mehr erscheinen. Manche Chrome-Versionen (v141+)
+bieten in den normalen Website-Einstellungen kein separates "Zurücksetzen"
+mehr für "Unsichere Inhalte", nur noch Blockieren/Zulassen - die Warnung
+bleibt dann bis zum nächsten Löschen der Website-Daten kosmetisch bestehen,
+ist aber funktional irrelevant.
 
 ## 3. TrueNAS (musicbox.reckeweg.io)
 

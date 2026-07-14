@@ -149,6 +149,32 @@ gezeigt. RSA-2048 ist der konservativere, breiter kompatible Default.
   Vergleich bei jedem Lauf reicht. Ein kaputter CronJob fällt lange vor
   Ablauf auf (Let's-Encrypt-Renewal läuft 30 Tage vor Ablauf).
 
+## Cluster-weite Erkenntnisse aus dem ersten Rollout (2026-07-14)
+
+Bei der Erstausstellung des Wildcard-Zertifikats sind zwei Dinge zutage
+getreten, die über cert-distribution hinaus relevant sind:
+
+- **cert-manager prüft DNS-01-Propagation jetzt über öffentliche Resolver,
+  nicht mehr über die Cluster-Default-Route.** Ursprünglich hing die
+  Erstausstellung >2h fest, weil cert-manager seinen Propagation-Selfcheck
+  über CoreDNS → Node-`resolv.conf` → Pi-hole (192.168.11.55) macht, und
+  Pi-hole eine negative Antwort für den frisch angelegten
+  `_acme-challenge`-TXT-Record gecached hatte, weit über die SOA-Negative-TTL
+  hinaus. Fix (siehe `gitops/apps/cert-manager.yaml`):
+  `--dns01-recursive-nameservers=1.1.1.1:53,8.8.8.8:53` +
+  `--dns01-recursive-nameservers-only=true`. Das betrifft **alle** künftigen
+  DNS-01-Zertifikate im Cluster, nicht nur dieses Wildcard-Zertifikat.
+- **`*.reckeweg.io` ist per CNAME auf die FritzBox delegiert**
+  (`achim.reckeweg.io` → `t0dv6nfx59d5d3r6.myfritz.net`, dokumentiert in
+  `myHomeIsMyCastle: Netzwerk_FritzBox.md`) für externen Zugriff/Port-
+  Forwarding/VPN. Das ist kein Konflikt mit den `_acme-challenge`-TXT-Records
+  von cert-manager, da ein spezifischer Record-Name (`_acme-challenge.reckeweg.io`
+  TXT) einen Wildcard-CNAME-Treffer (`*.reckeweg.io`) korrekt überstimmt –
+  bestätigt durch erfolgreiche Ausstellung. Wichtig für alle künftigen
+  DNS-Änderungen an der Zone: dieser Wildcard-CNAME nicht versehentlich
+  anfassen/löschen, er ist aktiv genutzte Netzwerk-Infrastruktur, kein
+  Altlast-Rest.
+
 ## Backlog (nicht Teil dieser Runde)
 
 - **Pi-hole-Verteilung**, sobald die neuen Pi-hole-Geräte final stehen
