@@ -80,8 +80,15 @@ seal_new() {
 
   local kubectl_args=()
   for key in "$@"; do
-    read -rsp "  $name / $key: " val
-    echo ""
+    # Nur tatsächlich geheime Felder maskiert abfragen (Passwort/Token/Secret).
+    # Usernames, Hostnames, E-Mails etc. dürfen sichtbar eingegeben werden -
+    # einfacher zu tippen/kontrollieren, ohne Sicherheitsgewinn beim Maskieren.
+    if [[ "$key" =~ (password|passwd|token|secret) ]]; then
+      read -rsp "  $name / $key: " val
+      echo ""
+    else
+      read -rp "  $name / $key: " val
+    fi
     kubectl_args+=("--from-literal=${key}=${val}")
   done
 
