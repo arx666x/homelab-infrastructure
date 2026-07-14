@@ -192,21 +192,51 @@ welches Kommando der Client anfordert.
 
 ### 3.3 Remote-Wrapper-Script installieren
 
+**Korrektur gegenüber der ursprünglichen Annahme (live bestätigt am
+2026-07-14):** TrueNAS SCALEs Basis-OS ist read-only/immutable, auch für
+root – `/usr/local/bin/` ist damit **kein** gültiger Zielort, `sudo install`
+dorthin scheitert mit "Read-only file system". Das Script muss auf einem
+beschreibbaren Dataset liegen. Ebenso ist `/mnt/<pool>/certs/` direkt unter
+der Pool-Wurzel für einen Nicht-root-User i.d.R. nicht beschreibbar
+("Permission denied") – das eigene Home-Dataset des Service-Users
+funktioniert zuverlässig.
+
+Installation über die **TrueNAS-Web-Shell** (System Settings → Shell, oder
+über SSH mit einem Account, der tatsächlich Shell-Zugriff hat – nicht über
+den command-restricted Cluster-Key, der kann nur das fertige Script
+ausführen):
+
 ```bash
-scp gitops/config/cert-distribution/remote-scripts/truenas-cert-deploy.sh \
-  certdeploy@musicbox.reckeweg.io:/tmp/truenas-cert-deploy.sh
-ssh certdeploy@musicbox.reckeweg.io  # regulärer Login zur Installation, danach greift die Restriction erst beim Cluster-Key
-sudo install -o root -g wheel -m 755 /tmp/truenas-cert-deploy.sh /usr/local/bin/truenas-cert-deploy.sh
+sudo mkdir -p /mnt/<pool>/homes/certdeploy/bin
+sudo tee /mnt/<pool>/homes/certdeploy/bin/truenas-cert-deploy.sh > /dev/null << 'SCRIPT_EOF'
+# ... Inhalt von gitops/config/cert-distribution/remote-scripts/truenas-cert-deploy.sh ...
+SCRIPT_EOF
+sudo chown root:root /mnt/<pool>/homes/certdeploy/bin/truenas-cert-deploy.sh
+sudo chmod 755 /mnt/<pool>/homes/certdeploy/bin/truenas-cert-deploy.sh
+sudo chmod 755 /mnt/<pool>/homes/certdeploy/bin
 ```
 
-**Vor dem ersten produktiven Lauf im Script anpassen:**
-- `CERT_DATASET="/mnt/tank/certs/reckeweg.io"` – Platzhalter-Pool-Name
-  `tank` durch den tatsächlichen Pool ersetzen.
-- Feldnamen-Check: `midclt call system.general.config | python3 -m json.tool`
-  – prüfen, dass `ui_certificate` tatsächlich so heißt (kann sich zwischen
-  TrueNAS-Versionen leicht unterscheiden; bei Abweichung Script anpassen).
+`<pool>` durch den tatsächlichen Pool-Namen ersetzen (bei musicbox:
+`data-pool`). Der `authorized_keys`-Eintrag aus 3.2 muss exakt auf diesen
+Pfad zeigen (`command="/mnt/<pool>/homes/certdeploy/bin/truenas-cert-deploy.sh",...`).
 
-Manueller Testlauf (simuliert, was der CronJob später automatisch macht):
+**Vor dem ersten produktiven Lauf im Script prüfen (beides live bestätigt,
+im aktuellen Script bereits korrekt):**
+- `CERT_DATASET` zeigt auf ein Dataset, das `certdeploy` tatsächlich
+  beschreiben darf – **nicht** `/mnt/<pool>/certs/...` direkt (Permission
+  denied), sondern `/mnt/<pool>/homes/certdeploy/certs/...`.
+- `midclt call certificate.create` und `midclt call certificate.delete`
+  sind **Jobs** – `midclt call -j <method> ...` ist Pflicht, sonst liefert
+  `midclt` sofort nur die Job-Tracking-ID zurück (ein anderer ID-Raum als
+  Zertifikats-IDs), was nachgelagerte Aufrufe mit "not a valid certificate"
+  scheitern lässt.
+- Feldnamen-Check bei TrueNAS-Versionsupdates: `midclt call
+  system.general.config | python3 -m json.tool` – prüfen, dass
+  `ui_certificate` weiterhin so heißt.
+
+Manueller Testlauf (simuliert, was der CronJob später automatisch macht) –
+von einer Maschine mit Zugriff auf das Cluster-Secret, oder testweise mit
+einem beliebigen gültigen Cert+Key-Paar:
 
 ```bash
 cat /pfad/zu/tls.key /pfad/zu/tls.crt | ssh certdeploy@musicbox.reckeweg.io
@@ -215,6 +245,13 @@ cat /pfad/zu/tls.key /pfad/zu/tls.crt | ssh certdeploy@musicbox.reckeweg.io
 Erwartete Ausgabe: `OK: TrueNAS-UI-Zertifikat aktualisiert (id=…), Caddy-Dataset unter … aktualisiert.`
 Die aktuelle HTTPS-Session der TrueNAS-UI wird dabei kurz getrennt
 (`ui_restart`) – das ist erwartetes Verhalten, kein Fehler.
+
+Verifikation danach:
+
+```bash
+midclt call certificate.query   # neues Zertifikat vorhanden, altes ggf. weg
+midclt call core.get_jobs '[["id","=",<job-id-aus-warn-meldung>]]'  # falls Cleanup als Job im Hintergrund lief
+```
 
 ### 3.4 Caddy Custom App für Navidrome/Airsonic
 
@@ -229,8 +266,8 @@ services:
     ports:
       - "8443:8443"
     volumes:
-      - /mnt/tank/certs/reckeweg.io:/certs:ro
-      - /mnt/tank/apps/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /mnt/data-pool/homes/certdeploy/certs/reckeweg.io:/certs:ro
+      - /mnt/data-pool/apps/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
 ```
 
 `Caddyfile`:

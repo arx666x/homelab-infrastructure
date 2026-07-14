@@ -23,7 +23,10 @@
 # =============================================================================
 set -euo pipefail
 
-CERT_DATASET="/mnt/data-pool/certs/reckeweg.io"
+# /mnt/data-pool/certs direkt unter der Pool-Wurzel ist für certdeploy
+# nicht beschreibbar (Permission denied, live bestätigt 2026-07-14) -
+# certdeploy besitzt aber sein eigenes Home-Dataset, dort funktioniert es.
+CERT_DATASET="/mnt/data-pool/homes/certdeploy/certs/reckeweg.io"
 REQUIRED_SAN="musicbox.reckeweg.io"
 
 WORK="$(mktemp -d)"
