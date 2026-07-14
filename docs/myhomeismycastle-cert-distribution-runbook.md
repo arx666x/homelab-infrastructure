@@ -318,6 +318,26 @@ den gemounteten Zertifikatsdateien automatisch (Polling), kein Reload nötig
 tatsächlichen Zertifikatswechsel (nicht bei jedem Lauf, siehe
 Fingerprint-Vergleich in `common.sh`).
 
+**Nicht vergessen – Pi-hole-Eintrag für JEDEN neuen Hostnamen:**
+`navidrome.reckeweg.io` und `airsonic.reckeweg.io` sind neue Hostnamen, die
+hier zum ersten Mal auftauchen – anders als `musicbox.reckeweg.io` oder
+`diskstation.reckeweg.io` haben sie noch KEINEN lokalen Pi-hole-DNS-Eintrag.
+Live bestätigt am 2026-07-14: ohne eigenen Eintrag fällt die Auflösung auf
+was auch immer der Domain-Default liefert (hier: die Cluster-MetalLB-IP
+`192.168.20.100`, VLAN 20) – von einem Management-VLAN-Client aus nicht
+erreichbar ("Network is unreachable"), nicht mal ein TLS-/Connection-Fehler.
+In Pi-hole unter Local DNS Records ergänzen:
+
+| Hostname | Ziel |
+|---|---|
+| `navidrome.reckeweg.io` | `192.168.11.53` (musicbox, IP nicht Port – Caddy übernimmt das Routing anhand SNI/Host) |
+| `airsonic.reckeweg.io` | `192.168.11.53` |
+
+Diese Regel gilt generell für **jeden** neuen Hostnamen, der über dieses
+System verteilt wird (auch künftig für Pi-hole selbst, siehe Backlog) –
+DNS-Eintrag ist ein eigener, nicht automatisierter Schritt und gehört in
+jede zukünftige Erweiterung mit hinein.
+
 ## 4. Secrets versiegeln (DSM-Credentials)
 
 Sobald der DSM-Account aus Schritt 2.2 existiert:
