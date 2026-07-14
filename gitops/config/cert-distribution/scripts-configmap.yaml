@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cert-distributor-scripts
+  namespace: cert-distribution
+data:
+  common.sh: |
+    #!/usr/bin/env bash
+    # Gemeinsame Helfer für alle deploy-*.sh Scripts.
+    set -euo pipefail
+
+    CERT_DIR="/certs"
+    WORK_DIR="/tmp/cert-distribution"
+    mkdir -p "$WORK_DIR"
+
+    # cert-manager liefert Leaf+Chain gemeinsam in tls.crt.
+    # Manche Ziele (DSM) wollen Leaf und Intermediate-Chain getrennt.
+    split_chain() {
+      awk -v dir="$WORK_DIR" \
+        '/BEGIN CERT/{n++} {print > (dir "/" (n==1 ? "leaf.pem" : "chain.pem"))}' \
+        "$CERT_DIR/tls.crt"
+    }
+
+    # openssl x509 liest aus einer Multi-Cert-PEM-Datei automatisch nur den
+    # ersten Block (= Leaf) - split_chain() ist für den Fingerprint-Vergleich
+    # nicht nötig.
+    local_fingerprint() {
+      openssl x509 -in "$CERT_DIR/tls.crt" -noout -sha256 -fingerprint | cut -d= -f2
+    }
+
+    remote_fingerprint() {
+      # $1 = host:port  $2 = SNI-Hostname
+      echo | openssl s_client -connect "$1" -servername "$2" 2>/dev/null \
+        | openssl x509 -noout -sha256 -fingerprint 2>/dev/null | cut -d= -f2 || true
+    }
+
+    # Exit 0 = Deploy nötig, Exit 1 = Ziel hat bereits das aktuelle Zertifikat.
+    needs_deploy() {
+      local remote
+      remote="$(remote_fingerprint "$1" "$2")"
+      if [ -z "$remote" ]; then
+        echo "  [WARN] Konnte aktuelles Zertifikat von $1 (SNI $2) nicht lesen - deploye sicherheitshalber." >&2
+        return 0
+      fi
+      if [ "$remote" = "$(local_fingerprint)" ]; then
+        echo "  Fingerprint auf $1 stimmt bereits überein, überspringe."
+        return 1
+      fi
+      return 0
+    }
+
+  deploy-dsm.sh: |
+    #!/usr/bin/env bash
+    # Zertifikat auf die Synology DiskStation ausrollen - rein über die
+    # offizielle SYNO.Core.Certificate Web-API, kein SSH nötig.
+    set -euo pipefail
+    source /scripts/common.sh
+
+    DSM_HOST="${DSM_HOST:-diskstation.reckeweg.io}"
+    DSM_PORT="${DSM_PORT:-5001}"
+    DSM_USER="$(cat /secrets/dsm/dsm-user)"
+    DSM_PASSWORD="$(cat /secrets/dsm/dsm-password)"
+
+    echo "== DSM (${DSM_HOST}) =="
+    split_chain
+
+    if ! needs_deploy "${DSM_HOST}:${DSM_PORT}" "${DSM_HOST}"; then
+      exit 0
+    fi
+
+    BASE="https://${DSM_HOST}:${DSM_PORT}/webapi"
+
+    SID="$(curl -sk "${BASE}/auth.cgi?api=SYNO.API.Auth&version=3&method=login&account=${DSM_USER}&passwd=${DSM_PASSWORD}&session=Certificate&format=sid" \
+      | jq -r '.data.sid // empty')"
+
+    if [ -z "$SID" ]; then
+      echo "  [ERROR] DSM-Login fehlgeschlagen." >&2
+      exit 1
+    fi
+
+    # Bestehenden cert-manager-Eintrag suchen, um ihn zu aktualisieren statt
+    # bei jedem Lauf einen neuen Zertifikats-Slot anzulegen.
+    CERT_ID="$(curl -sk "${BASE}/entry.cgi?api=SYNO.Core.Certificate&method=list&version=1&_sid=${SID}" \
+      | jq -r '.data.certificates[]? | select(.desc=="cert-manager") | .id' | head -n1)"
+
+    IMPORT_URL="${BASE}/entry.cgi?api=SYNO.Core.Certificate&method=import&version=1&_sid=${SID}"
+
+    if [ -n "$CERT_ID" ]; then
+      RESULT="$(curl -sk \
+        -F "key=@${CERT_DIR}/tls.key" \
+        -F "cert=@${WORK_DIR}/leaf.pem" \
+        -F "inter_cert=@${WORK_DIR}/chain.pem" \
+        -F "id=${CERT_ID}" -F "desc=cert-manager" -F "as_default=true" \
+        "$IMPORT_URL")"
+    else
+      RESULT="$(curl -sk \
+        -F "key=@${CERT_DIR}/tls.key" \
+        -F "cert=@${WORK_DIR}/leaf.pem" \
+        -F "inter_cert=@${WORK_DIR}/chain.pem" \
+        -F "desc=cert-manager" -F "as_default=true" \
+        "$IMPORT_URL")"
+    fi
+
+    curl -sk "${BASE}/auth.cgi?api=SYNO.API.Auth&version=1&method=logout&session=Certificate" >/dev/null || true
+
+    if echo "$RESULT" | jq -e '.success == true' >/dev/null 2>&1; then
+      echo "  [OK] DSM-Zertifikat importiert (id=${CERT_ID:-neu})."
+    else
+      echo "  [ERROR] DSM-Import fehlgeschlagen: $RESULT" >&2
+      exit 1
+    fi
+
+  deploy-truenas.sh: |
+    #!/usr/bin/env bash
+    # Zertifikat auf die TrueNAS-Box (musicbox) ausrollen - per SSH mit
+    # command-restricted Key an den fest installierten Remote-Wrapper
+    # truenas-cert-deploy.sh (der ruft lokal midclt auf, siehe
+    # gitops/config/cert-distribution/remote-scripts/).
+    set -euo pipefail
+    source /scripts/common.sh
+
+    TRUENAS_HOST="${TRUENAS_HOST:-musicbox.reckeweg.io}"
+    TRUENAS_SSH_USER="${TRUENAS_SSH_USER:-certdeploy}"
+    SSH_KEY="/secrets/ssh/ssh-privatekey"
+
+    echo "== TrueNAS (${TRUENAS_HOST}) =="
+
+    if ! needs_deploy "${TRUENAS_HOST}:443" "${TRUENAS_HOST}"; then
+      exit 0
+    fi
+
+    install -m 600 "$SSH_KEY" /tmp/cert-distribution/id_ed25519
+
+    cat "${CERT_DIR}/tls.key" "${CERT_DIR}/tls.crt" \
+      | ssh -i /tmp/cert-distribution/id_ed25519 \
+            -o StrictHostKeyChecking=accept-new \
+            -o BatchMode=yes \
+            "${TRUENAS_SSH_USER}@${TRUENAS_HOST}"
+
+    echo "  [OK] Zertifikat an TrueNAS übertragen (Remote-Script validiert und wendet an)."

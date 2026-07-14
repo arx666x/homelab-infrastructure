@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cert-distributor
+  namespace: cert-distribution
+spec:
+  schedule: "20 3 * * *"    # täglich 03:20 Uhr
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: cert-distributor
+          restartPolicy: OnFailure
+          containers:
+            - name: cert-distributor
+              image: alpine:3.20
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  apk add --no-cache bash openssh-client openssl curl jq >/dev/null
+
+                  chmod +x /scripts/*.sh 2>/dev/null || true
+
+                  status=0
+                  bash /scripts/deploy-dsm.sh || status=1
+                  bash /scripts/deploy-truenas.sh || status=1
+
+                  exit "$status"
+              volumeMounts:
+                - name: wildcard-cert
+                  mountPath: /certs
+                  readOnly: true
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: dsm-credentials
+                  mountPath: /secrets/dsm
+                  readOnly: true
+                - name: ssh-key
+                  mountPath: /secrets/ssh
+                  readOnly: true
+          volumes:
+            - name: wildcard-cert
+              secret:
+                secretName: wildcard-reckeweg-io-tls
+            - name: scripts
+              configMap:
+                name: cert-distributor-scripts
+                defaultMode: 0555
+            - name: dsm-credentials
+              secret:
+                secretName: cert-distributor-dsm-credentials
+            - name: ssh-key
+              secret:
+                secretName: cert-distributor-ssh-key
+                items:
+                  - key: ssh-privatekey
+                    path: ssh-privatekey
+                    mode: 0600

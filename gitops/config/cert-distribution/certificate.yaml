@@ -1,0 +1,17 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-reckeweg-io
+  namespace: cert-distribution
+spec:
+  secretName: wildcard-reckeweg-io-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - reckeweg.io
+    - "*.reckeweg.io"
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always

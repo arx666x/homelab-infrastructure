@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-distribution
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: cert-distribution
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  sources:
+    - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
+      targetRevision: HEAD
+      path: gitops/config/cert-distribution
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-distribution
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
