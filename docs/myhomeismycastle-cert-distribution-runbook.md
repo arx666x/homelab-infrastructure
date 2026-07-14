@@ -28,7 +28,7 @@ Caddy-Setup), plus die Rollout-Reihenfolge.
 | SSH-Public-Key auf musicbox installieren (command-restricted) | **Du (TrueNAS-Shell)** | ✅ erledigt |
 | Remote-Wrapper-Script installieren (Web-Shell, nicht scp - siehe 3.3) | **Du** | ✅ erledigt |
 | Erster automatisierter Import via CronJob (musicbox, TrueNAS-UI-Cert) | Ich (Job-Test) | ✅ erledigt, 2026-07-14 |
-| Caddy Custom App für Navidrome/Airsonic anlegen | **Du (TrueNAS-Apps-UI)** | offen |
+| Caddy Custom App für Navidrome/Airsonic anlegen | **Du (TrueNAS-Apps-UI)** | ✅ erledigt, 2026-07-14 |
 | `seal-all-secrets.sh` ausführen (DSM-Passwort eingeben) | **Du** | offen |
 | Manifeste + Sealed Secrets committen & pushen | **Du** (ich kann vorbereiten) | teilweise |
 
@@ -256,8 +256,42 @@ midclt call core.get_jobs '[["id","=",<job-id-aus-warn-meldung>]]'  # falls Clea
 
 ### 3.4 Caddy Custom App für Navidrome/Airsonic
 
-TrueNAS Apps → Discover Apps → Custom App. Grundgerüst (Ports/Container-Namen
-an die tatsächliche App-Konfiguration anpassen):
+**Erledigt und live verifiziert am 2026-07-14** (TLS-Handshake auf beiden
+virtuellen Hosts liefert korrekt `CN=reckeweg.io`, Navidrome antwortet
+`302`, Airsonic `401` – beides normale App-Antworten, kein Proxy-Fehler).
+
+TrueNAS Apps → Discover Apps → Custom App akzeptiert eine Compose-YAML
+direkt 1:1 zum Einfügen (kein separates Formular). Jede TrueNAS-App läuft
+als eigenes Compose-Projekt mit eigenem Docker-Netzwerk
+(`ix-navidrome-...`, `ix-airsonic-advanced-...`) – Caddy als neue,
+separate App hängt NICHT automatisch im selben Netzwerk. Reverse-Proxy
+daher über die auf dem Host published Ports, nicht über Container-Namen:
+
+```bash
+sudo docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
+```
+
+zeigt live die tatsächlichen Host-Ports (live bestätigt: Navidromes
+internes 4533 ist NICHT published, aber 7070 ist es; Airsonic-Advanceds
+internes 4040 ist als 6060 published – diese können sich bei App-Updates
+ändern, vor jeder Änderung neu prüfen).
+
+Caddyfile unter `/mnt/data-pool/apps/caddy/Caddyfile` (per `sudo tee`
+angelegt, siehe vorherige Runbook-Version für den genauen Befehl):
+
+```
+navidrome.reckeweg.io:8443 {
+  tls /certs/fullchain.pem /certs/privkey.pem
+  reverse_proxy 192.168.11.53:7070
+}
+
+airsonic.reckeweg.io:8443 {
+  tls /certs/fullchain.pem /certs/privkey.pem
+  reverse_proxy 192.168.11.53:6060
+}
+```
+
+Compose-Definition für die Custom App:
 
 ```yaml
 services:
@@ -271,27 +305,18 @@ services:
       - /mnt/data-pool/apps/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
 ```
 
-`Caddyfile`:
-
-```
-navidrome.reckeweg.io:8443 {
-  tls /certs/fullchain.pem /certs/privkey.pem
-  reverse_proxy navidrome:4533
-}
-
-airsonic.reckeweg.io:8443 {
-  tls /certs/fullchain.pem /certs/privkey.pem
-  reverse_proxy airsonic:4040
-}
-```
-
 Port `8443` ist die Empfehlung aus dem Konzept (TrueNAS-UI bleibt
 unverändert auf 443, Caddy übernimmt bewusst NICHT den Admin-Zugang – siehe
-Entscheidungs-Log im Konzeptdokument). `navidrome`/`airsonic` als Hostnamen
-im `reverse_proxy` setzen nur, wenn Caddy im selben Docker-Netzwerk wie die
-Apps hängt – sonst durch die tatsächliche Container-IP/den Host-Port
-ersetzen. Caddy erkennt Änderungen an den gemounteten Zertifikatsdateien
-automatisch (Polling), kein Reload nötig.
+Entscheidungs-Log im Konzeptdokument). Kein `user:`-Override nötig, obwohl
+`privkey.pem` mit `600` nur für `certdeploy` lesbar ist: der Container läuft
+per Docker-Default als root, und root liest jede Datei unabhängig von
+Unix-Permissions (kein User-Namespace-Remapping auf dieser TrueNAS-Instanz).
+Ein `user:`-Override hätte zudem Caddys eigene `/config`/`/data`-Verzeichnisse
+im Image (root-owned) unbeschreibbar gemacht. Caddy erkennt Änderungen an
+den gemounteten Zertifikatsdateien automatisch (Polling), kein Reload nötig
+– der CronJob überschreibt `fullchain.pem`/`privkey.pem` bei jedem
+tatsächlichen Zertifikatswechsel (nicht bei jedem Lauf, siehe
+Fingerprint-Vergleich in `common.sh`).
 
 ## 4. Secrets versiegeln (DSM-Credentials)
 
