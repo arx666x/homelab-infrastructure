@@ -91,13 +91,31 @@ Control Panel → Security → Account:
 
 ```bash
 DSM_HOST=diskstation.reckeweg.io
-SID=$(curl -sk "https://$DSM_HOST:5001/webapi/auth.cgi?api=SYNO.API.Auth&version=3&method=login&account=cert-distributor&passwd=DEIN_PASSWORT&session=Certificate&format=sid" | jq -r .data.sid)
+read -rsp "Passwort: " DSM_PASSWORD; echo
+# -G/--data-urlencode ist Pflicht: Sonderzeichen im Passwort (%, &, +, #, ...)
+# machen sonst die Query-String-Interpretation auf DSM-Seite kaputt und
+# führen zu "400 - No such account or incorrect password", obwohl Account
+# und Passwort eigentlich stimmen.
+SID=$(curl -sk -G "https://$DSM_HOST:5001/webapi/auth.cgi" \
+  --data-urlencode "api=SYNO.API.Auth" \
+  --data-urlencode "version=3" \
+  --data-urlencode "method=login" \
+  --data-urlencode "account=cert-distributor" \
+  --data-urlencode "passwd=$DSM_PASSWORD" \
+  --data-urlencode "session=Certificate" \
+  --data-urlencode "format=sid" | jq -r .data.sid)
 curl -sk "https://$DSM_HOST:5001/webapi/entry.cgi?api=SYNO.Core.Certificate&method=list&version=1&_sid=$SID" | jq .
 ```
 
-Wenn das eine Zertifikatsliste zurückgibt, funktioniert der Zugang. Danach
-Passwort aus der Shell-History löschen (`history -d`) bzw. Terminal
-schließen.
+`read -rsp` fragt das Passwort maskiert ab, statt es als Klartext-Argument in
+die Shell-History zu schreiben. `$SID` und `$DSM_PASSWORD` bleiben nur in der
+aktuellen Shell-Sitzung; Terminal danach schließen, wenn fertig getestet.
+
+Wenn das eine Zertifikatsliste zurückgibt, funktioniert der Zugang. Kommt
+weiterhin `{"error":{"code":400},...}` zurück, obwohl Account und Passwort
+stimmen: Account-Gruppenmitgliedschaft (`administrators`) und die
+Login-Allowlist aus 2.3 gegenprüfen – nicht jede Fehlerursache hinter Code
+400 ist tatsächlich ein falsches Passwort.
 
 Sobald das automatisierte Ausrollen (Schritt 6) einmal erfolgreich lief und
 `as_default=true` gesetzt wurde: altes Let's-Encrypt-Zertifikat aus Schritt

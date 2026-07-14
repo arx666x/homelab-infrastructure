@@ -70,7 +70,19 @@ data:
 
     BASE="https://${DSM_HOST}:${DSM_PORT}/webapi"
 
-    SID="$(curl -sk "${BASE}/auth.cgi?api=SYNO.API.Auth&version=3&method=login&account=${DSM_USER}&passwd=${DSM_PASSWORD}&session=Certificate&format=sid" \
+    # -G/--data-urlencode statt Query-String-Interpolation: Sonderzeichen in
+    # Account/Passwort (%, &, +, #, Leerzeichen, ...) würden sonst die
+    # Query-String-Interpretation auf DSM-Seite kaputt machen und zu einem
+    # falschen "400 - No such account or incorrect password" führen, obwohl
+    # Account und Passwort eigentlich stimmen.
+    SID="$(curl -sk -G "${BASE}/auth.cgi" \
+      --data-urlencode "api=SYNO.API.Auth" \
+      --data-urlencode "version=3" \
+      --data-urlencode "method=login" \
+      --data-urlencode "account=${DSM_USER}" \
+      --data-urlencode "passwd=${DSM_PASSWORD}" \
+      --data-urlencode "session=Certificate" \
+      --data-urlencode "format=sid" \
       | jq -r '.data.sid // empty')"
 
     if [ -z "$SID" ]; then
