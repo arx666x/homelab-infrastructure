@@ -73,10 +73,17 @@ print(json.dumps({
 PY
 )"
 
-# midclt call certificate.create gibt die neue ID direkt als JSON-Skalar
-# zurück (z.B. "42"), nicht als {"id": ...} - live bestätigt am 2026-07-14.
-NEW_ID="$(midclt call certificate.create "$PAYLOAD" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin))')"
+# certificate.create ist ein Job: ohne -j liefert midclt sofort nur die
+# Job-Tracking-ID zurück (ein anderer ID-Raum als Zertifikats-IDs!), was
+# den nachfolgenden system.general.update mit "not a valid certificate"
+# scheitern lässt - live bestätigt am 2026-07-14 (zwei verwaiste, aber
+# valide Zertifikate mit falscher NEW_ID entstanden). -j lässt midclt auf
+# den Job warten und dessen tatsächliches Ergebnis liefern; das Ergebnis
+# robust gegen dict-mit-id ODER reinen Skalar parsen.
+NEW_ID="$(midclt call -j certificate.create "$PAYLOAD" \
+  | python3 -c 'import json,sys
+r = json.load(sys.stdin)
+print(r["id"] if isinstance(r, dict) else r)')"
 
 [ -n "$NEW_ID" ] && [ "$NEW_ID" != "None" ] \
   || { echo "[ERROR] certificate.create lieferte keine ID zurück." >&2; exit 1; }
