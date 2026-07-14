@@ -12,15 +12,18 @@
 # einspielen, alte Zertifikate aufräumen, und eine Kopie für den
 # Caddy-Reverse-Proxy (Navidrome/Airsonic) ablegen.
 #
-# ACHTUNG: CERT_DATASET unten ist ein Platzhalter (Pool-Name "tank") –
-# vor dem ersten Rollout an den tatsächlichen Pool-/Dataset-Namen anpassen.
-# Ebenso: TrueNAS-Feldnamen (ui_certificate) können sich zwischen Versionen
-# leicht unterscheiden – vor Produktivsetzung einmal manuell gegenprüfen:
+# TrueNAS-Feldnamen (ui_certificate) können sich zwischen Versionen leicht
+# unterscheiden – vor Produktivsetzung einmal manuell gegenprüfen:
 #   midclt call system.general.config | python3 -m json.tool
+#
+# Das Script selbst liegt NICHT unter /usr/local/bin - TrueNAS SCALEs
+# Basis-OS ist read-only (immutable), auch für root. Es muss auf einem
+# beschreibbaren Dataset liegen (bestätigt live am musicbox-Pool
+# "data-pool"), siehe Runbook Abschnitt 3.3.
 # =============================================================================
 set -euo pipefail
 
-CERT_DATASET="/mnt/tank/certs/reckeweg.io"
+CERT_DATASET="/mnt/data-pool/certs/reckeweg.io"
 REQUIRED_SAN="musicbox.reckeweg.io"
 
 WORK="$(mktemp -d)"
@@ -43,9 +46,13 @@ awk -v work="$WORK" '
 openssl x509 -in "$WORK/fullchain.pem" -noout -checkend 0 \
   || { echo "[ERROR] Zertifikat ist bereits abgelaufen, breche ab." >&2; exit 1; }
 
+# Deckt sowohl exakte SANs als auch ein passendes Wildcard-SAN ab
+# (unser Cluster-Zertifikat ist *.reckeweg.io, nicht musicbox.reckeweg.io
+# wörtlich - ein reiner Literal-Grep würde hier immer fehlschlagen).
+SAN_PARENT="${REQUIRED_SAN#*.}"
 openssl x509 -in "$WORK/fullchain.pem" -noout -text \
-  | grep -q "DNS:${REQUIRED_SAN}" \
-  || { echo "[ERROR] Zertifikat enthält ${REQUIRED_SAN} nicht als SAN, breche ab." >&2; exit 1; }
+  | grep -qE "DNS:(${REQUIRED_SAN}|\*\.${SAN_PARENT})" \
+  || { echo "[ERROR] Zertifikat enthält ${REQUIRED_SAN} nicht als SAN (auch nicht per Wildcard), breche ab." >&2; exit 1; }
 
 NAME="reckeweg-io-$(date +%Y%m%d%H%M%S)"
 
