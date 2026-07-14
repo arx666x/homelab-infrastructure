@@ -16,6 +16,17 @@ spec:
         releaseName: cert-manager
         values: |
           installCRDs: true
+          # DNS-01-Selfcheck direkt gegen öffentliche Resolver statt über die
+          # Cluster-Default-Route (CoreDNS -> Node-resolv.conf -> Pi-hole).
+          # Pi-hole cached sonst negative Antworten für frisch angelegte
+          # _acme-challenge-TXT-Records und blockiert die Propagation-Prüfung
+          # weit über die eigentliche SOA-Negative-TTL hinaus (beobachtet:
+          # >2h Stillstand bei einem Wildcard-Cert, obwohl der Record über
+          # öffentliche Resolver und die autoritativen Cloudflare-NS längst
+          # sichtbar war).
+          extraArgs:
+            - --dns01-recursive-nameservers=1.1.1.1:53,8.8.8.8:53
+            - --dns01-recursive-nameservers-only=true
     
     # ClusterIssuer Config aus Git
     - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
