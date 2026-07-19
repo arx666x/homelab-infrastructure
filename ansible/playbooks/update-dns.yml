@@ -1,5 +1,5 @@
 ---
-# dns-update.yml
+# update-dns.yml
 #
 # Rolling OS update for DNS nodes (dns01, later dns02).
 #
@@ -32,11 +32,11 @@
 #   8. VRRP-Status danach anzeigen
 #
 # Usage:
-#   ansible-playbook -i inventory/hosts.ini playbooks/dns-update.yml
-#   ansible-playbook -i inventory/hosts.ini playbooks/dns-update.yml --limit dns01
-#   ansible-playbook -i inventory/hosts.ini playbooks/dns-update.yml -e eeprom_update=true
-#   ansible-playbook -i inventory/hosts.ini playbooks/dns-update.yml -e force_reboot=true
-#   ansible-playbook -i inventory/hosts.ini playbooks/dns-update.yml -e confirm=true   # Pause ueberspringen
+#   ansible-playbook -i inventory/hosts.ini playbooks/update-dns.yml
+#   ansible-playbook -i inventory/hosts.ini playbooks/update-dns.yml --limit dns01
+#   ansible-playbook -i inventory/hosts.ini playbooks/update-dns.yml -e eeprom_update=true
+#   ansible-playbook -i inventory/hosts.ini playbooks/update-dns.yml -e force_reboot=true
+#   ansible-playbook -i inventory/hosts.ini playbooks/update-dns.yml -e confirm=true   # Pause ueberspringen
 
 - name: Rolling OS update fuer DNS-Nodes
   hosts: dns
@@ -197,7 +197,7 @@
       ansible.builtin.reboot:
         reboot_timeout: "{{ node_ready_timeout }}"
         post_reboot_delay: 10
-        msg: "Reboot durch Ansible dns-update.yml"
+        msg: "Reboot durch Ansible update-dns.yml"
       when: reboot_required.stat.exists or (force_reboot | bool)
 
     - name: "[ REBOOT ] Warten bis SSH wieder verfuegbar"
