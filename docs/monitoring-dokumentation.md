@@ -105,6 +105,102 @@ Alle Alerts → Telegram
 |-------|-----------|----------|-----------|
 | `K3sAgentDown` | kubelet nicht erreichbar | critical | 5m |
 
+### Update-Alerts
+
+| Alert | Bedingung | Severity | Wartezeit |
+|-------|-----------|----------|-----------|
+| `OSUpdatesPending` | `node_os_updates_pending > 0` | warning | 3d |
+| `OSRebootRequired` | `/var/run/reboot-required` vorhanden | warning | 1h |
+
+Gilt für k3s-Nodes UND die DNS-Nodes (dns01, später dns02) — siehe
+[OS-Update-Tracking](#os-update-tracking) unten.
+
+### DNS-Alerts
+
+| Alert | Bedingung | Severity | Wartezeit |
+|-------|-----------|----------|-----------|
+| `DnsNodeDown` | `up{job="dns-node-exporter"} == 0` | critical | 2m |
+| `KeepalivedExporterDown` | `up{job="dns-keepalived-exporter"} == 0` | warning | 5m |
+
+`DnsNodeDown` ist critical, weil dns01 aktuell der einzige DNS/Pi-hole-Node
+ist (dns02 noch nicht provisioniert) — kein Failover, ein Ausfall betrifft
+sofort das gesamte Netz. `KeepalivedExporterDown` sagt nur etwas über das
+Monitoring selbst aus, nicht über den VRRP-Status (siehe unten).
+
+---
+
+## OS-Update-Tracking
+
+`apt-daily.timer` / `apt-daily-upgrade.timer` sind clusterweit deaktiviert
+(siehe `update-pi-nodes.yml` / `update-master-nodes.yml`), damit Updates nur
+über die kontrollierten Update-Playbooks landen. Das heißt aber auch: ohne
+zusätzlichen Mechanismus aktualisiert sich der apt-Cache nie von selbst und
+niemand sieht, wie viele Updates anstehen.
+
+`ansible/playbooks/os-update-check.yml` schließt diese Lücke — ein
+systemd-Timer (alle 6h) auf jedem k3s- und DNS-Node:
+
+1. `apt-get update` (read-only, installiert nichts)
+2. zählt simulierte Upgrades (`apt-get -s upgrade | grep -c '^Inst '`)
+3. prüft `/var/run/reboot-required`
+4. schreibt beides als node-exporter-Textfile-Collector-Metriken
+   (`node_os_updates_pending`, `node_os_reboot_required`) nach
+   `/var/lib/node_exporter/textfile_collector/os_updates.prom`
+
+Der Textfile-Collector selbst wird über
+`prometheus-node-exporter.extraArgs` + `extraHostVolumeMounts` in
+`gitops/apps/monitoring.yaml` aktiviert (Standard-Chart hat ihn nicht an).
+
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/os-update-check.yml
+ansible-playbook -i inventory/hosts.ini playbooks/os-update-check.yml --tags remove
+```
+
+## DNS-Node-Monitoring (dns01, später dns02)
+
+dns01 (Debian 13/trixie, Raspberry Pi 5, aarch64) liegt außerhalb des
+k3s-Clusters — eigene `[dns]`-Inventory-Gruppe in `ansible/inventory/hosts.ini`.
+Damit greift weder das node-exporter-DaemonSet noch ein ServiceMonitor.
+`ansible/playbooks/dns-exporters.yml` installiert stattdessen zwei
+eigenständige systemd-Services:
+
+| Exporter | Port | Zweck |
+|----------|------|-------|
+| `node_exporter` | 9100 | OS/CPU/RAM/Disk + Textfile-Collector (Updates, s.o.) |
+| `keepalived_exporter` | 9165 | VRRP-Status (`keepalived_vrrp_state`, `keepalived_up`) |
+
+Beide werden in `gitops/apps/monitoring.yaml` unter
+`prometheus.prometheusSpec.additionalScrapeConfigs` als static targets
+gescraped (dns01 hat keine Kubernetes-Service-Discovery zur Verfügung).
+
+`keepalived_exporter` braucht Root-Rechte — er schickt `SIGDATA`/`SIGSTATS`
+an den keepalived-Prozess und liest die Dump-Dateien unter `/tmp/keepalived.data`
+bzw. `/tmp/keepalived.stats`. Kein spezielles Compile-Flag nötig (Debians
+keepalived-Paket unterstützt das Standardmäßig).
+
+**Bewusst noch kein Alert auf den VRRP-Zustand selbst** (`keepalived_vrrp_state`):
+mit nur einem DNS-Node ist "nicht MASTER" gleichbedeutend mit "kein DNS im
+ganzen Netz" — das deckt `DnsNodeDown` bereits ab. Ein sinnvoller
+Failover-Alert (z. B. "kein Node ist MASTER") ergibt erst Sinn, sobald dns02
+provisioniert ist.
+
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/dns-exporters.yml
+ansible-playbook -i inventory/hosts.ini playbooks/dns-exporters.yml --tags remove
+```
+
+### Offen: Pi-hole-Metriken
+
+Pi-hole v6.7 (FTL) hat **kein** eingebautes Prometheus-Endpoint, und der
+verbreitete `eko/pihole-exporter` zielt auf die alte v5-API
+(`/admin/api.php`) — die existiert auf dieser Instanz nicht mehr (`/api` ist
+jetzt der einzige Weg, Session-Auth via `POST /api/auth`). Geplanter Ansatz:
+ein kleines Script authentifiziert sich mit einem Pi-hole **Application
+Password** gegen `/api/auth`, liest `/api/stats/summary` +
+`/api/dns/blocking` und schreibt die Werte in denselben Textfile-Collector
+wie die Update-Metriken. Blockiert auf: Application Password muss einmalig
+über die Pi-hole-Weboberfläche (Settings → API) erzeugt werden.
+
 ---
 
 ## Secrets
