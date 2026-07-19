@@ -38,7 +38,7 @@ Caddy-Setup), plus die Rollout-Reihenfolge.
 | `pihole.toml` `[webserver.tls] validity = 0` gesetzt | **Du (dns01-Shell)** | ✅ erledigt, 2026-07-19 |
 | Manueller Testlauf via SSH (Dummy-Zertifikat) | Ich (Anleitung) + Du (Ausführung) | ✅ erledigt, 2026-07-19 |
 | `deploy-pihole.sh` in ConfigMap + CronJob eingebaut | Ich (Repo) | ✅ erledigt |
-| Erster automatisierter Import via CronJob (dns01) | – | offen (Voraussetzungen jetzt alle erfüllt) |
+| Erster automatisierter Import via CronJob (dns01) | Ich (Job-Test) | ✅ erledigt, 2026-07-19 |
 | `seal-all-secrets.sh` ausführen (DSM-Passwort eingeben) | **Du** | offen |
 | Manifeste + Sealed Secrets committen & pushen | **Du** (ich kann vorbereiten) | teilweise |
 
@@ -518,6 +518,26 @@ rm -f /tmp/certdeploy_key   # sofort danach wieder löschen
 Erwartete Ausgabe: `OK: Pi-hole TLS-Zertifikat aktualisiert.` – **live
 bestätigt am 2026-07-19**. `/etc/pihole/tls.pem` danach `pihole:pihole`,
 Mode `600`.
+
+### 8.6 Erster echter CronJob-Lauf
+
+**Live bestätigt am 2026-07-19** (`kubectl create job --from=cronjob/cert-distributor
+... -n cert-distribution`): alle drei Ziele in einem Lauf, DSM und TrueNAS
+übersprungen (Fingerprint stimmte bereits), Pi-hole erhielt zum ersten Mal
+automatisiert das echte cert-manager-Wildcard-Zertifikat:
+
+```
+== DSM (diskstation.reckeweg.io) ==
+  Fingerprint auf diskstation.reckeweg.io:5001 stimmt bereits überein, überspringe.
+== TrueNAS (musicbox.reckeweg.io) ==
+  Fingerprint auf musicbox.reckeweg.io:443 stimmt bereits überein, überspringe.
+== Pi-hole (dns01.reckeweg.io) ==
+OK: Pi-hole TLS-Zertifikat aktualisiert.
+  [OK] Zertifikat an Pi-hole übertragen (Remote-Script validiert und wendet an).
+```
+
+Damit ist Pi-hole/dns01 auf demselben Reifegrad wie musicbox/diskstation:
+vollautomatisiert, täglich um 03:20 Uhr, Fingerprint-gesteuert.
 
 ## Backlog
 
