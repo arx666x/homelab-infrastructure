@@ -1,0 +1,231 @@
+---
+# temp-watchdog.yml
+# Deploys a systemd-based CPU temperature watchdog to DNS nodes (Raspberry Pi 5).
+#
+# Periodically reads /sys/class/thermal/thermal_zone0/temp and logs a
+# WARNING/CRITICAL to journald on threshold crossing (edge-triggered, no spam
+# on every run while a level is sustained). Purely observational for now - no
+# auto-remediation. The Pi 5 already self-throttles in hardware around ~80C
+# and hard-shuts-down around ~85C; the thresholds here sit safely below that
+# so there's advance warning before it gets there.
+#
+# Superseded later by node_exporter + Prometheus/Alertmanager once that
+# integration exists (see Netzwerk_PiHole-HA.md, offene Punkte) - this is the
+# stopgap until then.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini playbooks/temp-watchdog.yml
+#   ansible-playbook -i inventory/hosts.ini playbooks/temp-watchdog.yml --tags remove
+
+- name: Deploy temperature watchdog to DNS nodes
+  hosts: dns
+  become: true
+  gather_facts: false
+
+  vars:
+    temp_warn_millideg: 70000    # 70C
+    temp_crit_millideg: 75000    # 75C
+    temp_check_interval_sec: 60
+    temp_script_path: /usr/local/bin/temp-watchdog.sh
+    temp_state_dir: /var/lib/temp-watchdog
+
+  tasks:
+
+    # -------------------------------------------------------------------------
+    # Persistent journal
+    # DNS nodes were installed manually (not via Ansible) and may not have
+    # this set yet - same fix as ssh-watchdog.yml.
+    # -------------------------------------------------------------------------
+
+    - name: Ensure /var/log/journal directory exists (activates persistent logging)
+      ansible.builtin.file:
+        path: /var/log/journal
+        state: directory
+        owner: root
+        group: systemd-journal
+        mode: "2755"
+      tags: [install, journal]
+      notify: Restart journald
+
+    - name: Ensure journald.conf.d directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags: [install, journal]
+
+    - name: Ensure journald Storage=persistent is configured
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/persistent.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Journal]
+          Storage=persistent
+      tags: [install, journal]
+      notify: Restart journald
+
+    # -------------------------------------------------------------------------
+    # Temperature Watchdog: Script + Service + Timer
+    # -------------------------------------------------------------------------
+
+    - name: Create watchdog state directory
+      ansible.builtin.file:
+        path: "{{ temp_state_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      tags: [install, watchdog]
+
+    - name: Deploy temperature watchdog script
+      ansible.builtin.copy:
+        dest: "{{ temp_script_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # temp-watchdog.sh
+          # Liest die SoC-Temperatur, loggt WARNING/CRITICAL bei Schwellenwert-Ueberschreitung.
+          # RPi5 Soft-Throttle liegt bei ca. 80C, Hard-Shutdown bei ca. 85C - Schwellen bewusst darunter.
+
+          WARN_TEMP={{ temp_warn_millideg }}
+          CRIT_TEMP={{ temp_crit_millideg }}
+          STATE_FILE={{ temp_state_dir }}/last_level
+          LOG_TAG="temp-watchdog"
+
+          TEMP_RAW=$(cat /sys/class/thermal/thermal_zone0/temp)
+          TEMP_C=$(( TEMP_RAW / 1000 ))
+
+          LAST_LEVEL="ok"
+          [[ -f "$STATE_FILE" ]] && LAST_LEVEL=$(cat "$STATE_FILE")
+
+          if [[ "$TEMP_RAW" -ge "$CRIT_TEMP" ]]; then
+            LEVEL="crit"
+          elif [[ "$TEMP_RAW" -ge "$WARN_TEMP" ]]; then
+            LEVEL="warn"
+          else
+            LEVEL="ok"
+          fi
+
+          # Nur bei Zustandswechsel loggen, nicht bei jedem Lauf - vermeidet Log-Spam
+          if [[ "$LEVEL" != "$LAST_LEVEL" ]]; then
+            case "$LEVEL" in
+              crit) logger -t "$LOG_TAG" "CRITICAL: CPU-Temperatur ${TEMP_C}C >= $(( CRIT_TEMP / 1000 ))C" ;;
+              warn) logger -t "$LOG_TAG" "WARNING: CPU-Temperatur ${TEMP_C}C >= $(( WARN_TEMP / 1000 ))C" ;;
+              ok)   logger -t "$LOG_TAG" "OK: CPU-Temperatur wieder bei ${TEMP_C}C (unter Warnschwelle)" ;;
+            esac
+            echo "$LEVEL" > "$STATE_FILE"
+          fi
+      tags: [install, watchdog]
+
+    - name: Deploy temp-watchdog systemd service unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/temp-watchdog.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Temperature Watchdog - single check run
+          After=multi-user.target
+
+          [Service]
+          Type=oneshot
+          ExecStart={{ temp_script_path }}
+          StandardOutput=journal
+          StandardError=journal
+      tags: [install, watchdog]
+      notify: Reload systemd
+
+    - name: Deploy temp-watchdog systemd timer unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/temp-watchdog.timer
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Temperature Watchdog Timer
+          Requires=temp-watchdog.service
+
+          [Timer]
+          OnBootSec=60
+          OnUnitActiveSec={{ temp_check_interval_sec }}s
+          AccuracySec=10
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+      tags: [install, watchdog]
+      notify: Reload systemd
+
+    - name: Force systemd reload before enabling timer
+      ansible.builtin.systemd:
+        daemon_reload: true
+      tags: [install, watchdog]
+
+    - name: Enable and start temp-watchdog timer
+      ansible.builtin.systemd:
+        name: temp-watchdog.timer
+        enabled: true
+        state: started
+      tags: [install, watchdog]
+
+    - name: Verify timer is active
+      ansible.builtin.command: systemctl status temp-watchdog.timer
+      register: timer_status
+      changed_when: false
+      tags: [install, watchdog]
+
+    - name: Show timer status
+      ansible.builtin.debug:
+        msg: "{{ timer_status.stdout_lines }}"
+      tags: [install, watchdog]
+
+    # -------------------------------------------------------------------------
+    # Remove (--tags remove)
+    # -------------------------------------------------------------------------
+
+    - name: Stop and disable temp-watchdog timer
+      ansible.builtin.systemd:
+        name: temp-watchdog.timer
+        enabled: false
+        state: stopped
+      ignore_errors: true
+      tags: [never, remove]
+
+    - name: Remove temp-watchdog files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/temp-watchdog.service
+        - /etc/systemd/system/temp-watchdog.timer
+        - "{{ temp_script_path }}"
+        - "{{ temp_state_dir }}"
+      tags: [never, remove]
+
+    - name: Reload systemd after removal
+      ansible.builtin.systemd:
+        daemon_reload: true
+      tags: [never, remove]
+
+  # ---------------------------------------------------------------------------
+  # Handlers
+  # ---------------------------------------------------------------------------
+
+  handlers:
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
