@@ -1,0 +1,69 @@
+---
+# fix-resolv-conf.yml
+# Updates /etc/resolv.conf on all k3s nodes to point at the new dns01 VIP
+# (192.168.11.56) instead of the retired Diskstation Pi-hole (192.168.11.55).
+#
+# Root cause (found 2026-07-19): /etc/resolv.conf on 8 of 9 nodes carries the
+# immutable attribute (chattr +i), set manually at some point in the past
+# (deliberately, to pin DNS independent of whatever DHCP hands out). That's
+# why neither a DHCP lease renewal, a NetworkManager connection/device
+# down-up cycle, nor a raw `dhclient` request could ever update it - every
+# write attempt silently failed or was rejected ("Operation not permitted").
+# The one exception (worker06) never had the attribute set and picked up the
+# new VIP automatically via ordinary DHCP renewal.
+#
+# This playbook keeps the original immutable-file design (rather than
+# switching to DHCP-managed DNS, which turned out to have its own staleness
+# behaviour on this NetworkManager version) - it just corrects the content
+# and re-locks it, uniformly across all 9 nodes including worker06.
+#
+# No interface/connection is touched - this is a pure file edit, so unlike
+# a DHCP renewal or NM reconnect it carries no link-flap risk. Safe to run
+# in parallel across the whole group.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini playbooks/fix-resolv-conf.yml
+
+- name: Fix /etc/resolv.conf on all k3s nodes to point at dns01 VIP
+  hosts: k3s_cluster
+  become: true
+  gather_facts: false
+
+  vars:
+    resolv_conf_content: |
+      search reckeweg.io
+      nameserver 192.168.11.56
+
+  tasks:
+    - name: Record current lsattr state (for the summary at the end)
+      ansible.builtin.command: lsattr /etc/resolv.conf
+      register: lsattr_before
+      changed_when: false
+
+    - name: Remove immutable attribute so the file can be rewritten
+      ansible.builtin.command: chattr -i /etc/resolv.conf
+      changed_when: true
+
+    - name: Write corrected /etc/resolv.conf
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: "{{ resolv_conf_content }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Re-apply immutable attribute (restores original protection intent)
+      ansible.builtin.command: chattr +i /etc/resolv.conf
+      changed_when: true
+
+    - name: Verify final state
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - cat /etc/resolv.conf
+        - lsattr /etc/resolv.conf
+      register: verify_result
+      changed_when: false
+
+    - name: Report result per host
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ verify_result.results[0].stdout_lines }} | {{ verify_result.results[1].stdout }}"
