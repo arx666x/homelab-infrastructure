@@ -1,8 +1,9 @@
-# Runbook: MyHomeIsMyCastle – Zertifikatsverteilung (musicbox + diskstation)
+# Runbook: MyHomeIsMyCastle – Zertifikatsverteilung (musicbox + diskstation + Pi-hole/dns01)
 
 **Ziel:** Das cluster-seitig bereits angelegte Wildcard-Zertifikat
-(`*.reckeweg.io`) automatisiert auf die Synology DiskStation und die
-TrueNAS-Box "musicbox" ausrollen. Voraussetzung/Hintergrund: siehe
+(`*.reckeweg.io`) automatisiert auf die Synology DiskStation, die
+TrueNAS-Box "musicbox" und Pi-hole (dns01, dediziertes Raspberry Pi 5)
+ausrollen. Voraussetzung/Hintergrund: siehe
 [myhomeismycastle-cert-distribution-konzept.md](myhomeismycastle-cert-distribution-konzept.md).
 
 Cluster-seitige Manifeste sind bereits im Repo unter
@@ -29,6 +30,15 @@ Caddy-Setup), plus die Rollout-Reihenfolge.
 | Remote-Wrapper-Script installieren (Web-Shell, nicht scp - siehe 3.3) | **Du** | ✅ erledigt |
 | Erster automatisierter Import via CronJob (musicbox, TrueNAS-UI-Cert) | Ich (Job-Test) | ✅ erledigt, 2026-07-14 |
 | Caddy Custom App für Navidrome/Airsonic anlegen | **Du (TrueNAS-Apps-UI)** | ✅ erledigt, 2026-07-14 |
+| Pi-hole Service-User `certdeploy` angelegt (SSH-Key, Passwort gesperrt) | **Du (dns01-Shell)** | ✅ erledigt, 2026-07-19 |
+| SSH-Public-Key (derselbe wie TrueNAS) mit `command=` in `authorized_keys` installiert | **Du (dns01-Shell)** | ✅ erledigt, 2026-07-19 |
+| Remote-Wrapper-Script `pihole-cert-deploy.sh` installiert | **Du (dns01-Shell)** | ✅ erledigt, 2026-07-19 |
+| sudoers-Regel (`NOPASSWD` für genau dieses Script) angelegt | **Du (dns01-Shell)** | ✅ erledigt, 2026-07-19 |
+| `pihole.toml` `[webserver]` Port konfiguriert | **Du (dns01-Shell)** | ✅ erledigt, 2026-07-19 |
+| `pihole.toml` `[webserver.tls] validity = 0` gesetzt | **Du (dns01-Shell)** | ✅ erledigt, 2026-07-19 |
+| Manueller Testlauf via SSH (Dummy-Zertifikat) | Ich (Anleitung) + Du (Ausführung) | ✅ erledigt, 2026-07-19 |
+| `deploy-pihole.sh` in ConfigMap + CronJob eingebaut | Ich (Repo) | ✅ erledigt |
+| Erster automatisierter Import via CronJob (dns01) | – | offen (Voraussetzungen jetzt alle erfüllt) |
 | `seal-all-secrets.sh` ausführen (DSM-Passwort eingeben) | **Du** | offen |
 | Manifeste + Sealed Secrets committen & pushen | **Du** (ich kann vorbereiten) | teilweise |
 
@@ -402,10 +412,120 @@ oder (bei zweitem Lauf) `Fingerprint ... stimmt bereits überein, überspringe.`
 | TrueNAS-Wrapper bricht mit "SAN nicht enthalten" ab | Wildcard-Cert enthält `musicbox.reckeweg.io` nicht (sollte durch `*.reckeweg.io` immer der Fall sein) | `openssl x509 -in tls.crt -noout -text \| grep DNS:` prüfen |
 | `ui_restart` killt die SSH-Session mitten im Script | Erwartetes Verhalten von TrueNAS | Kein Fehler – Script läuft danach zu Ende, da `\|\| true` |
 | Caddy liefert altes Zertifikat weiter aus | Datei-Polling-Intervall von Caddy noch nicht abgelaufen, oder Dataset-Pfad im Compose falsch gemountet | `docker exec` in den Caddy-Container, Dateidatum von `/certs/fullchain.pem` prüfen |
+| SSH zu dns01 schlägt fehl | `authorized_keys`-Zeile fehlerhaft, User existiert nicht, oder `-s /bin/bash` fehlt (eine `nologin`-Shell verweigert auch SSH-Forced-Commands komplett) | `ssh -v` gegen den Key testen, `getent passwd certdeploy` prüfen |
+| `pihole-cert-deploy.sh` bricht mit "SAN nicht enthalten" ab | Wildcard-Cert enthält `dns01.reckeweg.io` nicht (sollte durch `*.reckeweg.io` immer der Fall sein) | `openssl x509 -in tls.crt -noout -text \| grep DNS:` prüfen |
+| `sudo /usr/local/bin/pihole-cert-deploy.sh` verlangt ein Passwort statt durchzulaufen | sudoers-Regel fehlt/falsch geschrieben | `sudo -l -U certdeploy` prüfen, Datei mit `visudo -c -f /etc/sudoers.d/certdeploy` auf Syntax prüfen |
+| FTL liefert nach erfolgreichem Deploy trotzdem das alte/ein neues selbstsigniertes Zertifikat aus | `systemctl restart pihole-FTL` im Script schlug fehl, oder `[webserver.tls].validity` steht noch auf dem Default (47) und FTL hat beim nächsten Selfcheck ein eigenes generiert | `sudo journalctl -u pihole-FTL -n 50 --no-pager`, `sudo pihole-FTL --config webserver.tls.validity` (muss `0` sein) |
+
+## 8. Pi-hole (dns01.reckeweg.io)
+
+Pi-hole ist wie geplant von der DiskStation auf dedizierte Hardware
+umgezogen (Raspberry Pi 5, `dns01.reckeweg.io`, 192.168.11.57) und damit aus
+dem Backlog in den aktiven Scope gewandert. Anders als bei TrueNAS/DSM läuft
+hier ein gewöhnliches Debian-System mit vollem Shell-Zugriff – SSH mit
+command-restricted Key ist der naheliegende Weg, keine appliance-spezifische
+API nötig. Alle Schritte unten sind **live durchgeführt und bestätigt am
+2026-07-19**.
+
+### 8.1 Service-User anlegen
+
+```bash
+sudo useradd -m -s /bin/bash certdeploy
+sudo passwd -l certdeploy   # kein Passwort-Login, nur SSH-Key
+sudo mkdir -p /home/certdeploy/.ssh
+sudo chmod 700 /home/certdeploy/.ssh
+sudo chown -R certdeploy:certdeploy /home/certdeploy/.ssh
+```
+
+`-s /bin/bash` ist Pflicht, nicht `nologin`: SSHs `command=`-Forced-Command-
+Mechanismus führt den Befehl über die Login-Shell des Accounts aus – eine
+`nologin`-Shell verweigert das komplett, auch für eingeschränkte Kommandos.
+
+### 8.2 SSH-Key wiederverwenden
+
+Kein neuer Key nötig – derselbe `cert-distributor@cert-distribution.cluster`-
+Key wie bei musicbox (siehe 3.2) wird hier mit einem anderen `command=`
+eingetragen, in `/home/certdeploy/.ssh/authorized_keys`
+(Owner `certdeploy:certdeploy`, Mode `600`):
+
+```
+command="sudo /usr/local/bin/pihole-cert-deploy.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILC6wKE9R1Nlc0JE5xD7CzQYhecHe90mCtgoGfC7fEOd cert-distributor@cert-distribution.cluster
+```
+
+### 8.3 Remote-Wrapper-Script + sudoers
+
+FTL läuft als OS-User `pihole` (`uid=999(pihole) gid=1002(pihole)`),
+`/etc/pihole/` gehört `pihole:pihole` – `certdeploy` kann dort nicht direkt
+schreiben. Anders als bei TrueNAS (Gruppenmitgliedschaft für `midclt`) löst
+das hier eine eng gefasste `sudoers`-Regel, die ausschließlich das eine
+Wrapper-Script ohne Passwort erlaubt:
+
+```bash
+sudo tee /usr/local/bin/pihole-cert-deploy.sh > /dev/null << 'SCRIPT_EOF'
+# ... Inhalt von gitops/config/cert-distribution/remote-scripts/pihole-cert-deploy.sh ...
+SCRIPT_EOF
+sudo chown root:root /usr/local/bin/pihole-cert-deploy.sh
+sudo chmod 750 /usr/local/bin/pihole-cert-deploy.sh
+
+sudo visudo -f /etc/sudoers.d/certdeploy
+# Inhalt der Datei:
+#   certdeploy ALL=(root) NOPASSWD: /usr/local/bin/pihole-cert-deploy.sh
+```
+
+FTL erwartet (anders als TrueNAS/`midclt` mit getrennten cert/key-Feldern)
+eine **kombinierte** PEM-Datei mit Zertifikat UND Private Key in einer Datei
+– das Script splittet daher nichts, sondern validiert und schreibt den
+Stream unverändert weg.
+
+### 8.4 `pihole.toml` konfigurieren
+
+`sudo vi /etc/pihole/pihole.toml`, dann `sudo systemctl restart pihole-FTL`:
+
+- `[webserver]` → `port = "80o,443os,[::]:80o,[::]:443os"` – das `o` macht
+  jeden Port optional, falls einer mal nicht binden kann.
+- `[webserver.tls]` → `cert = "/etc/pihole/tls.pem"` (Default, passt so),
+  **und zusätzlich `validity = 0` setzen** – sonst versucht FTL alle 47 Tage,
+  das per cert-manager verteilte Zertifikat durch ein neues selbstsigniertes
+  zu überschreiben. Am einfachsten direkt per `pihole-FTL --config`
+  (kein manuelles Editieren von `pihole.toml` nötig):
+
+  ```bash
+  sudo pihole-FTL --config webserver.tls.validity 0
+  sudo systemctl restart pihole-FTL
+  ```
+
+  Live bestätigt am 2026-07-19: `sudo pihole-FTL --config
+  webserver.tls.validity` liefert `0`.
+
+### 8.5 Manueller Testlauf
+
+Von einer Maschine mit Zugriff auf das Cluster-Secret (Private Key existiert
+nach dem Sealing sonst nirgends mehr im Klartext):
+
+```bash
+kubectl get secret cert-distributor-ssh-key -n cert-distribution \
+  -o jsonpath='{.data.ssh-privatekey}' | base64 -d > /tmp/certdeploy_key
+chmod 600 /tmp/certdeploy_key
+
+openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/k.pem -out /tmp/c.pem \
+  -days 1 -subj "/CN=dns01.reckeweg.io" \
+  -addext "subjectAltName=DNS:dns01.reckeweg.io"
+cat /tmp/c.pem /tmp/k.pem | ssh -i /tmp/certdeploy_key certdeploy@dns01
+
+rm -f /tmp/certdeploy_key   # sofort danach wieder löschen
+```
+
+Erwartete Ausgabe: `OK: Pi-hole TLS-Zertifikat aktualisiert.` – **live
+bestätigt am 2026-07-19**. `/etc/pihole/tls.pem` danach `pihole:pihole`,
+Mode `600`.
 
 ## Backlog
 
-- Pi-hole-Verteilung, sobald die neuen Pi-hole-Geräte final stehen.
+- dns02 (redundanter Pi-hole-Secondary): DNS-Platzhaltereintrag
+  (`dns02.reckeweg.io`, 192.168.11.58) existiert bereits, die Hardware/der
+  Pi-hole-Betrieb noch nicht. Sobald aufgebaut: identische
+  certdeploy/sudoers/Wrapper-Script-Einrichtung wie dns01 (Abschnitt 8 oben),
+  plus Ergänzung von `deploy-pihole.sh` um ein zweites Ziel.
 - Alerting auf `certmanager_certificate_expiration_timestamp_seconds`.
 - Eigenes CronJob-Image statt `apk add` bei jedem Lauf.
 

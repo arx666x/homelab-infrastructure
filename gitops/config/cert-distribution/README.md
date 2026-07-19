@@ -12,10 +12,11 @@ an Geräte außerhalb des Clusters. Konzept und Schritt-für-Schritt-Anleitung:
 |---|---|
 | `certificate.yaml` | Wildcard-`Certificate` (RSA-2048, `letsencrypt-prod`) |
 | `rbac.yaml` | ServiceAccount + Role, nur Lesezugriff auf das eine Wildcard-Secret |
-| `scripts-configmap.yaml` | Deploy-Logik (`common.sh`, `deploy-dsm.sh`, `deploy-truenas.sh`) |
+| `scripts-configmap.yaml` | Deploy-Logik (`common.sh`, `deploy-dsm.sh`, `deploy-truenas.sh`, `deploy-pihole.sh`) |
 | `cronjob.yaml` | Täglicher CronJob, der die Deploy-Scripts ausführt |
 | `remote-scripts/truenas-cert-deploy.sh` | Läuft AUF der TrueNAS-Box, manuell installiert (siehe Runbook) |
-| `sealed-secret-ssh-key.yaml` | SealedSecret mit dem TrueNAS-SSH-Private-Key |
+| `remote-scripts/pihole-cert-deploy.sh` | Läuft AUF Pi-hole (dns01), manuell installiert (siehe Runbook Abschnitt 8) |
+| `sealed-secret-ssh-key.yaml` | SealedSecret mit dem SSH-Private-Key, gemeinsam genutzt von TrueNAS UND Pi-hole (unterschiedliches `command=` je Ziel) |
 | `sealed-secret-dsm-credentials.yaml` | **Existiert erst, nachdem der Nutzer `seal-all-secrets.sh` ausgeführt hat** – siehe Runbook |
 
 ## Secrets, die NICHT automatisch reproduzierbar sind
@@ -23,8 +24,8 @@ an Geräte außerhalb des Clusters. Konzept und Schritt-für-Schritt-Anleitung:
 - **`cert-distributor-ssh-key`**: Keypair wurde einmalig generiert und offline
   versiegelt. Rotation: Anleitung im Kommentarblock in
   `gitops/sealed-secrets/seal-all-secrets.sh` (Abschnitt "CERT-DISTRIBUTION").
-  Der Public Key muss nach jeder Rotation neu in `authorized_keys` auf der
-  TrueNAS-Box hinterlegt werden.
+  Der Public Key muss nach jeder Rotation neu in `authorized_keys` auf
+  **beiden** Boxen (musicbox UND dns01) hinterlegt werden.
 - **`cert-distributor-dsm-credentials`**: Muss der Nutzer selbst erzeugen
   (`seal-all-secrets.sh` fragt Username/Passwort interaktiv ab, Klartext
   verlässt nie die lokale Shell). Voraussetzung: DSM-Service-Account existiert

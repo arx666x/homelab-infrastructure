@@ -29,6 +29,7 @@ spec:
                   status=0
                   bash /scripts/deploy-dsm.sh || status=1
                   bash /scripts/deploy-truenas.sh || status=1
+                  bash /scripts/deploy-pihole.sh || status=1
 
                   exit "$status"
               volumeMounts:

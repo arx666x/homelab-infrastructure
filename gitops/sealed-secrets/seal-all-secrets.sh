@@ -241,17 +241,19 @@ else
     "dsm-user" "dsm-password"
 fi
 
-# Der SSH-Key für die TrueNAS-Anbindung wird NICHT hier abgefragt (kein
-# Passwort-Prompt sinnvoll für einen Private Key). Rotation manuell:
+# Der SSH-Key für die TrueNAS-/Pi-hole-Anbindung wird NICHT hier abgefragt
+# (kein Passwort-Prompt sinnvoll für einen Private Key). Derselbe Key wird
+# für BEIDE Ziele verwendet (musicbox + dns01), jeweils mit unterschiedlichem
+# command= in authorized_keys. Rotation manuell:
 #   ssh-keygen -t ed25519 -f /tmp/cert-distributor-key -N "" -C "cert-distributor@cert-distribution.cluster"
 #   kubectl create secret generic cert-distributor-ssh-key --namespace=cert-distribution \
 #     --type=kubernetes.io/ssh-auth --from-file=ssh-privatekey=/tmp/cert-distributor-key \
 #     --dry-run=client -o json \
 #     | kubeseal --cert "$CERT" --format yaml \
 #     > gitops/config/cert-distribution/sealed-secret-ssh-key.yaml
-#   # Public Key (/tmp/cert-distributor-key.pub) danach auf der TrueNAS-Box in
-#   # authorized_keys des Service-Users hinterlegen (siehe Runbook), Private
-#   # Key lokal löschen.
+#   # Public Key (/tmp/cert-distributor-key.pub) danach auf BEIDEN Boxen neu
+#   # in authorized_keys hinterlegen (siehe Runbook Abschnitt 3.2 + 8.2),
+#   # Private Key lokal löschen.
 
 # =============================================================================
 # Zusammenfassung

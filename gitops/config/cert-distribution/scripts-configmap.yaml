@@ -152,3 +152,36 @@ data:
             "${TRUENAS_SSH_USER}@${TRUENAS_HOST}"
 
     echo "  [OK] Zertifikat an TrueNAS übertragen (Remote-Script validiert und wendet an)."
+
+  deploy-pihole.sh: |
+    #!/usr/bin/env bash
+    # Zertifikat auf Pi-hole (dns01) ausrollen - per SSH mit demselben
+    # command-restricted Key wie TrueNAS (anderes command= in authorized_keys),
+    # an den fest installierten Remote-Wrapper pihole-cert-deploy.sh (schreibt
+    # /etc/pihole/tls.pem und startet pihole-FTL neu, siehe
+    # gitops/config/cert-distribution/remote-scripts/).
+    set -euo pipefail
+    source /scripts/common.sh
+
+    PIHOLE_HOST="${PIHOLE_HOST:-dns01.reckeweg.io}"
+    PIHOLE_SSH_USER="${PIHOLE_SSH_USER:-certdeploy}"
+    SSH_KEY="/secrets/ssh/ssh-privatekey"
+
+    echo "== Pi-hole (${PIHOLE_HOST}) =="
+
+    if ! needs_deploy "${PIHOLE_HOST}:443" "${PIHOLE_HOST}"; then
+      exit 0
+    fi
+
+    install -m 600 "$SSH_KEY" /tmp/cert-distribution/id_ed25519
+
+    # FTL will Cert+Key kombiniert in EINER PEM-Datei (anders als TrueNAS, wo
+    # midclt getrennte Felder erwartet) - Reihenfolge im Stream ist egal, das
+    # Remote-Script erkennt beide Blocktypen selbst.
+    cat "${CERT_DIR}/tls.crt" "${CERT_DIR}/tls.key" \
+      | ssh -i /tmp/cert-distribution/id_ed25519 \
+            -o StrictHostKeyChecking=accept-new \
+            -o BatchMode=yes \
+            "${PIHOLE_SSH_USER}@${PIHOLE_HOST}"
+
+    echo "  [OK] Zertifikat an Pi-hole übertragen (Remote-Script validiert und wendet an)."
