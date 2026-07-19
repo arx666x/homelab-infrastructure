@@ -367,6 +367,18 @@ spec:
                       summary: "keepalived_exporter auf {{ $labels.node }} nicht erreichbar"
                       description: "keepalived_exporter auf {{ $labels.node }} antwortet seit 5 Minuten nicht mehr. Sagt nichts ueber den VRRP-Status selbst aus, nur ueber das Monitoring dafuer."
 
+                  # pihole_blocking_enabled kommt vom textfile collector
+                  # (siehe ansible/playbooks/pihole-metrics.yml), nicht aus
+                  # dem dns-node-exporter Scrape-Target direkt.
+                  - alert: PiholeBlockingDisabled
+                    expr: pihole_blocking_enabled == 0
+                    for: 15m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Pi-hole Blocking auf {{ $labels.instance }} deaktiviert"
+                      description: "Pi-hole blockiert seit 15 Minuten keine Anfragen mehr - falls das nicht absichtlich (Troubleshooting) ist, wieder aktivieren."
+
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

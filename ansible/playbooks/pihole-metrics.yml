@@ -1,0 +1,252 @@
+---
+# pihole-metrics.yml
+# Deploys a systemd-timer-based Pi-hole metrics check to DNS nodes.
+#
+# Pi-hole v6 (FTL) has no built-in Prometheus endpoint, and the popular
+# eko/pihole-exporter targets the old v5 API (/admin/api.php), which no
+# longer exists on v6 (confirmed against dns01's FTL 6.7 - it now serves
+# /api with session-based auth only). So instead of a third-party exporter
+# of uncertain v6 compatibility, this deploys a small script that:
+#
+#   1. authenticates against POST /api/auth using a Pi-hole Application
+#      Password (generated once via the Pi-hole web UI, Settings -> API)
+#   2. reads /api/stats/summary + /api/dns/blocking with the resulting
+#      session ID
+#   3. writes the values as Prometheus textfile-collector metrics
+#
+# The Application Password itself is NOT managed by this playbook - it
+# must be placed manually (outside of Ansible/git) at:
+#
+#   /etc/pihole-exporter/app-password   (root:root, mode 0600)
+#
+# on each DNS node, e.g.:
+#   ssh achim.reckeweg@<dns-node>
+#   sudo install -d -m 0700 /etc/pihole-exporter
+#   sudo tee /etc/pihole-exporter/app-password >/dev/null <<< 'the-app-password'
+#   sudo chmod 600 /etc/pihole-exporter/app-password
+#
+# This playbook only ensures the directory exists with the right
+# permissions; it will tell you if the password file is still missing.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini playbooks/pihole-metrics.yml
+#   ansible-playbook -i inventory/hosts.ini playbooks/pihole-metrics.yml --tags remove
+
+- name: Deploy Pi-hole metrics check to DNS nodes
+  hosts: dns
+  become: true
+  gather_facts: false
+
+  vars:
+    pihole_check_interval: "2min"
+    pihole_check_script_path: /usr/local/bin/pihole-metrics-check.sh
+    pihole_app_password_dir: /etc/pihole-exporter
+    pihole_app_password_file: /etc/pihole-exporter/app-password
+    textfile_collector_dir: /var/lib/node_exporter/textfile_collector
+
+  tasks:
+
+    - name: Ensure textfile collector directory exists
+      ansible.builtin.file:
+        path: "{{ textfile_collector_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags: [install, pihole-metrics]
+
+    - name: Ensure app-password directory exists (root-only)
+      ansible.builtin.file:
+        path: "{{ pihole_app_password_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      tags: [install, pihole-metrics]
+
+    - name: Check whether the app-password file has been placed
+      ansible.builtin.stat:
+        path: "{{ pihole_app_password_file }}"
+      register: app_password_stat
+      tags: [install, pihole-metrics]
+
+    - name: Warn if app-password file is still missing
+      ansible.builtin.debug:
+        msg: >-
+          {{ pihole_app_password_file }} does not exist on {{ inventory_hostname }} yet.
+          The timer will be installed but every run will fail until you place the
+          Pi-hole Application Password there manually (see header of this playbook).
+      when: not app_password_stat.stat.exists
+      tags: [install, pihole-metrics]
+
+    - name: Deploy Pi-hole metrics check script
+      ansible.builtin.copy:
+        dest: "{{ pihole_check_script_path }}"
+        owner: root
+        group: root
+        mode: "0700"
+        content: |
+          #!/bin/bash
+          # pihole-metrics-check.sh
+          # Authenticates against Pi-hole v6's REST API with an Application
+          # Password and exposes key stats as textfile-collector metrics.
+
+          set -euo pipefail
+
+          PW_FILE="{{ pihole_app_password_file }}"
+          OUTDIR="{{ textfile_collector_dir }}"
+          OUTFILE="$OUTDIR/pihole.prom"
+          API="http://localhost/api"
+
+          if [[ ! -f "$PW_FILE" ]]; then
+            echo "app-password file missing: $PW_FILE" >&2
+            exit 1
+          fi
+
+          TMPFILE=$(mktemp "$OUTDIR/.pihole.XXXXXX")
+          trap 'rm -f "$TMPFILE"' EXIT
+
+          APP_PASSWORD=$(<"$PW_FILE")
+
+          AUTH_RESPONSE=$(curl -s -X POST "$API/auth" \
+            -H 'Content-Type: application/json' \
+            -d "{\"password\":\"${APP_PASSWORD}\"}")
+
+          SID=$(python3 -c '
+          import json, sys
+          d = json.loads(sys.argv[1])
+          print(d.get("session", {}).get("sid") or "")
+          ' "$AUTH_RESPONSE")
+
+          if [[ -z "$SID" ]]; then
+            echo "pihole auth failed: $AUTH_RESPONSE" >&2
+            exit 1
+          fi
+
+          SUMMARY=$(curl -s "$API/stats/summary" -H "sid: ${SID}")
+          BLOCKING=$(curl -s "$API/dns/blocking" -H "sid: ${SID}")
+
+          curl -s -X DELETE "$API/auth" -H "sid: ${SID}" >/dev/null || true
+
+          python3 -c '
+          import json, sys
+
+          summary = json.loads(sys.argv[1])
+          blocking = json.loads(sys.argv[2])
+
+          q = summary.get("queries", {})
+          c = summary.get("clients", {})
+          g = summary.get("gravity", {})
+          enabled = 1 if blocking.get("blocking") == "enabled" else 0
+
+          def m(name, help_text, value):
+              print(f"# HELP {name} {help_text}")
+              print(f"# TYPE {name} gauge")
+              print(f"{name} {value}")
+
+          m("pihole_dns_queries_total", "Total DNS queries today", q.get("total", 0))
+          m("pihole_dns_queries_blocked_total", "Blocked DNS queries today", q.get("blocked", 0))
+          m("pihole_dns_queries_blocked_percent", "Percent of DNS queries blocked today", q.get("percent_blocked", 0))
+          m("pihole_unique_domains", "Unique domains seen today", q.get("unique_domains", 0))
+          m("pihole_clients_active", "Active clients in the last 24h", c.get("active", 0))
+          m("pihole_clients_total", "Total clients known to FTL", c.get("total", 0))
+          m("pihole_gravity_domains", "Domains on the gravity (blocklist)", g.get("domains_being_blocked", 0))
+          m("pihole_blocking_enabled", "Whether Pi-hole blocking is enabled (1) or not (0)", enabled)
+          ' "$SUMMARY" "$BLOCKING" > "$TMPFILE"
+
+          chmod 644 "$TMPFILE"
+          mv "$TMPFILE" "$OUTFILE"
+      tags: [install, pihole-metrics]
+
+    - name: Deploy pihole-metrics-check systemd service unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/pihole-metrics-check.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Pi-hole metrics check - single run
+          After=pihole-FTL.service
+          Wants=pihole-FTL.service
+
+          [Service]
+          Type=oneshot
+          ExecStart={{ pihole_check_script_path }}
+          StandardOutput=journal
+          StandardError=journal
+      notify: Reload systemd
+      tags: [install, pihole-metrics]
+
+    - name: Deploy pihole-metrics-check systemd timer unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/pihole-metrics-check.timer
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Pi-hole metrics check timer
+          Requires=pihole-metrics-check.service
+
+          [Timer]
+          OnBootSec=2min
+          OnUnitActiveSec={{ pihole_check_interval }}
+          AccuracySec=30s
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+      notify: Reload systemd
+      tags: [install, pihole-metrics]
+
+    - name: Force systemd reload before enabling timer
+      ansible.builtin.systemd:
+        daemon_reload: true
+      tags: [install, pihole-metrics]
+
+    - name: Enable and start pihole-metrics-check timer
+      ansible.builtin.systemd:
+        name: pihole-metrics-check.timer
+        enabled: true
+        state: started
+      tags: [install, pihole-metrics]
+
+    - name: Run one check now (populate metrics immediately, if password is in place)
+      ansible.builtin.command: "{{ pihole_check_script_path }}"
+      changed_when: true
+      when: app_password_stat.stat.exists
+      tags: [install, pihole-metrics]
+
+    # -------------------------------------------------------------------------
+    # Remove (--tags remove)
+    # -------------------------------------------------------------------------
+
+    - name: Stop and disable pihole-metrics-check timer
+      ansible.builtin.systemd:
+        name: pihole-metrics-check.timer
+        enabled: false
+        state: stopped
+      ignore_errors: true
+      tags: [never, remove]
+
+    - name: Remove pihole-metrics-check files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/pihole-metrics-check.service
+        - /etc/systemd/system/pihole-metrics-check.timer
+        - "{{ pihole_check_script_path }}"
+        - "{{ textfile_collector_dir }}/pihole.prom"
+      tags: [never, remove]
+
+    - name: Reload systemd after removal
+      ansible.builtin.systemd:
+        daemon_reload: true
+      tags: [never, remove]
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
