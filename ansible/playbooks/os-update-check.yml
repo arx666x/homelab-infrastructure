@@ -1,0 +1,177 @@
+---
+# os-update-check.yml
+# Deploys a systemd-timer-based OS update check to all k3s nodes and DNS nodes.
+#
+# apt-daily.timer / apt-daily-upgrade.timer are disabled cluster-wide (see
+# update-pi-nodes.yml / update-master-nodes.yml) so updates only land through
+# the controlled update playbooks. That means nothing refreshes the apt cache
+# or reports how many packages are actually pending - this playbook closes
+# that gap:
+#
+#   - refreshes the apt cache (read-only, no packages are installed)
+#   - counts how many packages an `apt upgrade` would touch
+#   - checks /var/run/reboot-required
+#   - writes both as Prometheus textfile-collector metrics
+#
+# Metrics land in the same directory node_exporter already scrapes via
+# --collector.textfile.directory:
+#   - k3s nodes: mounted into the node-exporter DaemonSet via
+#     extraHostVolumeMounts (see gitops/apps/monitoring.yaml)
+#   - DNS nodes: the standalone node_exporter from dns-exporters.yml
+#
+# Alerting: see additionalPrometheusRulesMap "updates" group in
+# gitops/apps/monitoring.yaml (OSUpdatesPending, OSRebootRequired).
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini playbooks/os-update-check.yml
+#   ansible-playbook -i inventory/hosts.ini playbooks/os-update-check.yml --tags remove
+
+- name: Deploy OS update check to k3s + DNS nodes
+  hosts: k3s_cluster:dns
+  become: true
+  gather_facts: false
+
+  vars:
+    update_check_interval: "6h"
+    update_check_script_path: /usr/local/bin/os-update-check.sh
+    textfile_collector_dir: /var/lib/node_exporter/textfile_collector
+
+  tasks:
+
+    - name: Create textfile collector directory
+      ansible.builtin.file:
+        path: "{{ textfile_collector_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags: [install, update-check]
+
+    - name: Deploy OS update check script
+      ansible.builtin.copy:
+        dest: "{{ update_check_script_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # os-update-check.sh
+          # Refreshes the apt cache and exposes pending-update / reboot-required
+          # state as Prometheus textfile-collector metrics. Read-only - never
+          # installs or removes packages.
+
+          set -euo pipefail
+
+          OUTDIR="{{ textfile_collector_dir }}"
+          OUTFILE="$OUTDIR/os_updates.prom"
+          TMPFILE=$(mktemp "$OUTDIR/.os_updates.XXXXXX")
+
+          apt-get update -qq >/dev/null 2>&1 || true
+
+          PENDING=$(apt-get -s upgrade 2>/dev/null | grep -c '^Inst ' || true)
+
+          REBOOT_REQUIRED=0
+          [[ -f /var/run/reboot-required ]] && REBOOT_REQUIRED=1
+
+          {
+            echo "# HELP node_os_updates_pending Number of packages with a pending apt upgrade"
+            echo "# TYPE node_os_updates_pending gauge"
+            echo "node_os_updates_pending ${PENDING}"
+            echo "# HELP node_os_reboot_required Whether the node has a pending reboot (1) or not (0)"
+            echo "# TYPE node_os_reboot_required gauge"
+            echo "node_os_reboot_required ${REBOOT_REQUIRED}"
+          } > "$TMPFILE"
+
+          chmod 644 "$TMPFILE"
+          mv "$TMPFILE" "$OUTFILE"
+      tags: [install, update-check]
+
+    - name: Deploy os-update-check systemd service unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/os-update-check.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=OS update check - single run
+
+          [Service]
+          Type=oneshot
+          ExecStart={{ update_check_script_path }}
+          StandardOutput=journal
+          StandardError=journal
+      notify: Reload systemd
+      tags: [install, update-check]
+
+    - name: Deploy os-update-check systemd timer unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/os-update-check.timer
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=OS update check timer
+          Requires=os-update-check.service
+
+          [Timer]
+          OnBootSec=5min
+          OnUnitActiveSec={{ update_check_interval }}
+          AccuracySec=5min
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+      notify: Reload systemd
+      tags: [install, update-check]
+
+    - name: Force systemd reload before enabling timer
+      ansible.builtin.systemd:
+        daemon_reload: true
+      tags: [install, update-check]
+
+    - name: Enable and start os-update-check timer
+      ansible.builtin.systemd:
+        name: os-update-check.timer
+        enabled: true
+        state: started
+      tags: [install, update-check]
+
+    - name: Run one check now (populate metrics immediately)
+      ansible.builtin.command: "{{ update_check_script_path }}"
+      changed_when: true
+      tags: [install, update-check]
+
+    # -------------------------------------------------------------------------
+    # Remove (--tags remove)
+    # -------------------------------------------------------------------------
+
+    - name: Stop and disable os-update-check timer
+      ansible.builtin.systemd:
+        name: os-update-check.timer
+        enabled: false
+        state: stopped
+      ignore_errors: true
+      tags: [never, remove]
+
+    - name: Remove os-update-check files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/os-update-check.service
+        - /etc/systemd/system/os-update-check.timer
+        - "{{ update_check_script_path }}"
+        - "{{ textfile_collector_dir }}/os_updates.prom"
+      tags: [never, remove]
+
+    - name: Reload systemd after removal
+      ansible.builtin.systemd:
+        daemon_reload: true
+      tags: [never, remove]
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true

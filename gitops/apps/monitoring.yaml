@@ -27,6 +27,19 @@ spec:
             KubeControllerManagerDown: true
             KubeProxyDown: true
 
+        # node-exporter textfile collector: os-update-check.yml (Ansible) writes
+        # pending-update / reboot-required metrics into this hostPath on every
+        # k3s node; mount it read-only into the DaemonSet so node-exporter picks
+        # them up alongside the built-in collectors.
+        prometheus-node-exporter:
+          extraArgs:
+            - --collector.textfile.directory=/host/textfile_collector
+          extraHostVolumeMounts:
+            - name: textfile-collector
+              hostPath: /var/lib/node_exporter/textfile_collector
+              mountPath: /host/textfile_collector
+              readOnly: true
+
         prometheus:
           prometheusSpec:
             retention: 30d
@@ -37,7 +50,26 @@ spec:
                   resources:
                     requests:
                       storage: 50Gi
-          
+
+            # DNS nodes (dns01, later dns02) live outside the k3s cluster - own
+            # [dns] Ansible inventory group - so they never get scraped via the
+            # node-exporter DaemonSet or any ServiceMonitor. Scrape them as
+            # static targets instead. Exporters are deployed by
+            # ansible/playbooks/dns-exporters.yml.
+            additionalScrapeConfigs:
+              - job_name: dns-node-exporter
+                static_configs:
+                  - targets:
+                      - 192.168.11.57:9100   # dns01
+                    labels:
+                      node: dns01
+              - job_name: dns-keepalived-exporter
+                static_configs:
+                  - targets:
+                      - 192.168.11.57:9165   # dns01
+                    labels:
+                      node: dns01
+
           ingress:
             enabled: true
             ingressClassName: traefik
@@ -286,6 +318,54 @@ spec:
                     annotations:
                       summary: "k3s Agent auf {{ $labels.node }} nicht erreichbar"
                       description: "Der kubelet auf Node {{ $labels.node }} antwortet nicht mehr."
+
+              # node_os_updates_pending / node_os_reboot_required kommen vom
+              # textfile collector (siehe ansible/playbooks/os-update-check.yml).
+              # Gilt fuer k3s-Nodes UND die DNS-Nodes (dns01, spaeter dns02).
+              - name: updates
+                interval: 1h
+                rules:
+                  - alert: OSUpdatesPending
+                    expr: node_os_updates_pending > 0
+                    for: 3d
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Ausstehende Updates auf {{ $labels.instance }}"
+                      description: "{{ $labels.instance }} hat seit 3 Tagen {{ $value }} ausstehende Paket-Updates."
+
+                  - alert: OSRebootRequired
+                    expr: node_os_reboot_required == 1
+                    for: 1h
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Reboot erforderlich auf {{ $labels.instance }}"
+                      description: "{{ $labels.instance }} meldet seit 1 Stunde /var/run/reboot-required."
+
+              # DNS-Nodes (dns01, spaeter dns02) liegen ausserhalb des k3s-Clusters
+              # und werden ueber additionalScrapeConfigs als static targets erfasst
+              # (siehe prometheus.prometheusSpec.additionalScrapeConfigs oben).
+              - name: dns
+                interval: 1m
+                rules:
+                  - alert: DnsNodeDown
+                    expr: up{job="dns-node-exporter"} == 0
+                    for: 2m
+                    labels:
+                      severity: critical
+                    annotations:
+                      summary: "DNS-Node {{ $labels.node }} nicht erreichbar"
+                      description: "node_exporter auf {{ $labels.node }} antwortet seit 2 Minuten nicht mehr - Pi-hole/DNS fuer das gesamte Netz koennte betroffen sein."
+
+                  - alert: KeepalivedExporterDown
+                    expr: up{job="dns-keepalived-exporter"} == 0
+                    for: 5m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "keepalived_exporter auf {{ $labels.node }} nicht erreichbar"
+                      description: "keepalived_exporter auf {{ $labels.node }} antwortet seit 5 Minuten nicht mehr. Sagt nichts ueber den VRRP-Status selbst aus, nur ueber das Monitoring dafuer."
 
   destination:
     server: https://kubernetes.default.svc
