@@ -539,6 +539,11 @@ OK: Pi-hole TLS-Zertifikat aktualisiert.
 Damit ist Pi-hole/dns01 auf demselben Reifegrad wie musicbox/diskstation:
 vollautomatisiert, täglich um 03:20 Uhr, Fingerprint-gesteuert.
 
+**Browser-bestätigt am 2026-07-19:** Login am Pi-hole-Admin-UI
+(`https://dns01.reckeweg.io/admin/`) über HTTPS mit dem echten
+`reckeweg.io`-Zertifikat funktioniert – nicht nur `curl`/Cluster-interner
+Check, sondern der tatsächliche Endnutzer-Pfad.
+
 ## Backlog
 
 - dns02 (redundanter Pi-hole-Secondary): DNS-Platzhaltereintrag
