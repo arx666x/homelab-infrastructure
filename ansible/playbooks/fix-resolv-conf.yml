@@ -21,6 +21,27 @@
 # a DHCP renewal or NM reconnect it carries no link-flap risk. Safe to run
 # in parallel across the whole group.
 #
+# Update 2026-07-19: dropped "search reckeweg.io". Kubernetes merges a
+# node's own resolv.conf search domains into every pod's resolv.conf
+# (dnsPolicy: ClusterFirst), on top of the cluster ones. Combined with the
+# default ndots:5, any *.reckeweg.io lookup with fewer than 5 dots (e.g.
+# "git.reckeweg.io") got search-suffixed to "git.reckeweg.io.reckeweg.io"
+# BEFORE ever being tried as an absolute name - and that specific
+# double-suffixed form resolves on the public internet (reckeweg.io has a
+# wildcard-ish record pointing at a home-router DynDNS hostname), so the
+# resolver stopped there and never reached Pi-hole's correct internal
+# override. Confirmed via `getent hosts git.reckeweg.io` from inside
+# argocd-repo-server returning a public IPv6/DynDNS chain instead of the
+# gitea-ssh LoadBalancer IP - this is what caused ArgoCD Applications
+# sourced from git.reckeweg.io to sit in sync status "Unknown". Pods still
+# get their own cluster search domains from kubelet regardless (those
+# aren't sourced from this file), so nothing else here depends on it.
+#
+# NOTE: this only fixes resolv.conf on the NODE. Already-running pods keep
+# the resolv.conf they were created with - anything that does its own git/
+# DNS work against *.reckeweg.io (argocd-repo-server first and foremost)
+# needs a restart after this runs to pick up the corrected search list.
+#
 # Usage:
 #   ansible-playbook -i inventory/hosts.ini playbooks/fix-resolv-conf.yml
 
@@ -31,7 +52,6 @@
 
   vars:
     resolv_conf_content: |
-      search reckeweg.io
       nameserver 192.168.11.56
 
   tasks:
