@@ -1,0 +1,257 @@
+---
+# dns-update.yml
+#
+# Rolling OS update for DNS nodes (dns01, later dns02).
+#
+# Unlike k3s nodes, DNS nodes have no cluster-level HA to lean on - keepalived
+# fails the VIP (192.168.11.56) over between them, but with only dns01
+# provisioned today there is nobody to fail over TO. Rebooting the active
+# VRRP master right now means a full DNS outage for the whole network for
+# the duration of the reboot.
+#
+# This is written to be safe both for today (single node) and for the
+# eventual dns01+dns02 setup:
+#   - checks via keepalived_exporter's /metrics whether this node currently
+#     holds the VIP (is VRRP MASTER)
+#   - checks whether any OTHER [dns] inventory host has port 53 open
+#   - if this node is MASTER and no other resolver is reachable, pauses for
+#     manual confirmation before rebooting (skip with -e confirm=true)
+#   - only actually reboots if a reboot is required (kernel/firmware update),
+#     or if -e force_reboot=true is passed - no point causing an outage for
+#     nothing
+#
+# Ablauf pro Node:
+#   1. VRRP-/Failover-Status pruefen, ggf. Bestaetigung einholen
+#   2. apt-daily Timer stoppen (Lock-Konflikte vermeiden)
+#   3. apt update + full-upgrade + autoremove + autoclean
+#   4. EEPROM-Update (optional, Raspberry Pi 5)
+#   5. Reboot falls noetig (oder immer mit force_reboot=true)
+#   6. Warten bis SSH wieder da ist
+#   7. pihole-FTL, keepalived, node_exporter, keepalived_exporter,
+#      os-update-check.timer, pihole-metrics-check.timer wieder aktiv?
+#   8. VRRP-Status danach anzeigen
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini playbooks/dns-update.yml
+#   ansible-playbook -i inventory/hosts.ini playbooks/dns-update.yml --limit dns01
+#   ansible-playbook -i inventory/hosts.ini playbooks/dns-update.yml -e eeprom_update=true
+#   ansible-playbook -i inventory/hosts.ini playbooks/dns-update.yml -e force_reboot=true
+#   ansible-playbook -i inventory/hosts.ini playbooks/dns-update.yml -e confirm=true   # Pause ueberspringen
+
+- name: Rolling OS update fuer DNS-Nodes
+  hosts: dns
+  serial: 1                          # Immer nur einen DNS-Node gleichzeitig
+  max_fail_percentage: 0
+  gather_facts: true
+
+  vars:
+    eeprom_update: false             # EEPROM-Update: -e eeprom_update=true
+    force_reboot: false              # Immer rebooten, auch ohne reboot-required: -e force_reboot=true
+    confirm: false                   # Manuelle Bestaetigung ueberspringen: -e confirm=true
+    node_ready_timeout: 300          # Sekunden warten bis SSH wieder da ist
+    dns_services:
+      - pihole-FTL
+      - keepalived
+      - node_exporter
+      - keepalived_exporter
+
+  tasks:
+
+    # -------------------------------------------------------------------------
+    # PRE-CHECK
+    # -------------------------------------------------------------------------
+
+    - name: "[ PRE ] Kernel und OS anzeigen"
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ ansible_facts['kernel'] }} / {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+
+    - name: "[ PRE ] VRRP-Status dieses Node ermitteln (keepalived_exporter)"
+      ansible.builtin.command: curl -s http://localhost:9165/metrics
+      register: keepalived_metrics
+      changed_when: false
+      failed_when: false
+
+    - name: "[ PRE ] VRRP-Status auswerten"
+      ansible.builtin.set_fact:
+        # keepalived_vrrp_state: 2 = MASTER. Kein Wert/Fehler -> auf Nummer
+        # sicher gehen und wie MASTER behandeln (loest die Bestaetigung aus).
+        is_vrrp_master: >-
+          {{
+            keepalived_metrics.rc != 0 or
+            (keepalived_metrics.stdout
+              | regex_findall('keepalived_vrrp_state\{[^}]*\}\s+(\d+)')
+              | first | default('2')) == '2'
+          }}
+
+    - name: "[ PRE ] Andere DNS-Nodes auf Port 53 pruefen"
+      delegate_to: localhost
+      become: false
+      ansible.builtin.wait_for:
+        host: "{{ hostvars[item]['ansible_host'] }}"
+        port: 53
+        timeout: 3
+        state: started
+      register: other_dns_check
+      ignore_errors: true
+      loop: "{{ groups['dns'] | difference([inventory_hostname]) }}"
+      when: (groups['dns'] | difference([inventory_hostname]) | length) > 0
+
+    - name: "[ PRE ] Failover-Verfuegbarkeit festlegen"
+      ansible.builtin.set_fact:
+        other_dns_reachable: >-
+          {{
+            (other_dns_check.results | default([])
+              | selectattr('failed', 'equalto', false) | list | length) > 0
+          }}
+
+    - name: "[ PRE ] Bestaetigung einholen falls kein Failover verfuegbar"
+      ansible.builtin.pause:
+        prompt: |
+          ACHTUNG: {{ inventory_hostname }} ist aktuell VRRP-MASTER (haelt die VIP
+          192.168.11.56) und kein anderer DNS-Node ist erreichbar. Ein Reboot
+          bedeutet einen KOMPLETTEN DNS-AUSFALL fuer das gesamte Netzwerk bis
+          dieser Node wieder hochgefahren ist.
+          Enter druecken zum Fortfahren, Strg+C dann A zum Abbrechen.
+      when:
+        - is_vrrp_master | bool
+        - not other_dns_reachable
+        - not (confirm | bool)
+
+    # -------------------------------------------------------------------------
+    # APT UPDATE
+    # -------------------------------------------------------------------------
+
+    - name: "[ APT ] apt-daily Timer deaktivieren (falls noch aktiv)"
+      become: true
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop:
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      ignore_errors: true
+
+    - name: "[ APT ] apt update"
+      become: true
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 0
+
+    - name: "[ APT ] Pakete upgraden"
+      become: true
+      ansible.builtin.apt:
+        upgrade: full
+        autoremove: true
+        autoclean: true
+      register: apt_result
+
+    - name: "[ APT ] Installierte/aktualisierte Pakete anzeigen"
+      ansible.builtin.debug:
+        msg: "{{ apt_result.stdout_lines | select('match', '^(Inst|Remv)') | list }}"
+      when: apt_result.stdout_lines is defined
+
+    # -------------------------------------------------------------------------
+    # EEPROM UPDATE (optional, Raspberry Pi 5)
+    # -------------------------------------------------------------------------
+
+    - name: "[ EEPROM ] Verfuegbare Updates pruefen"
+      become: true
+      ansible.builtin.command: rpi-eeprom-update
+      register: eeprom_check
+      changed_when: false
+      failed_when: false
+      when: eeprom_update | bool
+
+    - name: "[ EEPROM ] Update-Status anzeigen"
+      ansible.builtin.debug:
+        msg: "{{ eeprom_check.stdout_lines }}"
+      when: eeprom_update | bool
+
+    - name: "[ EEPROM ] Update einspielen"
+      become: true
+      ansible.builtin.command: rpi-eeprom-update -a
+      register: eeprom_apply
+      when:
+        - eeprom_update | bool
+        - "'BOOTLOADER: up to date' not in eeprom_check.stdout"
+      changed_when: true
+
+    # -------------------------------------------------------------------------
+    # REBOOT
+    # -------------------------------------------------------------------------
+
+    - name: "[ REBOOT ] Pruefen ob Reboot erforderlich"
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: "[ REBOOT ] Reboot-Grund anzeigen"
+      ansible.builtin.debug:
+        msg: >
+          Reboot-Flag /var/run/reboot-required: {{ reboot_required.stat.exists }}
+          {% if force_reboot | bool %}(force_reboot=true - Reboot in jedem Fall){% endif %}
+
+    - name: "[ REBOOT ] Node neu starten"
+      become: true
+      ansible.builtin.reboot:
+        reboot_timeout: "{{ node_ready_timeout }}"
+        post_reboot_delay: 10
+        msg: "Reboot durch Ansible dns-update.yml"
+      when: reboot_required.stat.exists or (force_reboot | bool)
+
+    - name: "[ REBOOT ] Warten bis SSH wieder verfuegbar"
+      ansible.builtin.wait_for_connection:
+        delay: 10
+        timeout: "{{ node_ready_timeout }}"
+      when: reboot_required.stat.exists or (force_reboot | bool)
+
+    # -------------------------------------------------------------------------
+    # POST-REBOOT CHECK
+    # -------------------------------------------------------------------------
+
+    - name: "[ POST ] Neuen Kernel anzeigen"
+      ansible.builtin.command: uname -r
+      register: new_kernel
+      changed_when: false
+
+    - name: "[ POST ] Kernel nach Update"
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: Kernel jetzt {{ new_kernel.stdout }}"
+
+    - name: "[ POST ] Kern-Services sicherstellen"
+      become: true
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+      loop: "{{ dns_services }}"
+      register: service_check
+
+    - name: "[ POST ] Service-Status anzeigen"
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ item.status.ActiveState | default('unbekannt') }}"
+      loop: "{{ service_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "[ POST ] VRRP-Status nach Reboot ermitteln"
+      ansible.builtin.command: curl -s http://localhost:9165/metrics
+      register: keepalived_metrics_post
+      changed_when: false
+      failed_when: false
+
+    - name: "[ POST ] VRRP-Status anzeigen"
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: VRRP-State =
+          {{ keepalived_metrics_post.stdout
+             | regex_findall('keepalived_vrrp_state\{[^}]*\}\s+(\d+)')
+             | first | default('unbekannt') }}
+          (0=INIT, 1=BACKUP, 2=MASTER)
+
+    - name: "[ DONE ] Node abgeschlossen"
+      ansible.builtin.debug:
+        msg: >
+          ✓ {{ inventory_hostname }} erfolgreich aktualisiert.
+          Kernel: {{ new_kernel.stdout }}.
+          Rebootet: {{ reboot_required.stat.exists or (force_reboot | bool) }}.
