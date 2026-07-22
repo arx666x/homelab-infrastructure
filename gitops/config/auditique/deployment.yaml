@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: auditique-web
-          image: gitea.reckeweg.io/susann/redesign:v0.1.0
+          image: gitea.reckeweg.io/susann/redesign:v0.2.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
