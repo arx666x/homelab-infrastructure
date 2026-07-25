@@ -1,0 +1,162 @@
+# =============================================================================
+# Typesense für ChromeIQ - SERI Homelab
+# Such-/Facetten-Index, s. ChromeIQ-Konzeptdokument Abschnitt 3.2/4.2.
+# Erste Such-Engine in diesem Cluster - kein bestehendes Muster zum Anlehnen,
+# Layout folgt daher demselben Stil wie gitops/config/chromeiq/postgresql.yaml.
+# Image-Tag vor dem ersten echten Deploy gegen die aktuell verfuegbare
+# Typesense-Version pruefen (hier zum Planungszeitpunkt gewaehlt).
+# =============================================================================
+
+---
+# Secret wird extern angelegt via gitops/sealed-secrets/seal-all-secrets.sh
+# Referenz: chromeiq-typesense-secret
+#   Keys: api-key
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chromeiq-typesense-data
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: typesense
+    app.kubernetes.io/instance: chromeiq
+    app.kubernetes.io/component: search
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chromeiq-typesense
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: typesense
+    app.kubernetes.io/instance: chromeiq
+    app.kubernetes.io/component: search
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: typesense
+      app.kubernetes.io/instance: chromeiq
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: typesense
+        app.kubernetes.io/instance: chromeiq
+        app.kubernetes.io/component: search
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      containers:
+        - name: typesense
+          image: typesense/typesense:27.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--data-dir=/data"
+            - "--api-key=$(TYPESENSE_API_KEY)"
+            - "--enable-cors"
+          env:
+            - name: TYPESENSE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-typesense-secret
+                  key: api-key
+          ports:
+            - name: http
+              containerPort: 8108
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 500m
+            limits:
+              memory: 1Gi
+              cpu: "1"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: chromeiq-typesense-data
+
+---
+# ClusterIP Service - fuer den (spaeteren) Go-Backend-Zugriff in-cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: chromeiq-typesense
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: typesense
+    app.kubernetes.io/instance: chromeiq
+    app.kubernetes.io/component: search
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8108
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: typesense
+    app.kubernetes.io/instance: chromeiq
+
+---
+# LoadBalancer (MetalLB) - der ChromeIQ-Crawler laeuft auf der Musicbox,
+# ausserhalb des Clusters (s. postgresql.yaml fuer dieselbe Begruendung).
+apiVersion: v1
+kind: Service
+metadata:
+  name: chromeiq-typesense-lb
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: typesense
+    app.kubernetes.io/instance: chromeiq
+    app.kubernetes.io/component: search
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 8108
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: typesense
+    app.kubernetes.io/instance: chromeiq

@@ -256,6 +256,44 @@ fi
 #   # Private Key lokal löschen.
 
 # =============================================================================
+# 6. CHROMEIQ
+# =============================================================================
+echo ""
+echo "── ChromeIQ ───────────────────────────────────────────"
+
+if kubectl get secret chromeiq-postgresql-secret -n chromeiq &>/dev/null; then
+  seal_from_cluster "chromeiq-postgresql-secret" "chromeiq" \
+    "gitops/config/chromeiq/sealed-postgresql-secret.yaml"
+else
+  warn "chromeiq-postgresql-secret nicht im Cluster – interaktiv eingeben:"
+  seal_new "chromeiq-postgresql-secret" "chromeiq" \
+    "gitops/config/chromeiq/sealed-postgresql-secret.yaml" \
+    "password" "postgres-password"
+fi
+
+# Typesense-API-Key: kein Login-Passwort, das sich jemand merken muss - wird
+# wie TRAKKWS_JWT_SECRET/AUTHENTIK_SECRET_KEY im Schwesterrepo automatisch
+# generiert statt interaktiv abgefragt.
+if kubectl get secret chromeiq-typesense-secret -n chromeiq &>/dev/null; then
+  seal_from_cluster "chromeiq-typesense-secret" "chromeiq" \
+    "gitops/config/chromeiq/sealed-typesense-secret.yaml"
+else
+  info "chromeiq-typesense-secret nicht im Cluster – generiere neuen API-Key:"
+  TYPESENSE_API_KEY="$(openssl rand -hex 32)"
+  kubectl create secret generic "chromeiq-typesense-secret" \
+    --namespace="chromeiq" \
+    --from-literal="api-key=${TYPESENSE_API_KEY}" \
+    --dry-run=client -o json \
+    | kubeseal --cert "$CERT" --format yaml \
+    > "$REPO_ROOT/gitops/config/chromeiq/sealed-typesense-secret.yaml"
+  success "gitops/config/chromeiq/sealed-typesense-secret.yaml"
+fi
+
+# Reminder: sealed-*.yaml erst in gitops/config/chromeiq/kustomization.yaml
+# aufnehmen, nachdem sie hier echt generiert wurden (s. Kommentare in den
+# Platzhalter-Dateien) - sonst crashloopt Postgres/Typesense mangels Passwort.
+
+# =============================================================================
 # Zusammenfassung
 # =============================================================================
 echo ""
