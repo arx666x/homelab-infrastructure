@@ -1,0 +1,329 @@
+# =============================================================================
+# Deklarative Authentik-Konfiguration statt manueller UI-Klicks. Wird
+# automatisch beim Start von authentik-server/-worker aus /blueprints/custom
+# eingelesen (siehe deployment.yaml volumeMounts - Mount-Pfad ist bewusst
+# NICHT /blueprints selbst, siehe Kommentar dort).
+#
+# grant_types und property_mappings sind auf jedem Provider explizit
+# gesetzt: beide Felder defaulten in Authentik auf eine LEERE Liste, nicht
+# "alles erlaubt" (bestaetigt gegen authentik/providers/oauth2/models.py -
+# "grant_types = ArrayField(..., default=list)"). Ohne grant_types schlaegt
+# jeder Authorize-Request mit einem generischen invalid_request fehl, ohne
+# property_mappings jeder angeforderte Scope mit invalid_scope - beides ohne
+# hilfreiche Fehlermeldung, die auf die eigentliche Ursache hindeutet. Live
+# dokumentierte Falle aus seri-k8s/docs/services/authentik.md.
+#
+# client_secret wird bei jedem confidential Client explizit per !Env-Tag aus
+# einer Umgebungsvariable des authentik-server/-worker-Pods gelesen (befuellt
+# aus sealed-secret.yaml), NICHT von Authentik selbst zufaellig generiert.
+# Grund: der generierte Wert waere sonst nur in der Authentik-DB/-UI sichtbar
+# und muesste manuell in jedes App-Secret uebertragen werden - mit !Env ist
+# derselbe Wert deklarativ auf beiden Seiten (Authentik-Provider und
+# App-eigenes SealedSecret) identisch, ohne dass der Klartext jemals in
+# dieser ConfigMap landet (nur der Variablenname steht hier, nicht der Wert).
+#
+# Schema-Referenz: https://docs.goauthentik.io/customize/blueprints/
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-blueprints
+  namespace: authentik
+  labels:
+    app: authentik
+data:
+  # ---------------------------------------------------------------------
+  # ForwardAuth-Gate fuer Apps ohne eigenes OIDC (Longhorn, Prometheus,
+  # HomeAssistant). "Forward auth (domain level)": EIN ProxyProvider +
+  # EINE Application genuegen fuer beliebig viele Domains unter dem
+  # gemeinsamen Parent reckeweg.io - anders als "single application"-Modus
+  # muss NICHT pro Domain ein eigener Provider/Application angelegt werden.
+  # cookie_domain ist der Schluessel dafuer, dass ein Login auf
+  # sso.reckeweg.io automatisch fuer alle *.reckeweg.io-Subdomains gilt.
+  # ---------------------------------------------------------------------
+  forward-auth-gate.yaml: |
+    version: 1
+    metadata:
+      name: "Homelab Forward-Auth Gate"
+    entries:
+      - model: authentik_providers_proxy.proxyprovider
+        state: present
+        identifiers:
+          name: homelab-gate-provider
+        attrs:
+          name: homelab-gate-provider
+          mode: forward_domain
+          external_host: https://sso.reckeweg.io
+          cookie_domain: reckeweg.io
+          access_token_validity: hours=24
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: homelab-gate
+        attrs:
+          name: "Homelab Gate"
+          provider: !Find [authentik_providers_proxy.proxyprovider, [name, homelab-gate-provider]]
+
+      - model: authentik_outposts.outpost
+        state: present
+        identifiers:
+          name: "authentik Embedded Outpost"
+        attrs:
+          providers:
+            - !Find [authentik_providers_proxy.proxyprovider, [name, homelab-gate-provider]]
+
+  # ---------------------------------------------------------------------
+  # Grafana - natives OIDC (siehe gitops/apps/monitoring.yaml, auth.generic_oauth)
+  # ---------------------------------------------------------------------
+  grafana-oidc.yaml: |
+    version: 1
+    metadata:
+      name: "Grafana OIDC"
+    entries:
+      - model: authentik_providers_oauth2.oauth2provider
+        state: present
+        identifiers:
+          name: grafana-oidc-provider
+        attrs:
+          name: grafana-oidc-provider
+          client_type: confidential
+          client_id: grafana
+          client_secret: !Env [GRAFANA_OIDC_CLIENT_SECRET]
+          grant_types:
+            - authorization_code
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-openid"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-profile"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-email"]]
+          redirect_uris:
+            - matching_mode: strict
+              url: https://grafana.reckeweg.io/login/generic_oauth
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: grafana
+        attrs:
+          name: "Grafana"
+          provider: !Find [authentik_providers_oauth2.oauth2provider, [name, grafana-oidc-provider]]
+
+  # ---------------------------------------------------------------------
+  # Guacamole - natives OIDC (implicit-flow-only, siehe deren OpenID-
+  # Extension-Doku - kein client_secret wird Guacamole-seitig benutzt,
+  # obwohl Authentik intern trotzdem eins generiert/speichert). Gleiches
+  # Muster wie in seri-k8s live-verifiziert.
+  # ---------------------------------------------------------------------
+  guacamole-oidc.yaml: |
+    version: 1
+    metadata:
+      name: "Guacamole OIDC"
+    entries:
+      - model: authentik_providers_oauth2.oauth2provider
+        state: present
+        identifiers:
+          name: guacamole-oidc-provider
+        attrs:
+          name: guacamole-oidc-provider
+          client_type: confidential
+          client_id: guacamole
+          grant_types:
+            - implicit
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-openid"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-profile"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-email"]]
+          redirect_uris:
+            - matching_mode: strict
+              url: https://guacamole.reckeweg.io/guacamole/
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: guacamole
+        attrs:
+          name: "Guacamole"
+          provider: !Find [authentik_providers_oauth2.oauth2provider, [name, guacamole-oidc-provider]]
+
+  # ---------------------------------------------------------------------
+  # Diskstation/DSM - natives OIDC ueber DSMs "SSO Client"-Paket. Anders
+  # als urspruenglich recherchiert unterstuetzt DSM 7.1.1-42962 das schon
+  # (Domain/LDAP -> SSO-Client -> OpenID Connect SSO-Dienst) - live vom
+  # Nutzer bestaetigt per Screenshot, keine 7.2 noetig wie zuerst vermutet.
+  #
+  # redirect_uris ist laut offizieller Authentik-Integrationsanleitung
+  # (https://integrations.goauthentik.io/infrastructure/synology-dsm/)
+  # bewusst NUR der Origin OHNE Pfad - DSM matched den Redirect NUR gegen
+  # Host+HTTPS-Header, ein Pfad-Suffix wuerde den Abgleich brechen.
+  #
+  # sub_mode: user_email, weil DSMs eigenes "Benutzeranspruch"-Feld in der
+  # SSO-Client-UI auf "preferred_username" gesetzt wird (siehe Runbook) -
+  # das ist Gitea/Grafana/ArgoCD-inkonsistent, aber die von Synology selbst
+  # dokumentierte Kombination, nicht selbst erfunden.
+  #
+  # DSM ist NICHT GitOps-verwaltet (eigenstaendiges Geraet, Konfiguration
+  # nur ueber die DSM-Web-UI) - Application ID/Application Key muessen nach
+  # dem Rollout manuell aus diesem Blueprint bzw. dem generierten Secret in
+  # die DSM-SSO-Client-Maske uebertragen werden, siehe
+  # docs/diskstation-oidc-setup.md.
+  diskstation-oidc.yaml: |
+    version: 1
+    metadata:
+      name: "Diskstation DSM OIDC"
+    entries:
+      - model: authentik_providers_oauth2.oauth2provider
+        state: present
+        identifiers:
+          name: diskstation-oidc-provider
+        attrs:
+          name: diskstation-oidc-provider
+          client_type: confidential
+          client_id: diskstation
+          client_secret: !Env [DISKSTATION_OIDC_CLIENT_SECRET]
+          sub_mode: user_email
+          grant_types:
+            - authorization_code
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-openid"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-profile"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-email"]]
+          redirect_uris:
+            - matching_mode: strict
+              url: https://diskstation.reckeweg.io:5001
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: diskstation
+        attrs:
+          name: "Diskstation"
+          provider: !Find [authentik_providers_oauth2.oauth2provider, [name, diskstation-oidc-provider]]
+
+  # ---------------------------------------------------------------------
+  # Gitea - natives OIDC. Provider hier deklarativ angelegt, die
+  # Login-Source auf Gitea-Seite selbst NICHT (lebt in Giteas eigener DB,
+  # siehe gitops/config/gitea/oidc-setup-job.yaml).
+  # ---------------------------------------------------------------------
+  gitea-oidc.yaml: |
+    version: 1
+    metadata:
+      name: "Gitea OIDC"
+    entries:
+      - model: authentik_providers_oauth2.oauth2provider
+        state: present
+        identifiers:
+          name: gitea-oidc-provider
+        attrs:
+          name: gitea-oidc-provider
+          client_type: confidential
+          client_id: gitea
+          client_secret: !Env [GITEA_OIDC_CLIENT_SECRET]
+          grant_types:
+            - authorization_code
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-openid"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-profile"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-email"]]
+          redirect_uris:
+            - matching_mode: strict
+              url: https://gitea.reckeweg.io/user/oauth2/authentik/callback
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: gitea
+        attrs:
+          name: "Gitea"
+          provider: !Find [authentik_providers_oauth2.oauth2provider, [name, gitea-oidc-provider]]
+
+  # ---------------------------------------------------------------------
+  # ArgoCD - natives OIDC.
+  # ---------------------------------------------------------------------
+  argocd-oidc.yaml: |
+    version: 1
+    metadata:
+      name: "ArgoCD OIDC"
+    entries:
+      - model: authentik_providers_oauth2.oauth2provider
+        state: present
+        identifiers:
+          name: argocd-oidc-provider
+        attrs:
+          name: argocd-oidc-provider
+          client_type: confidential
+          client_id: argocd
+          client_secret: !Env [ARGOCD_OIDC_CLIENT_SECRET]
+          grant_types:
+            - authorization_code
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-openid"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-profile"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-email"]]
+          redirect_uris:
+            - matching_mode: strict
+              url: https://argocd.reckeweg.io/auth/callback
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: argocd
+        attrs:
+          name: "ArgoCD"
+          provider: !Find [authentik_providers_oauth2.oauth2provider, [name, argocd-oidc-provider]]
+
+  # ---------------------------------------------------------------------
+  # Headlamp - OIDC direkt gegen die Kubernetes-API (Phase 3). groups-Scope
+  # zusaetzlich zu profile/email, damit --oidc-groups-claim auf dem
+  # k3s-apiserver etwas zum Greifen hat.
+  # ---------------------------------------------------------------------
+  headlamp-oidc.yaml: |
+    version: 1
+    metadata:
+      name: "Headlamp OIDC"
+    entries:
+      - model: authentik_providers_oauth2.oauth2provider
+        state: present
+        identifiers:
+          name: headlamp-oidc-provider
+        attrs:
+          name: headlamp-oidc-provider
+          client_type: confidential
+          client_id: headlamp
+          client_secret: !Env [HEADLAMP_OIDC_CLIENT_SECRET]
+          grant_types:
+            - authorization_code
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-openid"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-profile"]]
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, "goauthentik.io/providers/oauth2/scope-email"]]
+          redirect_uris:
+            - matching_mode: strict
+              url: https://headlamp.reckeweg.io/oidc-callback
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: headlamp
+        attrs:
+          name: "Headlamp"
+          provider: !Find [authentik_providers_oauth2.oauth2provider, [name, headlamp-oidc-provider]]

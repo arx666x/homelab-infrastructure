@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authentik
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: authentik
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  sources:
+    - repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
+      targetRevision: HEAD
+      path: gitops/config/authentik
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: authentik
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 2m

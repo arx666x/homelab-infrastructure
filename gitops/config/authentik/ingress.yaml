@@ -1,0 +1,33 @@
+# =============================================================================
+# Authentik - Ingress
+# URL: https://sso.reckeweg.io
+# Manueller Schritt außerhalb von GitOps: Pi-hole Local-DNS-Eintrag
+# sso.reckeweg.io -> 192.168.20.100 ergaenzen (siehe docs/NETWORK-GUIDE.md).
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: authentik
+  namespace: authentik
+  labels:
+    app: authentik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - sso.reckeweg.io
+      secretName: authentik-tls
+  rules:
+    - host: sso.reckeweg.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: authentik-server
+                port:
+                  number: 9000

@@ -101,11 +101,26 @@ spec:
         - name: headlamp
           image: ghcr.io/headlamp-k8s/headlamp:v0.43.0
           args:
-            - "-in-cluster"
+            # -in-cluster entfernt: OIDC ersetzt den bisherigen statischen
+            # Jahres-Token vollstaendig als Login-Mechanismus (siehe
+            # docs/headlamp-oidc-setup.md - der k3s-apiserver braucht dafuer
+            # zusaetzlich --oidc-*-Flags auf allen drei Control-Plane-Nodes,
+            # das ist NICHT Teil dieser GitOps-Aenderung, siehe dortiges
+            # Dokument fuer den manuellen Schritt).
             - "-plugins-dir=/headlamp/plugins"
-            # Session-Cookie 1 Jahr gueltig statt Default 24h (passend zum
-            # 1-Jahres-Token aus headlamp-token.sh) - verfuegbar seit v0.41.0
+            - "-oidc-client-id=headlamp"
+            - "-oidc-idp-issuer-url=https://sso.reckeweg.io/application/o/headlamp/"
+            - "-oidc-scopes=openid,profile,email,groups"
+            # Session-Cookie 1 Jahr gueltig statt Default 24h - verfuegbar
+            # seit v0.41.0. Weiterhin sinnvoll auch mit OIDC (weniger
+            # Re-Logins), unabhaengig vom alten Jahres-Token.
             - "-session-ttl=31536000"
+          env:
+            - name: HEADLAMP_CONFIG_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: headlamp-oidc-secret
+                  key: client_secret
           ports:
             - containerPort: 4466
               name: http

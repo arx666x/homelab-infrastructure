@@ -102,17 +102,25 @@ spec:
                 secretKeyRef:
                   name: guacamole-db-secret
                   key: password
-
-            # ── OpenID Connect / Keycloak (Phase 2 – jetzt deaktiviert) ──────
-            # OPENID_ENABLED=false → lokales DB-Login (guacadmin) aktiv,
-            # OIDC-Plugin wird nicht geladen.
-            # Auf "true" setzen sobald Keycloak deployed und Client konfiguriert ist.
-            - name: OPENID_ENABLED
+            # Nicht jeder erfolgreiche Authentik-Login soll automatisch einen
+            # neuen Guacamole-Account anlegen - JDBC-User muessen weiterhin
+            # manuell existieren (Default des Images ist sonst "true").
+            - name: POSTGRESQL_AUTO_CREATE_ACCOUNTS
               value: "false"
+
+            # ── OpenID Connect / Authentik ────────────────────────────────
+            # OPENID_ENABLED=true → zusaetzlich zum lokalen DB-Login
+            # (guacadmin bleibt als Fallback aktiv) auch "Sign in with
+            # OpenID" auf der Login-Seite. extension-priority ist hier nicht
+            # nötig (kein guacamole.properties-File, stock Image via Env-Vars).
+            - name: OPENID_ENABLED
+              value: "true"
             - name: OPENID_USERNAME_CLAIM_TYPE
               value: "preferred_username"
             - name: OPENID_GROUPS_CLAIM_TYPE
               value: "groups"
+            - name: OPENID_SCOPE
+              value: "openid profile email"
             - name: OPENID_ISSUER
               valueFrom:
                 secretKeyRef:
@@ -125,6 +133,11 @@ spec:
                   name: guacamole-oidc-secret
                   key: authorization_endpoint
                   optional: true
+            # Wird SERVERSEITIG vom Guacamole-Pod abgerufen (in-cluster),
+            # anders als authorization_endpoint/redirect_uri, die
+            # browserseitig aufgerufen werden - deshalb hier bewusst die
+            # Service-DNS statt sso.reckeweg.io. Sonst UnresolvableKeyException
+            # (live dokumentierte Falle aus seri-k8s/docs/services/guacamole.md).
             - name: OPENID_JWKS_ENDPOINT
               valueFrom:
                 secretKeyRef:

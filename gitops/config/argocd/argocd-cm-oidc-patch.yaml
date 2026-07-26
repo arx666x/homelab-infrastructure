@@ -1,0 +1,37 @@
+# =============================================================================
+# ArgoCD - OIDC-Login gegen Authentik
+#
+# VORSICHT: argocd-cm existiert bereits (imperativ per install.yaml angelegt,
+# seitdem per kubectl patch um resource.customizations.* erweitert - siehe
+# scripts/install-argocd.sh / scripts/upgrade-argocd-hop.sh). Diese Datei
+# enthaelt bewusst NUR den neuen oidc.config-Key, nicht die komplette
+# ConfigMap - mit ServerSideApply=true (siehe gitops/apps/argocd-config.yaml)
+# merged ArgoCD nur die hier deklarierten Felder und laesst die bestehenden
+# resource.customizations.*-Keys unangetastet (bestaetigt per
+# `kubectl get cm argocd-cm -o jsonpath='{.metadata.managedFields}'` vor
+# dieser Aenderung: mehrere Field-Manager koexistieren bereits, das ist genau
+# das Modell, auf das sich SSA stuetzt). Nach dem ersten Sync GEGENPRUEFEN:
+#   kubectl get cm argocd-cm -n argocd -o yaml | grep resource.customizations
+# muss weiterhin alle bisherigen Eintraege zeigen.
+#
+# clientSecret referenziert gitops/config/argocd/sealed-oidc-secret.yaml -
+# ArgoCD liest per $<secretname>:<key>-Syntax jedes Secret mit dem Label
+# app.kubernetes.io/part-of=argocd ein (siehe dortiges Label).
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+data:
+  oidc.config: |
+    name: Authentik
+    issuer: https://sso.reckeweg.io/application/o/argocd/
+    clientID: argocd
+    clientSecret: $argocd-oidc-secret:client_secret
+    requestedScopes:
+      - openid
+      - profile
+      - email

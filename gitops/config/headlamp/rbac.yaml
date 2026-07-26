@@ -22,6 +22,12 @@ metadata:
   name: headlamp-cluster-admin
   labels:
     app.kubernetes.io/name: headlamp
+  annotations:
+    # Bewusst NICHT geloescht, obwohl Headlamp jetzt per OIDC statt per
+    # ServiceAccount-Token einloggt (siehe headlamp-oidc-user-admin unten) -
+    # der 1-Jahres-Token (headlamp-token.sh) bleibt als offline aufbewahrter
+    # Notfallzugang gueltig, siehe SSO-Rollout-Plan "Break-Glass".
+    note: "Offline break-glass access via long-lived ServiceAccount token, kept intentionally"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -30,3 +36,23 @@ subjects:
   - kind: ServiceAccount
     name: headlamp
     namespace: headlamp
+
+---
+# Normaler Login-Pfad ab jetzt: OIDC-Nutzer statt ServiceAccount-Token.
+# "oidc:" Prefix kommt vom --oidc-username-prefix=oidc: Flag auf dem
+# k3s-apiserver, siehe docs/headlamp-oidc-setup.md - der Claim-Wert davor
+# ist der "email"-Claim aus dem Authentik-Token.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-oidc-user-admin
+  labels:
+    app.kubernetes.io/name: headlamp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: User
+    name: "oidc:achim.reckeweg@gmail.com"
+    apiGroup: rbac.authorization.k8s.io

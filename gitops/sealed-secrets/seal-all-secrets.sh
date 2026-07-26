@@ -102,6 +102,38 @@ seal_new() {
   success "$outfile"
 }
 
+# Hilfsfunktion: Secret mit zufaellig generierten Werten erstellen und
+# versiegeln (kein Interactive-Prompt) - fuer Werte, die niemand sich merken
+# muss (Signing-Keys, OIDC-Client-Secrets, generierte DB-Passwoerter). Args:
+# key1 key2 ... (jeweils per openssl rand -hex 32 befuellt). Gibt die
+# generierten Werte auf stdout aus (key=value je Zeile), damit der Aufrufer
+# sie bei Bedarf an einer zweiten Stelle wiederverwenden kann (z.B. denselben
+# Client-Secret-Wert in einem !Env-referenzierten authentik-secret UND im
+# jeweiligen App-Secret).
+seal_generated() {
+  local name=$1
+  local namespace=$2
+  local outfile=$3
+  shift 3
+
+  local kubectl_args=()
+  for key in "$@"; do
+    local val
+    val=$(openssl rand -hex 32)
+    echo "${key}=${val}"
+    kubectl_args+=("--from-literal=${key}=${val}")
+  done
+
+  kubectl create secret generic "$name" \
+    --namespace="$namespace" \
+    "${kubectl_args[@]}" \
+    --dry-run=client -o json \
+    | kubeseal --cert "$CERT" --format yaml \
+    > "$REPO_ROOT/$outfile"
+
+  success "$outfile" >&2
+}
+
 # Cert prüfen
 [ -f "$CERT" ] || error "pub-cert.pem nicht gefunden unter $CERT"
 
@@ -110,6 +142,107 @@ echo "╔═══════════════════════�
 echo "║        Homelab Sealed Secrets – Vollständig          ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
+
+# =============================================================================
+# 0. AUTHENTIK (+ OIDC-Client-Secrets fuer Grafana/Gitea/ArgoCD/Headlamp)
+# =============================================================================
+echo "── Authentik ──────────────────────────────────────────"
+
+# Alle Werte werden generiert, nicht abgefragt - reine Zufallsstrings, die
+# niemand sich merken muss. Die vier OIDC-Client-Secrets muessen IDENTISCH
+# im jeweiligen App-Secret UND hier in authentik-secret landen, weil
+# gitops/config/authentik/blueprints-configmap.yaml sie per !Env aus den
+# Env-Vars des authentik-server/-worker-Pods liest (siehe Kommentar dort) -
+# deshalb hier in EINEM Block generiert statt ueber seal_generated() einzeln,
+# damit derselbe Wert zweimal verwendet werden kann.
+if kubectl get secret authentik-secret -n authentik &>/dev/null; then
+  warn "authentik-secret existiert bereits im Cluster - fuer eine Rotation"
+  warn "ALLER Werte (inkl. der vier OIDC-Client-Secrets unten) muesst ihr"
+  warn "dieses Secret UND die vier App-seitigen *-oidc-secret Secrets von"
+  warn "Hand loeschen und diesen Block erneut laufen lassen - sonst laufen"
+  warn "Authentik-Provider und App-Secret auseinander."
+  seal_from_cluster "authentik-secret" "authentik" \
+    "gitops/config/authentik/sealed-secret.yaml"
+else
+  info "Generiere Authentik-Secrets + OIDC-Client-Secrets..."
+  AUTHENTIK_SECRET_KEY=$(openssl rand -hex 32)
+  AUTHENTIK_DB_PASSWORD=$(openssl rand -base64 32)
+  AUTHENTIK_BOOTSTRAP_PASSWORD=$(openssl rand -base64 24)
+  AUTHENTIK_BOOTSTRAP_TOKEN=$(openssl rand -hex 32)
+  GRAFANA_OIDC_CLIENT_SECRET=$(openssl rand -hex 32)
+  GITEA_OIDC_CLIENT_SECRET=$(openssl rand -hex 32)
+  ARGOCD_OIDC_CLIENT_SECRET=$(openssl rand -hex 32)
+  HEADLAMP_OIDC_CLIENT_SECRET=$(openssl rand -hex 32)
+  DISKSTATION_OIDC_CLIENT_SECRET=$(openssl rand -hex 32)
+
+  kubectl create secret generic authentik-secret \
+    --namespace=authentik \
+    --from-literal="AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY}" \
+    --from-literal="AUTHENTIK_POSTGRESQL__PASSWORD=${AUTHENTIK_DB_PASSWORD}" \
+    --from-literal="AUTHENTIK_BOOTSTRAP_PASSWORD=${AUTHENTIK_BOOTSTRAP_PASSWORD}" \
+    --from-literal="AUTHENTIK_BOOTSTRAP_TOKEN=${AUTHENTIK_BOOTSTRAP_TOKEN}" \
+    --from-literal="GRAFANA_OIDC_CLIENT_SECRET=${GRAFANA_OIDC_CLIENT_SECRET}" \
+    --from-literal="GITEA_OIDC_CLIENT_SECRET=${GITEA_OIDC_CLIENT_SECRET}" \
+    --from-literal="ARGOCD_OIDC_CLIENT_SECRET=${ARGOCD_OIDC_CLIENT_SECRET}" \
+    --from-literal="HEADLAMP_OIDC_CLIENT_SECRET=${HEADLAMP_OIDC_CLIENT_SECRET}" \
+    --from-literal="DISKSTATION_OIDC_CLIENT_SECRET=${DISKSTATION_OIDC_CLIENT_SECRET}" \
+    --dry-run=client -o json \
+    | kubeseal --cert "$CERT" --format yaml \
+    > "$REPO_ROOT/gitops/config/authentik/sealed-secret.yaml"
+  success "gitops/config/authentik/sealed-secret.yaml"
+
+  warn "DISKSTATION_OIDC_CLIENT_SECRET wird NICHT gesealt (DSM ist nicht"
+  warn "GitOps-verwaltet) - manuell in die DSM SSO-Client-Maske"
+  warn "'Anwendungsschluessel' eintragen, siehe docs/diskstation-oidc-setup.md:"
+  warn "${DISKSTATION_OIDC_CLIENT_SECRET}"
+
+  warn "AUTHENTIK_POSTGRESQL__PASSWORD muss identisch in"
+  warn "gitops/config/authentik/postgres-setup.sql eingetragen und einmalig"
+  warn "gegen gitea-postgresql ausgefuehrt werden: ${AUTHENTIK_DB_PASSWORD}"
+
+  kubectl create secret generic grafana-oidc-secret --namespace=monitoring \
+    --from-literal="client_secret=${GRAFANA_OIDC_CLIENT_SECRET}" \
+    --dry-run=client -o json | kubeseal --cert "$CERT" --format yaml \
+    > "$REPO_ROOT/gitops/config/monitoring/sealed-grafana-oidc-secret.yaml"
+  success "gitops/config/monitoring/sealed-grafana-oidc-secret.yaml"
+
+  kubectl create secret generic gitea-oidc-secret --namespace=gitea \
+    --from-literal="client_secret=${GITEA_OIDC_CLIENT_SECRET}" \
+    --dry-run=client -o json | kubeseal --cert "$CERT" --format yaml \
+    > "$REPO_ROOT/gitops/config/gitea/sealed-oidc-secret.yaml"
+  success "gitops/config/gitea/sealed-oidc-secret.yaml"
+
+  # app.kubernetes.io/part-of: argocd Label ist Pflicht, sonst kann
+  # argocd-cm den Wert nicht per $argocd-oidc-secret:client_secret lesen.
+  kubectl create secret generic argocd-oidc-secret --namespace=argocd \
+    --from-literal="client_secret=${ARGOCD_OIDC_CLIENT_SECRET}" \
+    --dry-run=client -o json \
+    | kubectl label --local -f - app.kubernetes.io/part-of=argocd -o json \
+    | kubeseal --cert "$CERT" --format yaml \
+    > "$REPO_ROOT/gitops/config/argocd/sealed-oidc-secret.yaml"
+  success "gitops/config/argocd/sealed-oidc-secret.yaml"
+
+  kubectl create secret generic headlamp-oidc-secret --namespace=headlamp \
+    --from-literal="client_secret=${HEADLAMP_OIDC_CLIENT_SECRET}" \
+    --dry-run=client -o json | kubeseal --cert "$CERT" --format yaml \
+    > "$REPO_ROOT/gitops/config/headlamp/sealed-oidc-secret.yaml"
+  success "gitops/config/headlamp/sealed-oidc-secret.yaml"
+
+  unset AUTHENTIK_SECRET_KEY AUTHENTIK_DB_PASSWORD AUTHENTIK_BOOTSTRAP_PASSWORD \
+    AUTHENTIK_BOOTSTRAP_TOKEN GRAFANA_OIDC_CLIENT_SECRET GITEA_OIDC_CLIENT_SECRET \
+    ARGOCD_OIDC_CLIENT_SECRET HEADLAMP_OIDC_CLIENT_SECRET DISKSTATION_OIDC_CLIENT_SECRET
+fi
+
+if kubectl get secret guacamole-oidc-secret -n guacamole &>/dev/null; then
+  seal_from_cluster "guacamole-oidc-secret" "guacamole" \
+    "gitops/config/guacamole/sealed-oidc-secret.yaml"
+else
+  warn "guacamole-oidc-secret nicht im Cluster - Werte kommen NICHT aus"
+  warn "diesem Script (Guacamole braucht issuer/authorization_endpoint/"
+  warn "jwks_endpoint/client_id/redirect_uri, keine Zufallswerte) - siehe"
+  warn "Kommentar in gitops/config/authentik/blueprints-configmap.yaml"
+  warn "(guacamole-oidc.yaml) fuer die erwarteten URLs."
+fi
 
 # =============================================================================
 # 1. GITEA

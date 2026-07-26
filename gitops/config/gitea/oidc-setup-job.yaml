@@ -1,0 +1,92 @@
+# =============================================================================
+# Gitea - Authentik als OAuth2/OIDC-Login-Quelle registrieren
+#
+# Gitea speichert Login-Quellen in der DB (login_source-Tabelle), es gibt
+# dafuer KEINEN deklarativen Helm-Values-Key und KEINEN REST-API-Endpunkt -
+# nur `gitea admin auth add-oauth` (CLI) bzw. die Web-UI. Dieser Job baut
+# sich eine eigene minimale app.ini (nur [database]-Sektion, reicht der CLI
+# fuer den DB-Zugriff) in einem eigenen emptyDir, statt das echte
+# /data-Volume der laufenden Gitea-Deployment zu mounten - das ist eine
+# ReadWriteOnce-PVC (gitea-shared-storage) und wuerde von einem zweiten Pod
+# gar nicht gleichzeitig gemountet werden koennen.
+#
+# Idempotent: prueft per `gitea admin auth list`, ob eine Quelle namens
+# "authentik" schon existiert, bevor sie angelegt wird.
+#
+# WICHTIG: authentik-server muss VOR diesem Job laufen und der
+# Client-Secret-Wert muss mit dem passen, den authentik-server per !Env
+# GITEA_OIDC_CLIENT_SECRET fuer den gitea-oidc-provider im Blueprint
+# verwendet (siehe gitops/config/authentik/blueprints-configmap.yaml und
+# gitops/config/authentik/sealed-secret.yaml) - beide kommen aus derselben
+# generierten Zufallszeichenkette, siehe Runbook/Scratchpad-Notiz.
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitea-oidc-setup
+  namespace: gitea
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app: gitea-oidc-setup
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: oidc-setup
+          image: docker.gitea.com/gitea:1.26.1-rootless
+          env:
+            - name: DB_PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: gitea-postgresql-secret
+                  key: password
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: gitea-oidc-secret
+                  key: client_secret
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              mkdir -p /tmp/gitea-work/custom/conf /tmp/gitea-work/data /tmp/gitea-work/log
+              cat > /tmp/gitea-work/custom/conf/app.ini <<EOF
+              APP_DATA_PATH = /tmp/gitea-work/data
+              [database]
+              DB_TYPE  = postgres
+              HOST     = gitea-postgresql:5432
+              NAME     = gitea
+              USER     = gitea
+              PASSWD   = ${DB_PASSWD}
+              EOF
+
+              export GITEA_WORK_DIR=/tmp/gitea-work
+              export GITEA_CUSTOM=/tmp/gitea-work/custom
+
+              echo "==> Warte auf Postgres..."
+              until nc -z gitea-postgresql 5432 2>/dev/null; do
+                sleep 3
+              done
+
+              if gitea admin auth list | awk '{print $2}' | grep -qx "authentik"; then
+                echo "==> Login-Quelle 'authentik' existiert schon - nichts zu tun."
+              else
+                echo "==> Lege OAuth2-Login-Quelle 'authentik' an..."
+                gitea admin auth add-oauth \
+                  --name authentik \
+                  --provider openidConnect \
+                  --key gitea \
+                  --secret "${OIDC_CLIENT_SECRET}" \
+                  --auto-discover-url https://sso.reckeweg.io/application/o/gitea/.well-known/openid-configuration
+                echo "==> Login-Quelle 'authentik' angelegt."
+              fi
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"

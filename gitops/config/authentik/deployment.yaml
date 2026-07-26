@@ -1,0 +1,234 @@
+---
+# authentik-server: HTTP-API + Web-UI + eingebetteter Outpost (Auth-Check-
+# Endpunkt für Traefiks ForwardAuth-Middleware, siehe middleware.yaml).
+# Portiert aus seri-k8s/base/platform/authentik/deployment.yaml (dort seit
+# 2026-07-15 live-verifiziert vor Colima), angepasst auf eigenen Namespace
+# und amd64-nodeAffinity analog zu gitea-postgresql.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-server
+  namespace: authentik
+  labels:
+    app: authentik-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik-server
+  template:
+    metadata:
+      labels:
+        app: authentik-server
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      # Wartet, bis die authentik-DB + der authentik-User existieren (siehe
+      # postgres-setup.sql, einmalig manuell ausgeführt) - ein reiner
+      # TCP-Check würde nur Postgres selbst prüfen, nicht ob der User/die DB
+      # schon angelegt wurden.
+      initContainers:
+        - name: wait-for-authentik-db
+          image: postgres:16-alpine
+          env:
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: authentik-config
+                  key: AUTHENTIK_POSTGRESQL__HOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: authentik-config
+                  key: AUTHENTIK_POSTGRESQL__PORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: authentik-config
+                  key: AUTHENTIK_POSTGRESQL__NAME
+            - name: PGUSER
+              valueFrom:
+                configMapKeyRef:
+                  name: authentik-config
+                  key: AUTHENTIK_POSTGRESQL__USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secret
+                  key: AUTHENTIK_POSTGRESQL__PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              until psql -tAc "SELECT 1" >/dev/null 2>&1; do
+                echo "Warte auf authentik-DB/-User (postgres-setup.sql ausgeführt?)..."
+                sleep 3
+              done
+              echo "authentik-DB ist bereit."
+      containers:
+        - name: authentik-server
+          image: ghcr.io/goauthentik/server:2026.5.4
+          args: ["server"]
+          envFrom:
+            - configMapRef:
+                name: authentik-config
+            - secretRef:
+                name: authentik-secret
+          ports:
+            - containerPort: 9000
+              name: http
+          volumeMounts:
+            # Mount zwingend unter /blueprints/custom, NIEMALS direkt unter
+            # /blueprints - ein Mount des gesamten Verzeichnisses dort würde
+            # die eingebauten system/default/example-Blueprints des Images
+            # verdecken und den internen gunicorn-Worker in eine Crash-Loop
+            # schicken (BlueprintRetrievalFailed: No such file or directory:
+            # '/blueprints/system/bootstrap.yaml') - live dokumentierte Falle
+            # aus seri-k8s, dort bricht das dann den Router-Proxy für JEDEN
+            # Dienst hinter dem Gate, nicht nur den neuen Provider.
+            - name: blueprints
+              mountPath: /blueprints/custom
+              readOnly: true
+            - name: dshm
+              mountPath: /dev/shm
+          startupProbe:
+            httpGet:
+              path: /-/health/ready/
+              port: 9000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /-/health/live/
+              port: 9000
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /-/health/ready/
+              port: 9000
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "384Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+      volumes:
+        - name: blueprints
+          configMap:
+            name: authentik-blueprints
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+---
+# authentik-worker: Background-Tasks (Blueprint-Anwendung, Token-Cleanup...).
+# Seit authentik 2025.10 läuft alles (Caching, Tasks, Outpost-Websockets)
+# über Postgres - kein Redis mehr nötig.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-worker
+  namespace: authentik
+  labels:
+    app: authentik-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik-worker
+  template:
+    metadata:
+      labels:
+        app: authentik-worker
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+      initContainers:
+        - name: wait-for-authentik-db
+          image: postgres:16-alpine
+          env:
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: authentik-config
+                  key: AUTHENTIK_POSTGRESQL__HOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: authentik-config
+                  key: AUTHENTIK_POSTGRESQL__PORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: authentik-config
+                  key: AUTHENTIK_POSTGRESQL__NAME
+            - name: PGUSER
+              valueFrom:
+                configMapKeyRef:
+                  name: authentik-config
+                  key: AUTHENTIK_POSTGRESQL__USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secret
+                  key: AUTHENTIK_POSTGRESQL__PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              until psql -tAc "SELECT 1" >/dev/null 2>&1; do
+                echo "Warte auf authentik-DB/-User (postgres-setup.sql ausgeführt?)..."
+                sleep 3
+              done
+              echo "authentik-DB ist bereit."
+      containers:
+        - name: authentik-worker
+          image: ghcr.io/goauthentik/server:2026.5.4
+          args: ["worker"]
+          envFrom:
+            - configMapRef:
+                name: authentik-config
+            - secretRef:
+                name: authentik-secret
+          volumeMounts:
+            - name: blueprints
+              mountPath: /blueprints/custom
+              readOnly: true
+            - name: dshm
+              mountPath: /dev/shm
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: blueprints
+          configMap:
+            name: authentik-blueprints
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi

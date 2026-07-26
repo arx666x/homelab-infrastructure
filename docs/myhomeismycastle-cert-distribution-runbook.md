@@ -318,6 +318,48 @@ falschen "Seite" landet, zuerst die `Location`-Header auf fehlenden Port
 prüfen (`curl -vk ... | grep -i location`), bevor man DNS/Zertifikat
 verdächtigt.
 
+### Authentik-SSO vor Navidrome (manueller Schritt, nicht Teil von GitOps)
+
+Navidrome bekommt ein Authentik-ForwardAuth-Gate analog zu Longhorn/
+Prometheus im Cluster (siehe `gitops/config/authentik/`) - reines
+Netzwerk-Gate, Navidromes eigenes Login bleibt bestehen (kein
+Header-Passthrough). Läuft NICHT über GitOps, weil musicbox/Caddy außerhalb
+des Clusters steht - Claude hat auf diese Box keinen SSH-Zugriff (nur der
+command-restricted `cert-distributor`-Key existiert, siehe oben), das Sealen
+muss manuell erfolgen. Airsonic bewusst NICHT mit ergänzt (nicht angefragt).
+
+Caddyfile um einen `forward_auth`-Block ergänzen (Caddys Pendant zu Traefiks
+ForwardAuth-Middleware, ruft denselben Authentik-Outpost auf):
+
+```
+navidrome.reckeweg.io:8443 {
+  tls /certs/fullchain.pem /certs/privkey.pem
+
+  forward_auth https://sso.reckeweg.io {
+    uri /outpost.goauthentik.io/auth/caddy
+    copy_headers X-Authentik-Username X-Authentik-Groups X-Authentik-Email
+  }
+
+  reverse_proxy 192.168.11.53:7070
+}
+```
+
+`/outpost.goauthentik.io/auth/caddy` ist Authentiks dedizierter Endpunkt für
+Caddys `forward_auth`-Direktive (Pendant zu `/auth/traefik` fürs
+Traefik-Middleware-Äquivalent im Cluster) - liefert bei erfolgreichem Login
+die `X-Authentik-*`-Header zurück, die `copy_headers` an Navidrome
+durchreicht (aktuell ungenutzt, da Navidrome kein Header-basiertes
+Auto-Login bekommt - für später vorbereitet). Cookie-Domain `reckeweg.io`
+(siehe `authentik-blueprints`-ConfigMap, ProxyProvider `cookie_domain`) gilt
+portunabhängig, ein zuvor auf `sso.reckeweg.io` gesetzter Session-Cookie
+wird also automatisch bei jedem Request an `navidrome.reckeweg.io:8443`
+mitgeschickt.
+
+Nach der Änderung: Caddy-Container neu starten (`docker compose restart
+caddy` im Compose-Verzeichnis), dann Test wie in der Verification-Sektion
+des SSO-Rollout-Plans beschrieben (unangemeldet aufrufen → Redirect zu
+Authentik-Login → zurück zu Navidromes eigenem Login).
+
 Compose-Definition für die Custom App:
 
 ```yaml

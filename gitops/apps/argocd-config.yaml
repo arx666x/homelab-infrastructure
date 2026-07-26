@@ -21,6 +21,10 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=false
+      # Noetig fuer argocd-cm-oidc-patch.yaml: nur die dort deklarierten
+      # Felder werden gemerged, bestehende Keys (u.a. resource.customizations.*,
+      # per kubectl patch angelegt) bleiben unangetastet. Siehe Kommentar dort.
+      - ServerSideApply=true
     retry:
       limit: 5
       backoff:

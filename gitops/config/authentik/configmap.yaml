@@ -1,0 +1,20 @@
+# =============================================================================
+# Authentik - Nicht-geheime Konfiguration
+# Secrets (DB-Passwort, Signing-Key, Bootstrap-Passwort/Token) liegen separat
+# in sealed-secret.yaml, siehe dortigen Kommentarblock für die Struktur.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-config
+  namespace: authentik
+  labels:
+    app: authentik
+data:
+  AUTHENTIK_POSTGRESQL__HOST: "gitea-postgresql.gitea.svc.cluster.local"
+  AUTHENTIK_POSTGRESQL__PORT: "5432"
+  AUTHENTIK_POSTGRESQL__NAME: "authentik"
+  AUTHENTIK_POSTGRESQL__USER: "authentik"
+  AUTHENTIK_BOOTSTRAP_EMAIL: "akadmin@reckeweg.io"
+  # Kein SMTP-Relay konfiguriert - deaktiviert, um Startup-Warnungen zu vermeiden
+  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"

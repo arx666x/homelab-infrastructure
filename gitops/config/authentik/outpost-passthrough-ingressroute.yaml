@@ -1,0 +1,46 @@
+# =============================================================================
+# Authentik Outpost-Passthrough - noetig fuer "Forward auth (domain level)"
+#
+# Ergaenzung zu middleware.yaml: der eigentliche Login-Redirect-Roundtrip
+# braucht auf JEDER gegateten App-Domain einen ungegateten Pfad
+# /outpost.goauthentik.io/, der direkt zum Authentik-Outpost geht (NICHT
+# zur App selbst, und OHNE die ForwardAuth-Middleware - sonst Redirect-Loop).
+# Quelle: offizielle Authentik-Doku zu "Forward auth (domain level)".
+#
+# Liegt bewusst hier im authentik-Namespace statt in jedem App-Namespace -
+# referenziert den lokalen authentik-server Service direkt, kein
+# Cross-Namespace-Service-Alias noetig. TLS-Zertifikate der jeweiligen
+# Domain (longhorn-tls, kube-prometheus-stack-*, homeassistant-tls) sind
+# durch die App-eigenen Ingress-Ressourcen bereits im globalen
+# Traefik-SNI-Store registriert - hier nicht nochmal noetig.
+#
+# Bei einer neuen gegateten Domain: hier einen weiteren routes-Eintrag
+# ergaenzen UND die Middleware in der App-eigenen Ingress-Annotation setzen.
+# =============================================================================
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: authentik-outpost-passthrough
+  namespace: authentik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`longhorn.reckeweg.io`) && PathPrefix(`/outpost.goauthentik.io/`)
+      kind: Rule
+      priority: 100
+      services:
+        - name: authentik-server
+          port: 9000
+    - match: Host(`prometheus.reckeweg.io`) && PathPrefix(`/outpost.goauthentik.io/`)
+      kind: Rule
+      priority: 100
+      services:
+        - name: authentik-server
+          port: 9000
+    - match: Host(`homeassistant.reckeweg.io`) && PathPrefix(`/outpost.goauthentik.io/`)
+      kind: Rule
+      priority: 100
+      services:
+        - name: authentik-server
+          port: 9000

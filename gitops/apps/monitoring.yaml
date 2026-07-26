@@ -82,13 +82,37 @@ spec:
             annotations:
               cert-manager.io/cluster-issuer: letsencrypt-prod
               traefik.ingress.kubernetes.io/router.entrypoints: websecure
-        
+              # Authentik ForwardAuth-Gate - Prometheus hat kein eigenes Login.
+              # Braucht zusaetzlich die ungegatete Outpost-Passthrough-Route,
+              # siehe gitops/config/authentik/outpost-passthrough-ingressroute.yaml
+              traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd
+
         grafana:
           enabled: true
           admin:
             existingSecret: grafana-admin-secret
             userKey: admin-user
             passwordKey: admin-password
+          # Natives OIDC gegen Authentik, zusaetzlich zum bestehenden
+          # Admin-Login (admin.existingSecret bleibt als Fallback aktiv,
+          # falls Authentik mal nicht erreichbar ist). role_attribute_path
+          # nutzt den groups-Claim - Gruppe "grafana-admins" in Authentik
+          # muss noch angelegt werden, sonst landen alle OIDC-User als Viewer.
+          grafana.ini:
+            auth.generic_oauth:
+              enabled: true
+              name: Authentik
+              client_id: grafana
+              scopes: "openid profile email"
+              auth_url: https://sso.reckeweg.io/application/o/authorize/
+              token_url: https://sso.reckeweg.io/application/o/token/
+              api_url: https://sso.reckeweg.io/application/o/userinfo/
+              role_attribute_path: "contains(groups[*], 'grafana-admins') && 'Admin' || 'Viewer'"
+          envValueFrom:
+            GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
+              secretKeyRef:
+                name: grafana-oidc-secret
+                key: client_secret
           persistence:
             enabled: true
             storageClassName: longhorn
