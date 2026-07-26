@@ -19,3 +19,13 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+  ignoreDifferences:
+    # Kubernetes echoes apiVersion/kind/volumeMode/status into the embedded PVC
+    # template on the live StatefulSet - not in git, not a real diff, but keeps
+    # the app permanently OutOfSync in the ArgoCD UI without this.
+    - group: apps
+      kind: StatefulSet
+      name: chromeiq-postgresql
+      namespace: chromeiq
+      jsonPointers:
+        - /spec/volumeClaimTemplates
