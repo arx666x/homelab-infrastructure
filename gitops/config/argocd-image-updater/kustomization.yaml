@@ -5,5 +5,4 @@ resources:
   - install.yaml
   - registries-configmap.yaml
   - imageupdater-auditique.yaml
-  - sealed-git-writeback-secret.yaml
   - sealed-gitea-registry-creds.yaml

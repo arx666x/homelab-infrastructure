@@ -17,9 +17,16 @@
 # gitops/config/auditique/kustomization.yaml - danach sind Git und Cluster
 # wieder deckungsgleich, kein Konflikt mit selfHeal.
 #
-# Git-Credentials: dediziertes SSH-Keypaar nur für diesen Zweck (bewusst
-# getrennt vom bestehenden ArgoCD-Sync-Key) - siehe
-# sealed-git-writeback-secret.yaml.
+# Git-Credentials: method "git" (ohne :secret:...) nutzt ArgoCDs eigene
+# registrierte Repo-Credentials ("repocreds") fuer diese Repo-URL. Bewusst
+# NICHT "git:secret:<eigener Key>": der eigene-Key-Pfad hat in
+# argocd-image-updater v1.2.2 insecureIgnoreHostKey fest auf true verdrahtet
+# (im Quellcode verifiziert, pkg/argocd/gitcreds.go - kein Config-Schalter
+# dagegen) und ignoriert damit die eigentlich gemountete
+# argocd-ssh-known-hosts-cm komplett. Der repocreds-Pfad respektiert dagegen
+# das insecure-Flag des ArgoCD-Repository-Eintrags korrekt. Der ArgoCD-eigene
+# Sync-Key wurde dafuer extra auf Schreibzugriff hochgestuft, siehe Abschnitt
+# "Git-Write-back-Credential" in docs/argocd-image-updater.md.
 # =============================================================================
 apiVersion: argocd-image-updater.argoproj.io/v1alpha1
 kind: ImageUpdater
@@ -28,7 +35,7 @@ metadata:
   namespace: argocd
 spec:
   writeBackConfig:
-    method: "git:secret:argocd/argocd-image-updater-git-creds"
+    method: "git"
     gitConfig:
       branch: main
       writeBackTarget: "kustomization"
