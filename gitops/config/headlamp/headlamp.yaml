@@ -115,6 +115,14 @@ spec:
             - "-oidc-client-id=headlamp"
             - "-oidc-idp-issuer-url=https://sso.reckeweg.io/application/o/headlamp/"
             - "-oidc-scopes=openid,profile,email,groups"
+            # Ohne explizites -oidc-callback-url faellt Headlamp offenbar auf
+            # einen Default zurueck, der nicht mit der bei Authentik
+            # hinterlegten redirect_uri uebereinstimmt - Login-Button hat
+            # commentarlos nichts ausgeloest (kein einziger
+            # /application/o/authorize/-Request bei Authentik angekommen,
+            # live bestaetigt am 2026-07-26). Muss exakt der redirect_uris-
+            # Eintrag im headlamp-oidc-provider-Blueprint sein.
+            - "-oidc-callback-url=https://headlamp.reckeweg.io/oidc-callback"
             # Session-Cookie 1 Jahr gueltig statt Default 24h - verfuegbar
             # seit v0.41.0. Weiterhin sinnvoll auch mit OIDC (weniger
             # Re-Logins), unabhaengig vom alten Jahres-Token.

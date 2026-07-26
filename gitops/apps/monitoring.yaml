@@ -99,6 +99,14 @@ spec:
           # nutzt den groups-Claim - Gruppe "grafana-admins" in Authentik
           # muss noch angelegt werden, sonst landen alle OIDC-User als Viewer.
           grafana.ini:
+            server:
+              # Ohne root_url baut Grafana die OAuth-redirect_uri mit dem
+              # Default http://localhost:3000/... statt der echten externen
+              # URL - landet nirgendwo, Login-Button bounct kommentarlos
+              # zurueck, bevor Authentik ueberhaupt einen Request sieht
+              # (live bestaetigt am 2026-07-26: keine /application/o/authorize/
+              # Requests in den Authentik-Logs trotz Login-Versuchen).
+              root_url: https://grafana.reckeweg.io/
             auth.generic_oauth:
               enabled: true
               name: Authentik
