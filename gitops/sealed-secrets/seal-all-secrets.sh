@@ -308,9 +308,11 @@ if kubectl get secret gitea-registry-creds -n argocd &>/dev/null; then
   seal_from_cluster "gitea-registry-creds" "argocd" \
     "gitops/config/argocd-image-updater/sealed-gitea-registry-creds.yaml"
 else
+  info "Registry-Zugang fuer Susanns redesign-Projekt (gitea.reckeweg.io/susann/redesign) -"
+  info "der ArgoCD Image Updater braucht das, um neue RC-/GA-Image-Tags zu sehen."
   warn "gitea-registry-creds nicht im Cluster – interaktiv eingeben:"
-  read -rp "  gitea-registry-creds / Gitea-Benutzername: " GITEA_REGISTRY_USER
-  read -rsp "  gitea-registry-creds / Token (Scope package, read): " GITEA_REGISTRY_TOKEN
+  read -rp "  Gitea-Benutzername (i.d.R. susann): " GITEA_REGISTRY_USER
+  read -rsp "  Registry-Token (Susanns Gitea Access Token, Scope 'package'): " GITEA_REGISTRY_TOKEN
   echo ""
   kubectl create secret docker-registry "gitea-registry-creds" \
     --namespace="argocd" \
