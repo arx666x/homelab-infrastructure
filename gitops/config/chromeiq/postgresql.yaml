@@ -71,11 +71,16 @@ spec:
                   key: password
             - name: POSTGRES_INITDB_ARGS
               value: "--encoding=UTF8"
-            - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
+            # Postgres 18's image refuses to start if a volume is mounted at
+            # the legacy /var/lib/postgresql/data path with a custom PGDATA
+            # subdirectory (the pattern gitea-postgresql/16-alpine uses) -
+            # found by running this locally via docker-compose first. Mount
+            # the parent instead and let the image manage its own
+            # version-specific subdirectory (pg_ctlcluster-style,
+            # docker-library/postgres#1259).
             - name: data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
           livenessProbe:
             exec:
               command:
