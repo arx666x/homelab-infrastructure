@@ -26,6 +26,15 @@ metadata:
   labels:
     app.kubernetes.io/part-of: argocd
 data:
+  # Fehlte komplett (bestaetigt per `kubectl get cm argocd-cm -o
+  # jsonpath='{.data.url}'` - leer). Ohne das konstruiert ArgoCD die
+  # OIDC-redirect_uri aus dem eingehenden Request - der kommt intern als
+  # HTTP an (Traefik terminiert TLS, ArgoCD selbst laeuft --insecure, siehe
+  # docs/NETWORK-GUIDE.md) - Ergebnis: http://argocd.reckeweg.io/auth/callback
+  # statt https://..., was Authentiks strikte redirect_uri-Pruefung ablehnt
+  # ("Invalid redirect URL: the protocol and host ... must match", live
+  # bestaetigt am 2026-07-26).
+  url: https://argocd.reckeweg.io
   oidc.config: |
     name: Authentik
     issuer: https://sso.reckeweg.io/application/o/argocd/
