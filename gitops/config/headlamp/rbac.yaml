@@ -40,8 +40,16 @@ subjects:
 ---
 # Normaler Login-Pfad ab jetzt: OIDC-Nutzer statt ServiceAccount-Token.
 # "oidc:" Prefix kommt vom --oidc-username-prefix=oidc: Flag auf dem
-# k3s-apiserver, siehe docs/headlamp-oidc-setup.md - der Claim-Wert davor
-# ist der "email"-Claim aus dem Authentik-Token.
+# k3s-apiserver. Claim ist "preferred_username" (Authentik-Username-Feld,
+# hier "achim"), NICHT "email" - Kubernetes' OIDC-Authenticator verlangt
+# bei --oidc-username-claim=email zusaetzlich einen wahren
+# email_verified-Claim, den es ohne konfigurierten E-Mail-Verifizierungs-
+# Flow (kein SMTP im Cluster) nie geben wird - live bestaetigt am
+# 2026-07-26: "Unable to authenticate the request: oidc: email not
+# verified". Betrifft jeden User, nicht nur diesen Account, daher der
+# Wechsel des Claims statt eines Einzelfall-Workarounds. Siehe
+# docs/headlamp-oidc-setup.md fuer die noetige k3s-apiserver-Flag-Aenderung
+# auf allen drei Control-Plane-Nodes.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -54,5 +62,5 @@ roleRef:
   name: cluster-admin
 subjects:
   - kind: User
-    name: "oidc:achim.reckeweg@gmail.com"
+    name: "oidc:achim"
     apiGroup: rbac.authorization.k8s.io

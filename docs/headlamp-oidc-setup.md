@@ -46,13 +46,26 @@ ssh gmkt-02x "sudo test -f /etc/rancher/k3s/config.yaml && echo exists || echo m
 DNS-Hinweis in [docs/diskstation-oidc-setup.md](diskstation-oidc-setup.md),
 IP `192.168.20.31` direkt verwenden.)
 
-Datei auf allen drei Nodes neu anlegen mit exakt diesem Inhalt:
+**Update (2026-07-26): `oidc-username-claim` von `email` auf
+`preferred_username` geändert.** Die Datei existiert auf allen drei Nodes
+bereits (erster Rollout erfolgreich) - dieser Schritt ist also ein
+**Bearbeiten**, kein Neuanlegen. Live bestätigter Fehler mit `email` als
+Claim: `Unable to authenticate the request: oidc: email not verified` -
+Kubernetes' OIDC-Authenticator verlangt bei `--oidc-username-claim=email`
+zusätzlich einen wahren `email_verified`-Claim, den es ohne
+E-Mail-Verifizierungs-Flow (kein SMTP im Cluster konfiguriert) nie geben
+wird. Betrifft jeden User, nicht nur einen einzelnen Account.
+`preferred_username` (Authentik-Username-Feld, z.B. "achim") umgeht diese
+Prüfung komplett. `gitops/config/headlamp/rbac.yaml` wurde entsprechend auf
+`oidc:achim` als Subject umgestellt.
+
+Datei auf allen drei Nodes mit exakt diesem Inhalt anlegen bzw. aktualisieren:
 
 ```yaml
 kube-apiserver-arg:
   - "oidc-issuer-url=https://sso.reckeweg.io/application/o/headlamp/"
   - "oidc-client-id=headlamp"
-  - "oidc-username-claim=email"
+  - "oidc-username-claim=preferred_username"
   - "oidc-username-prefix=oidc:"
   - "oidc-groups-claim=groups"
   - "oidc-signing-algs=RS256"
