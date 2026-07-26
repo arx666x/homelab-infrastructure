@@ -164,6 +164,12 @@ spec:
 
       nodeSelector:
         kubernetes.io/os: linux
+        # ghcr.io/headlamp-k8s/headlamp-plugin-cert-manager hat kein arm64-
+        # Manifest - live bestaetigt am 2026-07-26 (Pod auf k3s-02a/arm64
+        # landete im Init:CrashLoopBackOff, "exec /bin/sh: exec format
+        # error"). Hart pinnen statt nur bevorzugen, da es fuer diesen
+        # Init-Container schlicht kein funktionierendes arm64-Image gibt.
+        kubernetes.io/arch: amd64
 
 ---
 apiVersion: v1

@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - sealed-alertmanager-credentials.yaml
   - sealed-grafana-admin-secret.yaml
+  - sealed-grafana-oidc-secret.yaml
   - sealed-upgrade-agent-credentials.yaml
   - homelab-version-checker-v2.yaml
   - upgrade-agent.yaml

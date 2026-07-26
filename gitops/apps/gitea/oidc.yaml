@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitea-oidc
+  namespace: argocd
+  annotations:
+    # Nach gitea selbst (wave 20) - der Job registriert eine Login-Quelle
+    # gegen eine bereits laufende Gitea-Instanz.
+    argocd.argoproj.io/sync-wave: "21"
+spec:
+  project: default
+  source:
+    repoURL: git@git.reckeweg.io:achim/homelab-infrastructure.git
+    targetRevision: HEAD
+    path: gitops/config/gitea/oidc
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitea
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
