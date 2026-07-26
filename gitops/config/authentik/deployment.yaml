@@ -75,7 +75,7 @@ spec:
               echo "authentik-DB ist bereit."
       containers:
         - name: authentik-server
-          image: ghcr.io/goauthentik/server:2026.5.4
+          image: ghcr.io/goauthentik/server:2026.5.6
           args: ["server"]
           envFrom:
             - configMapRef:
@@ -204,7 +204,7 @@ spec:
               echo "authentik-DB ist bereit."
       containers:
         - name: authentik-worker
-          image: ghcr.io/goauthentik/server:2026.5.4
+          image: ghcr.io/goauthentik/server:2026.5.6
           args: ["worker"]
           envFrom:
             - configMapRef:

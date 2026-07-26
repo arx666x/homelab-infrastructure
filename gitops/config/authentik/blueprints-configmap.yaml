@@ -91,7 +91,7 @@ data:
           name: grafana-oidc-provider
           client_type: confidential
           client_id: grafana
-          client_secret: !Env [GRAFANA_OIDC_CLIENT_SECRET]
+          client_secret: !Env [GRAFANA_OIDC_CLIENT_SECRET, ""]
           grant_types:
             - authorization_code
           property_mappings:
@@ -187,7 +187,7 @@ data:
           name: diskstation-oidc-provider
           client_type: confidential
           client_id: diskstation
-          client_secret: !Env [DISKSTATION_OIDC_CLIENT_SECRET]
+          client_secret: !Env [DISKSTATION_OIDC_CLIENT_SECRET, ""]
           sub_mode: user_email
           grant_types:
             - authorization_code
@@ -228,7 +228,7 @@ data:
           name: gitea-oidc-provider
           client_type: confidential
           client_id: gitea
-          client_secret: !Env [GITEA_OIDC_CLIENT_SECRET]
+          client_secret: !Env [GITEA_OIDC_CLIENT_SECRET, ""]
           grant_types:
             - authorization_code
           property_mappings:
@@ -266,7 +266,7 @@ data:
           name: argocd-oidc-provider
           client_type: confidential
           client_id: argocd
-          client_secret: !Env [ARGOCD_OIDC_CLIENT_SECRET]
+          client_secret: !Env [ARGOCD_OIDC_CLIENT_SECRET, ""]
           grant_types:
             - authorization_code
           property_mappings:
@@ -306,7 +306,7 @@ data:
           name: headlamp-oidc-provider
           client_type: confidential
           client_id: headlamp
-          client_secret: !Env [HEADLAMP_OIDC_CLIENT_SECRET]
+          client_secret: !Env [HEADLAMP_OIDC_CLIENT_SECRET, ""]
           grant_types:
             - authorization_code
           property_mappings:
