@@ -1,0 +1,43 @@
+# =============================================================================
+# Watches gitea.reckeweg.io/susann/redesign for new RC-/GA-Tags (siehe
+# .gitea/workflows/build-and-push.yml im redesign-Repo) und rollt sie im
+# Homelab aus, sobald ein neuer Tag erscheint - kein manueller Tag-Bump mehr
+# in gitops/config/auditique/kustomization.yaml.
+#
+# newest-build statt semver: RC-x.x.x/GA-x.x.x ist kein echtes Semver, daher
+# wird nach Push-Zeitpunkt in der Registry sortiert - der zuletzt gebaute
+# RC- oder GA-Tag gewinnt. GA-Tags landen zusätzlich (über den Dual-Push nach
+# GitHub) beim Web-Hoster, siehe .github/workflows/deploy.yml im redesign-Repo
+# - das läuft komplett unabhängig vom Image Updater.
+#
+# Write-back per Git (nicht "argocd"): euer root-infrastructure App-of-Apps
+# nutzt selfHeal: true, das würde eine "argocd"-Write-back-Änderung (die nur
+# im Application-Objekt selbst landet, nicht in Git) beim nächsten Sync sofort
+# wieder zurückdrehen. Git-Write-back committet stattdessen direkt in
+# gitops/config/auditique/kustomization.yaml - danach sind Git und Cluster
+# wieder deckungsgleich, kein Konflikt mit selfHeal.
+#
+# Git-Credentials: dediziertes SSH-Keypaar nur für diesen Zweck (bewusst
+# getrennt vom bestehenden ArgoCD-Sync-Key) - siehe
+# sealed-git-writeback-secret.yaml.
+# =============================================================================
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: auditique
+  namespace: argocd
+spec:
+  writeBackConfig:
+    method: "git:secret:argocd/argocd-image-updater-git-creds"
+    gitConfig:
+      branch: main
+      writeBackTarget: "kustomization"
+  applicationRefs:
+    - namePattern: "auditique"
+      images:
+        - alias: auditique-web
+          imageName: gitea.reckeweg.io/susann/redesign
+          commonUpdateSettings:
+            updateStrategy: newest-build
+            allowTags: "regexp:^(RC|GA)-"
+            pullSecret: "pullsecret:argocd/gitea-registry-creds"

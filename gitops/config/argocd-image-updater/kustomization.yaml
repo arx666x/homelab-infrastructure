@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - install.yaml
+  - registries-configmap.yaml
+  - imageupdater-auditique.yaml
+  - sealed-git-writeback-secret.yaml
+  # sealed-gitea-registry-creds.yaml erst aufnehmen, nachdem
+  # gitops/sealed-secrets/seal-all-secrets.sh gelaufen ist und den Platzhalter
+  # durch ein echtes SealedSecret ersetzt hat - siehe Kommentare dort. Ohne
+  # echtes Secret findet der Image Updater die Registry-Tags nicht (401).

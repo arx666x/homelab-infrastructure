@@ -1,0 +1,23 @@
+# =============================================================================
+# registries.conf für gitea.reckeweg.io - Susanns Container-Registry, in der
+# .gitea/workflows/build-and-push.yml im redesign-Repo jeden RC-/GA-Tag als
+# Image veröffentlicht. Der Image Updater braucht Lesezugriff hierauf, um
+# Tags und Push-Zeitpunkte zu sehen (update-strategy: newest-build).
+# Registry-Zugangsdaten: sealed-gitea-registry-creds.yaml - siehe Kommentare
+# dort, Platzhalter bis gitops/sealed-secrets/seal-all-secrets.sh gelaufen ist.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-image-updater-config
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-image-updater-config
+    app.kubernetes.io/part-of: argocd-image-updater-controller
+data:
+  registries.conf: |
+    registries:
+    - name: Gitea Homelab Registry
+      prefix: gitea.reckeweg.io
+      api_url: https://gitea.reckeweg.io
+      credentials: pullsecret:argocd/gitea-registry-creds

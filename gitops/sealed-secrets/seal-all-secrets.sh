@@ -294,6 +294,48 @@ fi
 # Platzhalter-Dateien) - sonst crashloopt Postgres/Typesense mangels Passwort.
 
 # =============================================================================
+# 7. ARGOCD IMAGE UPDATER
+# =============================================================================
+echo ""
+echo "── ArgoCD Image Updater ──────────────────────────────"
+
+# Registry-Pull-Secret fuer gitea.reckeweg.io - der Image Updater braucht das,
+# um Tags/Push-Zeitpunkte fuer gitea.reckeweg.io/susann/redesign zu lesen
+# (siehe gitops/config/argocd-image-updater/registries-configmap.yaml).
+# Token: Susanns Gitea-Account -> Settings -> Applications -> Manage Access
+# Tokens, Scope "package" (read reicht).
+if kubectl get secret gitea-registry-creds -n argocd &>/dev/null; then
+  seal_from_cluster "gitea-registry-creds" "argocd" \
+    "gitops/config/argocd-image-updater/sealed-gitea-registry-creds.yaml"
+else
+  warn "gitea-registry-creds nicht im Cluster – interaktiv eingeben:"
+  read -rp "  gitea-registry-creds / Gitea-Benutzername: " GITEA_REGISTRY_USER
+  read -rsp "  gitea-registry-creds / Token (Scope package, read): " GITEA_REGISTRY_TOKEN
+  echo ""
+  kubectl create secret docker-registry "gitea-registry-creds" \
+    --namespace="argocd" \
+    --docker-server="gitea.reckeweg.io" \
+    --docker-username="${GITEA_REGISTRY_USER}" \
+    --docker-password="${GITEA_REGISTRY_TOKEN}" \
+    --dry-run=client -o json \
+    | kubeseal --cert "$CERT" --format yaml \
+    > "$REPO_ROOT/gitops/config/argocd-image-updater/sealed-gitea-registry-creds.yaml"
+  unset GITEA_REGISTRY_USER GITEA_REGISTRY_TOKEN
+  success "gitops/config/argocd-image-updater/sealed-gitea-registry-creds.yaml"
+fi
+
+# Reminder: sealed-gitea-registry-creds.yaml erst in
+# gitops/config/argocd-image-updater/kustomization.yaml aufnehmen, nachdem sie
+# hier echt generiert wurde (s. Kommentar in der Platzhalter-Datei) - sonst
+# findet der Image Updater die Registry-Tags nicht (401).
+#
+# Das SSH-Keypaar fuer den Git-Write-back (argocd-image-updater-git-creds) ist
+# NICHT Teil dieses Scripts - das wurde einmalig generiert und versiegelt, der
+# oeffentliche Schluessel liegt als Kommentar in
+# gitops/config/argocd-image-updater/sealed-git-writeback-secret.yaml. Nur bei
+# Rotation noetig, s. Kommentar dort.
+
+# =============================================================================
 # Zusammenfassung
 # =============================================================================
 echo ""

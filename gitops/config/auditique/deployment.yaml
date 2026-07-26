@@ -1,9 +1,14 @@
 # =============================================================================
 # auditique-web - statische Astro-Seite, ausgeliefert über Nginx
 # Quelle & Dockerfile: git@git.reckeweg.io:susann/redesign.git
-# Neues Release: Tag "vX.Y.Z" im redesign-Repo pushen (baut & pusht das Image
-# via .gitea/workflows/build-and-push.yml), danach den Tag hier unten bei
-# "image:" nachziehen und committen - ArgoCD rollt automatisch aus.
+# Neues Release: Tag "RC-x.x.x" (Vorschau) oder "GA-x.x.x" (freigegeben) im
+# redesign-Repo pushen - das baut & pusht das Image via
+# .gitea/workflows/build-and-push.yml. Der ArgoCD Image Updater
+# (gitops/config/argocd-image-updater) erkennt den neuen Tag automatisch und
+# schreibt ihn nach kustomization.yaml zurück - der Tag hier unten bei
+# "image:" ist nur der initiale Kustomize-Basiswert, wird durch das
+# images:/newTag Overlay in kustomization.yaml ersetzt, kein manueller
+# Nachzieh-Schritt mehr nötig.
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment

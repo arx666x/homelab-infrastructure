@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - certificate.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+# Der ArgoCD Image Updater (gitops/config/argocd-image-updater) schreibt neue
+# RC-/GA-Tags aus gitea.reckeweg.io/susann/redesign automatisch hier hinein -
+# kein manueller Tag-Bump in deployment.yaml mehr, siehe
+# gitops/config/argocd-image-updater/imageupdater-auditique.yaml.
+images:
+  - name: gitea.reckeweg.io/susann/redesign
+    newTag: v0.2.0
