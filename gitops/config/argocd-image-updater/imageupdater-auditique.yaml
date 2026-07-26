@@ -39,5 +39,8 @@ spec:
           imageName: gitea.reckeweg.io/susann/redesign
           commonUpdateSettings:
             updateStrategy: newest-build
-            allowTags: "regexp:^(RC|GA)-"
+            # (?i) - Go-Regex ist sonst case-sensitive; git tag RC-x.x.x wird
+            # nicht zwingend genauso großgeschrieben gepusht (z.B. "rc-0.4.0"),
+            # das soll trotzdem matchen.
+            allowTags: "regexp:(?i)^(rc|ga)-"
             pullSecret: "pullsecret:argocd/gitea-registry-creds"
