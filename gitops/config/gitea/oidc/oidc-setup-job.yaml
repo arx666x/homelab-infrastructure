@@ -76,12 +76,11 @@ spec:
               # zum Auffinden der Config (live bestaetigt: "Unable to load
               # config file for a installed Gitea instance" trotz gesetzter
               # Env-Vars) - --config explizit auf beiden Aufrufen noetig.
-              if gitea admin auth list --config "$CONFIG" | awk '{print $2}' | grep -qx "authentik"; then
+              if gitea --config "$CONFIG" admin auth list | awk '{print $2}' | grep -qx "authentik"; then
                 echo "==> Login-Quelle 'authentik' existiert schon - nichts zu tun."
               else
                 echo "==> Lege OAuth2-Login-Quelle 'authentik' an..."
-                gitea admin auth add-oauth \
-                  --config "$CONFIG" \
+                gitea --config "$CONFIG" admin auth add-oauth \
                   --name authentik \
                   --provider openidConnect \
                   --key gitea \

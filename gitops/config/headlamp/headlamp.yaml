@@ -101,12 +101,16 @@ spec:
         - name: headlamp
           image: ghcr.io/headlamp-k8s/headlamp:v0.43.0
           args:
-            # -in-cluster entfernt: OIDC ersetzt den bisherigen statischen
-            # Jahres-Token vollstaendig als Login-Mechanismus (siehe
-            # docs/headlamp-oidc-setup.md - der k3s-apiserver braucht dafuer
-            # zusaetzlich --oidc-*-Flags auf allen drei Control-Plane-Nodes,
-            # das ist NICHT Teil dieser GitOps-Aenderung, siehe dortiges
-            # Dokument fuer den manuellen Schritt).
+            # -in-cluster MUSS trotz OIDC drinbleiben - Headlamp selbst
+            # lehnt die -oidc-*-Flags sonst beim Start ab ("flags are only
+            # meant to be used in inCluster mode or with --oidc-use-cookie",
+            # live bestaetigt am 2026-07-26). -in-cluster entscheidet nur,
+            # wie Headlamp den API-Server erreicht - die OIDC-Flags regeln
+            # separat, mit wessen Identitaet (Nutzer-Token statt
+            # ServiceAccount-Token) die Requests dorthin signiert werden.
+            # Der k3s-apiserver braucht zusaetzlich die --oidc-*-Flags auf
+            # allen drei Control-Plane-Nodes, siehe docs/headlamp-oidc-setup.md.
+            - "-in-cluster"
             - "-plugins-dir=/headlamp/plugins"
             - "-oidc-client-id=headlamp"
             - "-oidc-idp-issuer-url=https://sso.reckeweg.io/application/o/headlamp/"
