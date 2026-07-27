@@ -40,7 +40,7 @@ echo "✓ MetalLB deployed"
 #       Ein manueller kubectl-Eingriff im laufenden Betrieb wird von ArgoCD
 #       (selfHeal: true) innerhalb weniger Minuten überschrieben.
 echo "2/5 cert-manager..."
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.4/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.0/cert-manager.yaml
 echo "Waiting for cert-manager..."
 sleep 90
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cert-manager -n cert-manager --timeout=300s 2>/dev/null || sleep 30
