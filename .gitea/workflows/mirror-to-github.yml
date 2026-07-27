@@ -31,5 +31,8 @@ jobs:
           git clone --mirror \
             "https://gitea-actions:${GITEA_TOKEN}@${SERVER_URL#https://}/${REPO_NAME}.git" repo
           cd repo
-          git push --mirror \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/arx666x/homelab-infrastructure.git"
+          # heads + tags only — full --mirror also carries Gitea's PR refs
+          # (refs/pull/N/head), which GitHub rejects as a hidden/reserved ref.
+          git push --prune \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/arx666x/homelab-infrastructure.git" \
+            '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'

@@ -216,6 +216,18 @@ prism/erp-portal/seri-k8s/trakkws-quarkus — reines `git clone --mirror` in
 einem `run:`-Step mit dem automatisch von Gitea Actions bereitgestellten
 `secrets.GITEA_TOKEN`.
 
+**`git push --mirror` schlägt an GitHub-PR-refs fehl.** `homelab-infrastructure`
+hat (im Gegensatz zu prism/erp-portal/seri-k8s) offene Gitea-PRs — vom
+Upgrade Agent per NOTIFY-Pfad angelegt. `git clone --mirror` zieht dafür lokal
+`refs/pull/N/head`-Refs; ein `git push --mirror` versucht diese nach GitHub zu
+schreiben, was dort als "hidden ref" abgelehnt wird (`deny updating a hidden
+ref`) und den kompletten Push abbrechen lässt — inklusive der eigentlich
+erfolgreichen Branch-/Tag-Refs. Fix: statt `--mirror` gezielt nur
+`refs/heads/*` und `refs/tags/*` pushen (`git push --prune ... '+refs/heads/*:refs/heads/*'
+'+refs/tags/*:refs/tags/*'`) — `--prune` sorgt weiterhin dafür, dass gelöschte
+Branches/Tags auch auf GitHub verschwinden, ohne den PR-ref-Namespace
+anzufassen.
+
 **Setup (einmalig, siehe Gitea-Secret unten):** Der Workflow braucht ein
 Repo-Secret `PERSONAL_GITHUB_TOKEN` (GitHub PAT, Scope `repo`, Account
 `arx666x`) unter
