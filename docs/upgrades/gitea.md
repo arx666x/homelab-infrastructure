@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `gitea`
-- **Aktuelle Version:** Chart 12.6.0 / Gitea App 1.26.1
+- **Aktuelle Version:** Chart 12.7.0 / Gitea App 1.27.0
 - **Quelle:** Helm-Chart `gitea` von `https://dl.gitea.com/charts/` ([Chart-Releases](https://gitea.com/gitea/helm-gitea/releases)); Values werden zusätzlich aus dem eigenen Repo (`git@git.reckeweg.io:achim/homelab-infrastructure.git`, `gitops/config/gitea/values.yaml`) als zweite Helm-Source gezogen
 - **ArgoCD App-Name:** `gitea` (sync-wave 20)
 - **Zugehörige ArgoCD-Apps:** `gitea-postgresql` (sync-wave 15, externes StatefulSet, postgres:16-alpine, Longhorn 10Gi) und `gitea-valkey` (sync-wave 16, externes StatefulSet) — beide sind Datastore-Abhängigkeiten von Gitea, kein eigenständiger Eintrag in der Service-Liste, werden aber in dieser Datei mitdokumentiert. Ergänzend läuft `gitea-actions` (sync-wave 25, act-runner + DinD) — hat ein eigenes Runbook: [gitea-actions-runner.md](gitea-actions-runner.md)
@@ -17,6 +17,7 @@
 | unbekannt | 1.23.x → 1.24.6 | unbekannt | Manuell | Abgeschlossen | Historie vor Einführung des strukturierten Runbooks nicht vollständig rekonstruierbar | Commit `ed1f43a`: Umbau auf externes PostgreSQL, Actions vorbereitet |
 | 2025-10 (ca., aus Commit-Historie) | 1.24.6 → 1.26.0 | Major | Manuell | Abgeschlossen | Direkter Sprung über mehrere App-Versionen; Registry-Wechsel für act_runner nötig | Commit `bffa2bf`; Init-Container `configure-gitea` schlug initial wegen entferntem `-o`-Flag fehl (Grund für spätere Vorsicht bei Chart-Bumps) |
 | 2026-05-18 | Chart 12.5.3 → 12.6.0 (App 1.25.5 → 1.26.1) | Minor (Chart) / faktisch Major (App-Zwang) | Manuell | Reklassifiziert (Minor→Major) | Ursprünglich als reiner Chart-Minor-Bump eingestuft; erster Versuch scheiterte, weil Chart 12.6.0 zwingend App 1.26.1 voraussetzt (`-apply-env`-Flag existiert nicht in 1.25.5) | Siehe Reklassifizierungs-Tabelle unten; zweiter Versuch mit kombiniertem Chart+App-Bump erfolgreich |
+| 2026-07-27 | Chart 12.6.0 → 12.7.0 (App 1.26.1 → 1.27.0) | Minor (Chart) / faktisch Major (App-Zwang) | Manuell | Abgeschlossen | Chart erzwingt wieder vollen App-Minor-Sprung (1.26→1.27); diesmal aber keine Init-Container/Template-Änderung im Chart-Diff (12.6.0 vs 12.7.0: nur Chart.yaml-Metadaten + neue, standardmäßig deaktivierte Gateway-API-Sektion in values.yaml) — Upgrade lief im Gegensatz zum letzten Mal im ersten Versuch durch | Vorab-Diff der Chart-Templates (`helm pull --untar` beider Versionen) bestätigte fehlendes Breaking-Change-Risiko; DB-Backup trotzdem vorab gezogen |
 
 ### Reklassifizierungen (Minor → Major)
 
@@ -205,6 +206,22 @@ kubectl get pods -n gitea -l app.kubernetes.io/name=act-runner
 - Keine Hinweise in der bisherigen Historie auf eine Verbindung zur phpLDAPadmin→LDAP Account
   Manager (LAM)-Migration — die beiden Themen sind unabhängig, LAM wird hier nicht weiter
   dokumentiert.
+- **Vorab-Diff der Chart-Templates deckt die `-apply-env`-Falle zuverlässig auf.** Seit dem
+  Vorfall vom 2026-05-18 lohnt sich vor jedem Chart-Bump: beide Chart-Versionen lokal ziehen
+  (`helm pull gitea-charts/gitea --version <alt>/<neu> --untar --untardir <dir>`) und
+  `templates/gitea/deployment.yaml` sowie `scripts/init-containers/` diffen. Bei 12.6.0→12.7.0
+  waren beide Dateien identisch — einziger inhaltlicher Unterschied war eine neue, standardmäßig
+  deaktivierte Gateway-API-Sektion in `values.yaml`. Das gab vorab Sicherheit, dass der App-Zwang
+  (1.26→1.27) diesmal nicht denselben Init-Container-Fehler wie beim letzten Mal auslösen würde.
+- **ArgoCD synct einen Chart+App-Doppel-Commit gelegentlich in zwei Wellen.** Beim Upgrade
+  2026-07-27 zeigte `argocd app history gitea` zwei Sync-Operationen auf denselben Commit-Hash
+  innerhalb von ~70 Sekunden — die erste erzeugte einen Pod-Recreate ohne Versionswechsel
+  (Chart blieb kurzzeitig bei 12.6.0), erst die zweite Welle brachte 12.7.0. Grund vermutlich
+  Timing zwischen dem `HEAD`-Values-Source (Gitea-Repo selbst) und dem Chart-Source-Refresh im
+  ArgoCD-Repo-Server. Kein Eingriff nötig, hat sich selbst aufgelöst — führt aber zu **zwei**
+  Downtime-Fenstern hintereinander statt einem (insgesamt ca. 130s statt der üblichen 60–120s).
+  Falls das reproduzierbar öfter auftritt, ggf. `argocd app get gitea --hard-refresh` vor dem
+  manuellen Beobachten erwägen.
 
 ## Rollback-Plan
 
