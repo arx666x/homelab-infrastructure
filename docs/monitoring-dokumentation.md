@@ -156,6 +156,60 @@ ansible-playbook -i inventory/hosts.ini playbooks/os-update-check.yml
 ansible-playbook -i inventory/hosts.ini playbooks/os-update-check.yml --tags remove
 ```
 
+---
+
+## Chart-/Image-Upgrade-Überwachung (Upgrade Agent)
+
+Während `os-update-check.yml` (oben) nur **OS-Pakete** auf den Nodes zählt,
+prüft der **Upgrade Agent** (`scripts/upgrade-agent.py`) die Anwendungsebene:
+Helm-Chart-Versionen der ArgoCD-Apps und gepinnte Container-Image-Tags. Läuft
+als eigener Kubernetes CronJob im Namespace `monitoring`, **jeden Montag
+08:00 Uhr Europe/Berlin**.
+
+**Vollständige Setup- und Betriebs-Doku:**
+[docs/upgrade-agent-setup.md](upgrade-agent-setup.md)
+
+### Ansatz
+
+1. Prüft aktuell **8 Helm Charts** (u.a. Longhorn, Traefik, cert-manager,
+   kube-prometheus-stack) und **4 Container-Images** (Home Assistant,
+   Guacamole/guacd, Headlamp) gegen die jeweils neueste stabile Version
+   (Helm-Repo bzw. GitHub Releases/Docker Hub).
+2. Für jeden Fund: lädt das passende Upgrade-Runbook aus `docs/upgrades/`
+   sowie die GitHub Release Notes und fragt **Claude Opus** nach einer
+   Minor/Major-Einstufung und einer AUTO/NOTIFY-Entscheidung.
+3. **AUTO** (i.d.R. Patch, teils risikoarme Minor-Bumps laut Runbook) → Version
+   wird direkt auf `main` committed und gepusht — ArgoCD deployt automatisch.
+4. **NOTIFY** (jeder Major-Bump, riskante Minor-Bumps) → kein automatischer
+   Commit; stattdessen ein Gitea-PR-Branch zum manuellen Review plus Telegram-
+   und E-Mail-Benachrichtigung.
+
+Diese Benachrichtigungen laufen **nicht** über Alertmanager/Prometheus,
+sondern werden vom Script direkt per Telegram-Bot-API und SMTP verschickt
+(dieselben Zugangsdaten wie oben unter [Secrets](#secrets) — via
+`alertmanager-credentials`, im Agent-Pod eingebunden unter
+`/etc/alertmanager/secrets/alertmanager-credentials/`).
+
+### Git-Sync-Lücke (behoben 2026-07-27)
+
+Der Agent klont/committet ausschließlich über eine HTTPS-Verbindung zu Gitea
+(`gitea-token`-Secret) — bis 2026-07-27 gab es dabei **kein GitHub-Remote**.
+Das lokale Dual-Push-Setup (`origin` mit zwei `pushurl`-Einträgen, siehe
+[GIT-WORKFLOW.md](GIT-WORKFLOW.md)) deckt nur manuelle Pushes vom Laptop ab,
+nicht die autonomen Commits des Agents — GitHub konnte dadurch hinter Gitea
+zurückfallen und bei einem späteren manuellen Push zu Non-Fast-Forward-
+Kollisionen führen. Behoben durch `.gitea/workflows/mirror-to-github.yml`
+(Gitea Action, spiegelt jeden Push — egal von wem — automatisch nach
+GitHub; selbes Muster wie `mirror-to-sailpoint.yml`, siehe
+[gitea-sailpoint-mirror-runbook.md](gitea-sailpoint-mirror-runbook.md)).
+
+**Setup (einmalig, siehe Gitea-Secret unten):** Der Workflow braucht ein
+Repo-Secret `PERSONAL_GITHUB_TOKEN` (GitHub PAT, Scope `repo`, Account
+`arx666x`) unter
+`https://gitea.reckeweg.io/achim/homelab-infrastructure/settings/actions/secrets`.
+Rotation bei Ablauf: neuen PAT erzeugen und dasselbe Secret überschreiben —
+kein Redeploy nötig, der nächste Push nutzt automatisch den neuen Wert.
+
 ## DNS-Node-Monitoring (dns01, später dns02)
 
 dns01 (Debian 13/trixie, Raspberry Pi 5, aarch64) liegt außerhalb des

@@ -1,0 +1,31 @@
+name: Mirror to GitHub (Backup)
+
+# Mirrors every push (any branch, any author — including upgrade-agent's
+# autonomous commits) from Gitea to the personal GitHub backup.
+# Gitea is authoritative; GitHub is a pure backup and never written to
+# independently, so --mirror (force, includes deletes) is safe here.
+# See docs/GIT-WORKFLOW.md and docs/gitea-sailpoint-mirror-runbook.md
+# (same pattern, used for prism/erp-portal/seri-k8s/trakkws-quarkus).
+
+on:
+  push:
+    branches:
+      - '**'
+  delete: {}
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mirror to GitHub (arx666x, backup)
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+        run: |
+          git remote add github-backup \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/arx666x/homelab-infrastructure.git"
+          git push --mirror github-backup
