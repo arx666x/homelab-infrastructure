@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `monitoring`
-- **Aktuelle Version:** 87.10.1 (Helm Chart; Prometheus-Operator v0.92.0)
+- **Aktuelle Version:** 87.19.2 (Helm Chart; Prometheus-Operator v0.92.1)
 - **Quelle:** Helm-Chart-Repo `https://prometheus-community.github.io/helm-charts` (Chart: `kube-prometheus-stack`); Prometheus-Operator CRD-Releases: `https://github.com/prometheus-operator/prometheus-operator/releases`; offizielles `UPGRADE.md`: `https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/UPGRADE.md`
 - **ArgoCD App-Name:** `kube-prometheus-stack`
 - **Versions-Check-Quelle:** homelab-version-checker vergleicht `targetRevision` in `gitops/apps/monitoring.yaml` gegen die neueste Chart-Version im Helm-Repo-Index von `prometheus-community.github.io/helm-charts`
@@ -31,7 +31,10 @@
 | 2026-06-14 | 85.3.3 → 86.2.0 | Major | Manuell | Abgeschlossen | CRD-Update (Operator v0.90.1→v0.91.0) + Prometheus 3.12; neue Validierungen in ScrapeConfig/AlertmanagerConfig/Prometheus/ThanosRuler | Station 16 |
 | 2026-06-15 | 86.2.0 → 86.2.3 | Minor (Patch) | Manuell | Abgeschlossen | Reines Dependency-Patch via Renovate, kein CRD-Update (Operator bleibt v0.91.0); Grafana 12.4.2→12.4.5, kube-state-metrics 7.4.0→7.4.1 | Station 17 |
 | 2026-06-29 | 86.2.3 → 87.3.0 | Major | Manuell | Abgeschlossen | CRD-Update (Operator v0.91.0→v0.92.0); alle 10 CRDs Schema-Änderungen; PrometheusTopologySharding/PrometheusShardRetentionPolicy Beta; Grafana 12.4.5→12.7.1, kube-state-metrics 7.4.1→7.5.1 | Station 18 (finale Station der ursprünglichen Stufenmigration) |
-| 2026-07-06 | 87.3.0 → 87.10.1 | Minor | Automatisch | Abgeschlossen | Automatisches Minor-Update durch homelab-version-checker, kein Breaking-Change laut Release Notes | Teil von Commit `a7d6250` (gemeinsam mit sealed-secrets 2.19.0→2.19.1); ursprünglich fälschlich als PR (#3/#4) erzeugt, dann manuell direkt auf `main` committet |
+| 2026-07-06 | 87.3.0 → 87.10.1 | Minor | Automatisch | Abgeschlossen | Automatisches Minor-Update durch homelab-version-checker, kein Breaking-Change laut Release Notes | Teil von Commit `a7d6250` (gemeinsam mit sealed-secrets 2.19.0→2.19.1); ursprünglich fälschlich als PR (#3/#4) erzeugt, dann manuell direkt auf `main` committet; Operator-Patch-Bump v0.92.0→v0.92.1 in diesem Schritt enthalten, aber im ursprünglichen Commit nicht erwähnt (nachträglich per Chart.yaml-Diff verifiziert) |
+| 2026-07-13 | 87.10.1 → 87.15.1 | Minor | Automatisch | Abgeschlossen | Nur Dependency-Image-Updates (kube-state-metrics 7.5.x→7.8.1, prometheus-node-exporter, Prometheus 3.13.1), kein Operator/CRD-Change, keine Breaking Changes laut Release Notes | Commit `af699f0` durch upgrade-agent; bislang nicht in diesem Changelog erfasst, jetzt nachgetragen |
+| 2026-07-20 | 87.15.1 → 87.17.0 | Minor | Automatisch | Abgeschlossen | Scrape-Config-Ergänzung (kube-scheduler resource metrics, PR #7118), externalUrl-Fix (PR #7107), node-exporter-Dependency-Bump v4.56.1; kein Operator/CRD-Change | Commit `35e4ad9` durch upgrade-agent; bislang nicht in diesem Changelog erfasst, jetzt nachgetragen |
+| 2026-07-27 | 87.17.0 → 87.19.2 | Minor | Manuell | Abgeschlossen | kube-state-metrics Dependency-Major-Bump 7.8.1→8.0.0 (Chart-Upgrade-Hinweis: nur Drop von `CiliumNetworkPolicy`-Support, hier nicht genutzt, kein Cilium im Cluster), Grafana 12.7.2→12.8.1; kein Operator/CRD-Change (Operator bleibt v0.92.1) | Auf Wunsch des Nutzers direkt ausgeführt (nicht über upgrade-agent); Release-Notes/Dependency-Diff vorab per GitHub-Compare-API geprüft |
 
 **Nicht produktiv gelandeter Zwischenschritt:** Commit `85b2150` ("chore: upgrade kube-prometheus-stack 86.2.3 → 86.3.2", Auto-Upgrade durch den upgrade-agent, 2026-06-22) existiert nur auf dem nie gemergten Branch `origin/chore/upgrade-kube-prometheus-stack-86.3.2`. Er wurde durch die manuelle Migration auf 87.3.0 (`ab63282`, 2026-06-29) überholt und ist nie in `main`/den Cluster gelangt — daher kein Eintrag in der Changelog-Tabelle oben.
 
@@ -137,7 +140,10 @@ kubectl get servicemonitors -n monitoring
 | 16      | 85.3.3 → 86.2.0 | **v0.91.0**           | CRD-Update + Prometheus 3.12 |
 | 17      | 86.2.0 → 86.2.3 | v0.91.0 (unverändert) | Maintenance (Grafana 12.4.5, kube-state-metrics 7.4.1) |
 | 18      | 86.2.3 → 87.3.0 | **v0.92.0**           | CRD-Update + Grafana 12.7.1 + kube-state-metrics 7.5.1 |
-| 19      | 87.3.0 → 87.10.1 | v0.92.0 (unverändert) | Automatisches Minor-Update (Commit `a7d6250`) |
+| 19      | 87.3.0 → 87.10.1 | v0.92.0 → v0.92.1 | Automatisches Minor-Update (Commit `a7d6250`); Operator-Patch-Bump ohne CRD-Schema-Änderung |
+| 20      | 87.10.1 → 87.15.1 | v0.92.1 (unverändert) | Automatisches Minor-Update (Commit `af699f0`), reine Dependency-Image-Updates |
+| 21      | 87.15.1 → 87.17.0 | v0.92.1 (unverändert) | Automatisches Minor-Update (Commit `35e4ad9`), Scrape-Config-Ergänzung kube-scheduler-Metriken |
+| 22      | 87.17.0 → 87.19.2 | v0.92.1 (unverändert) | Manuelles Minor-Update, kube-state-metrics Dependency-Major-Bump 7.8.1→8.0.0 (CiliumNetworkPolicy-Drop, nicht genutzt), Grafana 12.8.1 |
 
 ### Besondere Breaking Changes im Detail
 
@@ -255,6 +261,7 @@ argocd app set kube-prometheus-stack --sync-policy automated --self-heal --auto-
   ```
 - **Grafana-Passwort nach 79.x unbekannt:** `kubectl get secret -n monitoring kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d`
 - **Auto-Upgrade-Vorsicht bei diesem Chart:** Anders als bei den meisten anderen Diensten koppelt kube-prometheus-stack Minor-Versionssprünge fast immer an Operator/CRD-Änderungen. Ein rein numerisch als "Minor" erkannter Sprung (z.B. 86.2.3→87.3.0 wäre nominell minor, enthielt aber ein CRD-Update auf v0.92.0) kann trotzdem manuelles Eingreifen erfordern — der Versions-Checker sollte für diesen Chart nicht blind auf SemVer-Minor vertrauen.
+- **Sub-Dependency-Major-Bumps innerhalb eines Chart-Minor-Releases:** Der Chart bündelt kube-state-metrics, Grafana und weitere Sub-Charts als Dependencies mit eigenem SemVer. Ein chart-seitig "minor" Sprung (z.B. 87.17.0→87.19.2) kann intern einen Major-Bump einer Dependency enthalten (hier: kube-state-metrics 7.8.1→8.0.0). Vor jedem Auto-/Manuell-Upgrade lohnt ein Blick auf `dependencies:` im `Chart.yaml` der Ziel-Version (`curl -s https://raw.githubusercontent.com/prometheus-community/helm-charts/kube-prometheus-stack-<VERSION>/charts/kube-prometheus-stack/Chart.yaml`) sowie ggf. das `Upgrading to vX` im README der Dependency, bevor man sich nur auf die Chart-eigene Versionsnummer verlässt.
 - **Nie gemergter Zwischenschritt 86.3.2:** Der upgrade-agent hatte am 2026-06-22 automatisch 86.2.3→86.3.2 als PR-Branch vorbereitet (`origin/chore/upgrade-kube-prometheus-stack-86.3.2`), der jedoch nie gemergt wurde, da die manuelle Migration auf 87.3.0 bereits am 2026-06-29 direkt ab dem gleichen Basisstand (86.2.3) durchgeführt wurde. Branch kann bei Aufräumarbeiten gelöscht werden, sofern nicht anderweitig benötigt.
 
 ## Rollback-Plan
