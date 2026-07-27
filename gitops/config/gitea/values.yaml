@@ -17,7 +17,7 @@
 image:
   registry: docker.gitea.com
   repository: gitea
-  tag: "1.26.1"
+  tag: "1.27.0"
   pullPolicy: IfNotPresent
 
 # By default RollingUpgrades are used, but this is in conflict with the RWO PVC.
