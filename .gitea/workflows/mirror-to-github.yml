@@ -4,8 +4,12 @@ name: Mirror to GitHub (Backup)
 # autonomous commits) from Gitea to the personal GitHub backup.
 # Gitea is authoritative; GitHub is a pure backup and never written to
 # independently, so --mirror (force, includes deletes) is safe here.
-# See docs/GIT-WORKFLOW.md and docs/gitea-sailpoint-mirror-runbook.md
-# (same pattern, used for prism/erp-portal/seri-k8s/trakkws-quarkus).
+#
+# No actions/checkout here on purpose: the act_runner:nightly image has no
+# `node` binary and runner labels run host:// (see docs/upgrades/gitea-actions-runner.md),
+# so JS-based actions fail with "Cannot find: node in PATH". Plain `git clone`
+# in a run: step avoids that entirely — same pattern as mirror-to-sailpoint.yml
+# in prism/erp-portal/seri-k8s/trakkws-quarkus (docs/gitea-sailpoint-mirror-runbook.md).
 
 on:
   push:
@@ -17,15 +21,15 @@ jobs:
   mirror:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (full history)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Mirror to GitHub (arx666x, backup)
         env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          REPO_NAME: ${{ gitea.repository }}
+          SERVER_URL: ${{ gitea.server_url }}
         run: |
-          git remote add github-backup \
+          git clone --mirror \
+            "https://gitea-actions:${GITEA_TOKEN}@${SERVER_URL#https://}/${REPO_NAME}.git" repo
+          cd repo
+          git push --mirror \
             "https://x-access-token:${GITHUB_TOKEN}@github.com/arx666x/homelab-infrastructure.git"
-          git push --mirror github-backup

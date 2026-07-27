@@ -203,10 +203,25 @@ Kollisionen führen. Behoben durch `.gitea/workflows/mirror-to-github.yml`
 GitHub; selbes Muster wie `mirror-to-sailpoint.yml`, siehe
 [gitea-sailpoint-mirror-runbook.md](gitea-sailpoint-mirror-runbook.md)).
 
+**Kein `actions/checkout` — bewusst.** Der `act_runner:nightly`-Container hat
+kein `node`-Binary, und die Runner-Labels laufen `host://` (siehe
+[gitea-actions-runner.md](upgrades/gitea-actions-runner.md), Umstieg auf
+`host://` wegen `/var/run`-Symlink-Problemen) — JS-basierte Actions wie
+`actions/checkout@v4` scheitern dort mit `Cannot find: node in PATH`
+(bestätigt per `kubectl exec` in den Runner-Pod: kein `node` im Image, `apk`
+vorhanden aber nur ephemer). Betrifft grundsätzlich **jeden** Workflow auf
+diesem Runner, nicht nur diesen hier. Stattdessen — wie bei
+`mirror-to-sailpoint.yml` und `build-and-push.yml` in
+prism/erp-portal/seri-k8s/trakkws-quarkus — reines `git clone --mirror` in
+einem `run:`-Step mit dem automatisch von Gitea Actions bereitgestellten
+`secrets.GITEA_TOKEN`.
+
 **Setup (einmalig, siehe Gitea-Secret unten):** Der Workflow braucht ein
 Repo-Secret `PERSONAL_GITHUB_TOKEN` (GitHub PAT, Scope `repo`, Account
 `arx666x`) unter
-`https://gitea.reckeweg.io/achim/homelab-infrastructure/settings/actions/secrets`.
+`https://gitea.reckeweg.io/achim/homelab-infrastructure/settings/actions/secrets`
+— **bereits angelegt** (2026-07-27). `secrets.GITEA_TOKEN` braucht keine
+manuelle Einrichtung (automatisch von Gitea Actions pro Repo bereitgestellt).
 Rotation bei Ablauf: neuen PAT erzeugen und dasselbe Secret überschreiben —
 kein Redeploy nötig, der nächste Push nutzt automatisch den neuen Wert.
 
