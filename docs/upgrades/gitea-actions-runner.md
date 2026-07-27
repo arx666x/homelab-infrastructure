@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** gitea
-- **Aktuelle Version:** Helm-Chart `actions` 0.1.1, Runner-Image `docker.io/gitea/act_runner:nightly`
+- **Aktuelle Version:** Helm-Chart `actions` 0.1.2, Runner-Image `docker.io/gitea/act_runner:nightly`
 - **Quelle:** Helm-Chart-Repo `https://dl.gitea.com/charts/` (Chart `actions`); Runner-Image von Docker Hub (`gitea/act_runner`)
 - **ArgoCD App-Name:** gitea-actions
 - **Versions-Check-Quelle:** `homelab-version-checker` (CronJob, `gitops/config/monitoring/homelab-version-checker-v2.yaml`) vergleicht per `helm search repo actions --versions` gegen `targetRevision` in `gitops/apps/gitea/gitea-actions.yaml` — generischer Helm-Chart-Versionsvergleich für ArgoCD-Applications, kein Sonder-Mapping wie bei GitHub-Komponenten. Das Runner-Image-Tag (`nightly`) wird davon nicht separat getrackt.
@@ -22,6 +22,7 @@
 | 2026-05-18 | Resource-Anpassung | — | Manuell | Abgeschlossen | Runner-Resources für Multi-Arch-Builds erhöht; PVC-Size-Änderung wieder zurückgenommen (StatefulSet `volumeClaimTemplates` sind immutable) | Commits `b5a211b`, `f4d3f19` |
 | 2026-05-26 | Chart 0.1.0 → 0.1.1 | Minor (Breaking Change) | Manuell | Abgeschlossen | Chart benennt alle `act-runner`-Referenzen in `runner` um (StatefulSet, PVC-Template, values-Key `statefulset.actRunner` → `statefulset.runner`); ArgoCD löscht alten StatefulSet/PVC und legt neue an, altes PVC (nur Docker-Layer-Cache) muss manuell nachträglich gelöscht werden | Vollständiges Vorgehen siehe „Manuelle Vorgehensweise" unten |
 | 2026-06-01 | Runner-Image 0.6.1 → nightly | Minor→Major (faktisch) | Manuell | Abgeschlossen | Umstieg auf `nightly`-Tag nötig, um mehrere aufeinanderfolgende Laufzeit-Bugs zu beheben (siehe Stolperfallen); vier Folge-Fixes am selben Tag (Image-Remap, tmpfs-Workaround, `workdir_parent`, schließlich `host://`-Execution) | Commits `c48822c`, `af9e27b`, `15577df`, `d75876c`, `0ca9b2c` |
+| 2026-07-27 | Chart 0.1.1 → 0.1.2 | Minor | Manuell | Abgeschlossen | Kein Resource-Rename diesmal (StatefulSet/PVC-Namen unverändert) — nur Init-Container-Rename `init-gitea`→`reach-gitea` (im Repo nirgends referenziert) und Patch-Bumps der Default-Images (busybox 1.37.0→1.38.0, DinD 29.5.1→29.5.2-dind, App-Version bleibt 0.261.3) | Vorab-Chart-Diff bestätigte geringes Risiko; trotzdem trat beim ersten Rollout ein transienter Runner-Crash auf (siehe Stolperfallen) — nach Pod-Neuerstellung behoben |
 
 ### Reklassifizierungen (Minor → Major)
 
@@ -152,6 +153,22 @@ kubectl get pvc -n gitea | grep act-runner
 - **`global.storageClass` löst nindent-Bug im Chart-Helper aus:** Führt zu YAML-Rendering-Fehlern; stattdessen `storageClass` direkt unter `persistence` setzen (Commit `a0dff28`).
 - **`valuesObject` mit verschachtelten YAML-Block-Scalars problematisch:** ArgoCD-`valuesObject` (inline in der Application) verursachte Parse-Fehler bei mehrzeiligen `config:`-Blöcken; Umstieg auf `valueFiles` mit separater `values.yaml` über einen zweiten Git-Source (`ref: values`) behoben (Commits `1a56196`, `0afeb13`).
 - **StatefulSet-PVC-Größe ist immutable:** Eine versuchte PVC-Size-Änderung musste zurückgenommen werden, da `volumeClaimTemplates` eines StatefulSets nach Erstellung nicht mehr änderbar sind (Commit `f4d3f19`, 2026-05-18). Für eine PVC-Größenänderung ist ein manueller PVC-Ersatz (wie beim 0.1.0→0.1.1-Rename) nötig.
+- **Transienter Runner-Crash direkt nach Chart-Bump (2026-07-27, 0.1.1→0.1.2):** Nach dem Sync
+  startete der `runner`-Container 4× mit `Error: failed to load registration file: invalid
+  character '/' looking for beginning of value` (CrashLoopBackOff), obwohl weder PVC noch
+  `.runner`-Registrierungsdatei durch den Chart-Bump betroffen waren (kein Rename, siehe oben).
+  Die Init-Container (`reach-gitea`, `dind`) liefen beide fehlerfrei durch. Fix: StatefulSet auf
+  `replicas: 0` skaliert (PVC freigegeben, Longhorn-Volume vollständig detached), ArgoCD-SelfHeal
+  hat danach automatisch wieder auf `replicas: 1` hochskaliert — der neu erstellte Pod (volles
+  Neu-Attachen des Longhorn-Volumes statt reiner Container-Restart innerhalb desselben Pods)
+  registrierte sich beim zweiten Versuch ohne Fehler (`declare successfully` im Log). Vermutung:
+  stale Volume-Mount/Page-Cache-Artefakt vom vorherigen Pod, kein echter Dateiinhalts-Fehler —
+  ein reiner Container-Restart (ohne Pod-Neuerstellung) behebt das vermutlich nicht, da das
+  Volume dabei nicht neu gemountet wird. Falls das Muster erneut auftritt und ein Pod-Recreate
+  nicht hilft: `.runner`-Datei manuell aus dem PVC löschen (temporärer Debug-Pod mit
+  `data-runner-...`-PVC mounten, siehe `cache-flusher`-Init-Container-Logik im Chart als
+  Vorlage) — mit gültigem `GITEA_RUNNER_REGISTRATION_TOKEN` registriert sich der Runner beim
+  nächsten Start automatisch neu.
 - **Alte Config-Datei `gitops/config/gitea/actions-values.yaml` nicht mehr aktuell:** Stammt aus der Chart-0.1.0-Einführungsphase (Februar/April 2026) und wird von der aktuell aktiven ArgoCD-Source nicht mehr referenziert — nur `gitops/config/gitea-actions/values.yaml` ist live. Verwirrungsgefahr bei künftigen Änderungen.
 
 ## Rollback-Plan
