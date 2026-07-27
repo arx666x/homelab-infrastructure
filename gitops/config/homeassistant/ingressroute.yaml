@@ -10,15 +10,13 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # Authentik ForwardAuth-Gate - HomeAssistant hat kein OIDC-Login, das
-    # sich deklarativ anbinden liesse. Braucht zusaetzlich die ungegatete
-    # Outpost-Passthrough-Route, siehe
-    # gitops/config/authentik/outpost-passthrough-ingressroute.yaml
+    # ForwardAuth-Gate entfernt (2026-07-27) - ersetzt durch natives OIDC
+    # ueber die HACS-Komponente "hass-oidc-auth" (siehe
+    # gitops/config/authentik/blueprints-configmap.yaml,
+    # homeassistant-oidc.yaml). Beides gleichzeitig haette ein doppeltes
+    # Login bedeutet.
     - match: Host(`homeassistant.reckeweg.io`)
       kind: Rule
-      middlewares:
-        - name: authentik-forward-auth
-          namespace: authentik
       services:
         - name: homeassistant
           port: 8123
