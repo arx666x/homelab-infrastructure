@@ -22,6 +22,7 @@
     watchdog_check_interval_sec: 120    # how often to run the check (seconds)
     watchdog_failure_threshold: 3       # consecutive failures before reboot
     watchdog_connect_timeout_sec: 10    # ssh ConnectTimeout per attempt
+    watchdog_dstate_threshold: 5        # processes in D-state to count as a "pile-up"
     watchdog_script_path: /usr/local/bin/ssh-watchdog.sh
     watchdog_state_dir: /var/lib/ssh-watchdog
 
@@ -105,45 +106,81 @@
         content: |
           #!/bin/bash
           # ssh-watchdog.sh
-          # Checks SSH responsiveness on localhost via ssh-keyscan.
-          # Reboots the node after {{ watchdog_failure_threshold }} consecutive failures.
+          # Checks SSH responsiveness on localhost via ssh-keyscan, and separately
+          # checks for a sustained pile-up of D-state (uninterruptible sleep)
+          # processes. A hung disk/iSCSI/Longhorn mount can leave processes that
+          # need to fork or write (sshd sessions, containerd) stuck in D-state
+          # while the network stack and systemd's own watchdog-ping loop keep
+          # running fine - that combination shows up as "ping works, SSH doesn't"
+          # without ever being caught by either the SSH check alone or systemd's
+          # RuntimeWatchdogSec (see k3s-06a incident 2026-07-28).
+          # Reboots the node after {{ watchdog_failure_threshold }} consecutive
+          # failures of either check.
 
           THRESHOLD={{ watchdog_failure_threshold }}
           CONNECT_TIMEOUT={{ watchdog_connect_timeout_sec }}
+          DSTATE_THRESHOLD={{ watchdog_dstate_threshold }}
           STATE_FILE={{ watchdog_state_dir }}/fail_count
+          DSTATE_FILE={{ watchdog_state_dir }}/dstate_count
           LOG_TAG="ssh-watchdog"
 
-          # Read current failure count (default 0)
+          # --- SSH check ---
+          # Performs a full TCP + SSH handshake up to host key exchange
+          # without requiring a login or any credentials on this node.
+          # Fails if sshd is unresponsive, hung, or not accepting connections.
+
           FAIL_COUNT=0
           if [[ -f "$STATE_FILE" ]]; then
             FAIL_COUNT=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
           fi
 
-          # Check SSH responsiveness via ssh-keyscan.
-          # Performs a full TCP + SSH handshake up to host key exchange
-          # without requiring a login or any credentials on this node.
-          # Fails if sshd is unresponsive, hung, or not accepting connections.
           ssh-keyscan -T "${CONNECT_TIMEOUT}" -p 22 127.0.0.1 2>/dev/null | grep -q "ssh-"
-
           SSH_RC=$?
 
           if [[ $SSH_RC -eq 0 ]]; then
-            # SSH is healthy - reset counter
             if [[ "$FAIL_COUNT" -gt 0 ]]; then
               logger -t "$LOG_TAG" "SSH recovered after ${FAIL_COUNT} failure(s). Resetting counter."
             fi
-            echo 0 > "$STATE_FILE"
-            exit 0
+            FAIL_COUNT=0
+          else
+            FAIL_COUNT=$(( FAIL_COUNT + 1 ))
+            logger -t "$LOG_TAG" "WARNING: SSH check failed (attempt ${FAIL_COUNT}/${THRESHOLD}, rc=${SSH_RC})"
+          fi
+          echo "$FAIL_COUNT" > "$STATE_FILE"
+
+          # --- D-state pile-up check ---
+          # Reads /proc directly instead of shelling out to ps, since ps could
+          # itself stall if it touches the same hung mount we're checking for.
+          # Field 3 of /proc/<pid>/stat is the single-letter process state.
+
+          DSTATE_NOW=$(awk '{print $3}' /proc/[0-9]*/stat 2>/dev/null | grep -c '^D')
+
+          DSTATE_COUNT=0
+          if [[ -f "$DSTATE_FILE" ]]; then
+            DSTATE_COUNT=$(cat "$DSTATE_FILE" 2>/dev/null || echo 0)
           fi
 
-          # SSH failed - increment counter
-          FAIL_COUNT=$(( FAIL_COUNT + 1 ))
-          echo "$FAIL_COUNT" > "$STATE_FILE"
-          logger -t "$LOG_TAG" "WARNING: SSH check failed (attempt ${FAIL_COUNT}/${THRESHOLD}, rc=${SSH_RC})"
+          if [[ "$DSTATE_NOW" -ge "$DSTATE_THRESHOLD" ]]; then
+            DSTATE_COUNT=$(( DSTATE_COUNT + 1 ))
+            logger -t "$LOG_TAG" "WARNING: ${DSTATE_NOW} processes stuck in D-state (attempt ${DSTATE_COUNT}/${THRESHOLD}) - possible hung disk/iSCSI mount"
+          else
+            if [[ "$DSTATE_COUNT" -gt 0 ]]; then
+              logger -t "$LOG_TAG" "D-state pile-up recovered after ${DSTATE_COUNT} failure(s). Resetting counter."
+            fi
+            DSTATE_COUNT=0
+          fi
+          echo "$DSTATE_COUNT" > "$DSTATE_FILE"
 
+          # --- Escalate ---
           if [[ "$FAIL_COUNT" -ge "$THRESHOLD" ]]; then
             logger -t "$LOG_TAG" "CRITICAL: SSH unresponsive for ${THRESHOLD} consecutive checks. Initiating reboot."
             echo 0 > "$STATE_FILE"
+            echo 0 > "$DSTATE_FILE"
+            /bin/systemctl reboot
+          elif [[ "$DSTATE_COUNT" -ge "$THRESHOLD" ]]; then
+            logger -t "$LOG_TAG" "CRITICAL: D-state process pile-up (>= ${DSTATE_THRESHOLD}) sustained for ${THRESHOLD} consecutive checks. Initiating reboot."
+            echo 0 > "$STATE_FILE"
+            echo 0 > "$DSTATE_FILE"
             /bin/systemctl reboot
           fi
       tags: [install, watchdog]

@@ -9,7 +9,7 @@ spec:
   task: backup
   groups:
     - default
-  retain: 90
+  retain: 14
   concurrency: 1
   labels: {}
 

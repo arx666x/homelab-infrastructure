@@ -209,6 +209,13 @@
         - not skip_os_update | bool
         - apt_result.stdout_lines is defined
 
+    - name: "[ APT ] nvme-cli sicherstellen (SMART-Diagnose bei künftigen Incidents)"
+      become: true
+      apt:
+        name: nvme-cli
+        state: present
+      when: not skip_os_update | bool
+
     # -------------------------------------------------------------------------
     # K3S BINARY UPDATE
     # Strategie: Binary direkt von GitHub herunterladen, Unit-File per

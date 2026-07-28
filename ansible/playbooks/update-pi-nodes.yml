@@ -191,6 +191,12 @@
         msg: "{{ apt_result.stdout_lines | select('match', '^(Inst|Remv)') | list }}"
       when: apt_result.stdout_lines is defined
 
+    - name: "[ APT ] nvme-cli sicherstellen (SMART-Diagnose bei künftigen Incidents)"
+      become: true
+      apt:
+        name: nvme-cli
+        state: present
+
     # -------------------------------------------------------------------------
     # IPTABLES → NFT BACKEND (Kernel 6.18+ hat kein ip_tables-Modul mehr)
     # Flannel und kube-proxy rufen /usr/sbin/iptables auf. Der RPi-Kernel 6.18

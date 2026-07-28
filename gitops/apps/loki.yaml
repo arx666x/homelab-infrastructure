@@ -20,6 +20,16 @@ spec:
             enabled: true
             storageClassName: longhorn
             size: 20Gi
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values:
+                          - k3s-03a
+                          - k3s-06a
           config:
             limits_config:
               retention_period: 744h
