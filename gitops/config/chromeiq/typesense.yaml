@@ -104,12 +104,16 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
+          # 1Gi limit was a rough guess at planning time, before the real
+          # collection size was known - 71.8k albums / 1.04M tracks (2026-07-29)
+          # OOMKilled the pod into a crash loop under real query load. Bumped
+          # generously; node has ample headroom (see incident notes).
           resources:
             requests:
-              memory: 512Mi
+              memory: 2Gi
               cpu: 500m
             limits:
-              memory: 1Gi
+              memory: 4Gi
               cpu: "1"
       volumes:
         - name: data
