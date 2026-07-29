@@ -1,0 +1,114 @@
+# =============================================================================
+# ciq-frontend - ChromeIQ's React UI (musik-inventarisierung-konzept.md
+# 3.5). Static nginx-served build, VITE_API_BASE_URL baked in at image-
+# build time (see ciq-frontend/Dockerfile) pointing at ciq-backend's own
+# Ingress host below.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ciq-frontend
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: ciq-frontend
+    app.kubernetes.io/instance: chromeiq
+    app.kubernetes.io/component: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ciq-frontend
+      app.kubernetes.io/instance: chromeiq
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ciq-frontend
+        app.kubernetes.io/instance: chromeiq
+        app.kubernetes.io/component: web
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: [amd64]
+      containers:
+        - name: ciq-frontend
+          image: gitea.reckeweg.io/achim/ciq-frontend:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ciq-frontend
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: ciq-frontend
+    app.kubernetes.io/instance: chromeiq
+spec:
+  selector:
+    app.kubernetes.io/name: ciq-frontend
+    app.kubernetes.io/instance: chromeiq
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ciq-tls
+  namespace: chromeiq
+spec:
+  secretName: ciq-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - ciq.reckeweg.io
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ciq-frontend
+  namespace: chromeiq
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [ciq.reckeweg.io]
+      secretName: ciq-tls
+  rules:
+    - host: ciq.reckeweg.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ciq-frontend
+                port:
+                  number: 80

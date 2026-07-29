@@ -1,0 +1,151 @@
+# =============================================================================
+# ciq-backend - ChromeIQ's read-only JSON API (musik-inventarisierung-
+# konzept.md 3.4). Talks to chromeiq-postgresql/chromeiq-typesense via
+# in-cluster ClusterIP DNS (not the external *-lb Services, which stay
+# reserved for the crawler running on the Musicbox outside the cluster),
+# and reads cover/review/lyrics files from the SMB-backed music mount
+# (see smb-pv.yaml).
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ciq-backend
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: ciq-backend
+    app.kubernetes.io/instance: chromeiq
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ciq-backend
+      app.kubernetes.io/instance: chromeiq
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ciq-backend
+        app.kubernetes.io/instance: chromeiq
+        app.kubernetes.io/component: api
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: [amd64]
+      containers:
+        - name: ciq-backend
+          image: gitea.reckeweg.io/achim/ciq-backend:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: CIQ_BACKEND_POSTGRES_HOST
+              value: "chromeiq-postgresql.chromeiq.svc.cluster.local"
+            - name: CIQ_BACKEND_POSTGRES_DB
+              value: "chromeiq"
+            - name: CIQ_BACKEND_POSTGRES_USER
+              value: "chromeiq"
+            - name: CIQ_BACKEND_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-postgresql-secret
+                  key: password
+            - name: CIQ_BACKEND_TYPESENSE_URL
+              value: "http://chromeiq-typesense.chromeiq.svc.cluster.local:8108"
+            - name: CIQ_BACKEND_TYPESENSE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-typesense-secret
+                  key: api-key
+            - name: CIQ_BACKEND_CORS_ORIGIN
+              value: "https://ciq.reckeweg.io"
+            - name: CIQ_BACKEND_MUSIC_ROOT
+              value: "/music"
+          volumeMounts:
+            - name: music
+              mountPath: /music
+              readOnly: true
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: {memory: 512Mi, cpu: 500m}
+            limits: {memory: 1Gi, cpu: "1"}
+      volumes:
+        - name: music
+          persistentVolumeClaim:
+            claimName: chromeiq-musicbox-music
+            readOnly: true
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ciq-backend
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: ciq-backend
+    app.kubernetes.io/instance: chromeiq
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: ciq-backend
+    app.kubernetes.io/instance: chromeiq
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ciq-api-tls
+  namespace: chromeiq
+spec:
+  secretName: ciq-api-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - ciq-api.reckeweg.io
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ciq-backend
+  namespace: chromeiq
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [ciq-api.reckeweg.io]
+      secretName: ciq-api-tls
+  rules:
+    - host: ciq-api.reckeweg.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ciq-backend
+                port:
+                  number: 8080

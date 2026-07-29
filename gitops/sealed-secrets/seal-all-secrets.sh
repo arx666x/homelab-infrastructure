@@ -422,9 +422,26 @@ else
   success "gitops/config/chromeiq/sealed-typesense-secret.yaml"
 fi
 
+# SMB-Credentials fuer die Musicbox-Library-Freigabe (//musicbox/music) -
+# echter SMB-User "chromeiq", read-only Zugriff. Erstes SMB-Volume in
+# diesem Cluster, s. gitops/apps/csi-driver-smb.yaml und
+# gitops/config/chromeiq/smb-pv.yaml (nodeStageSecretRef erwartet exakt
+# die Keys "username"/"password").
+if kubectl get secret chromeiq-smb-secret -n chromeiq &>/dev/null; then
+  seal_from_cluster "chromeiq-smb-secret" "chromeiq" \
+    "gitops/config/chromeiq/sealed-smb-secret.yaml"
+else
+  warn "chromeiq-smb-secret nicht im Cluster – interaktiv eingeben:"
+  seal_new "chromeiq-smb-secret" "chromeiq" \
+    "gitops/config/chromeiq/sealed-smb-secret.yaml" \
+    "username" "password"
+fi
+
 # Reminder: sealed-*.yaml erst in gitops/config/chromeiq/kustomization.yaml
 # aufnehmen, nachdem sie hier echt generiert wurden (s. Kommentare in den
 # Platzhalter-Dateien) - sonst crashloopt Postgres/Typesense mangels Passwort.
+# Das gilt jetzt auch fuer sealed-smb-secret.yaml + smb-pv.yaml/
+# ciq-backend.yaml, sobald diese ebenfalls in der kustomization.yaml stehen.
 
 # =============================================================================
 # 7. ARGOCD IMAGE UPDATER

@@ -7,3 +7,12 @@ resources:
   - typesense.yaml
   - sealed-postgresql-secret.yaml
   - sealed-typesense-secret.yaml
+  - smb-pv.yaml
+  - ciq-backend.yaml
+  - ciq-frontend.yaml
+  # sealed-smb-secret.yaml is NOT listed here yet - the file doesn't exist
+  # until Achim runs the updated seal-all-secrets.sh (see its comment in
+  # that script). Add it to this list once it's been generated for real -
+  # until then, ciq-backend's pod will sit at ContainerCreating (PVC can't
+  # mount without the SMB credentials Secret), same failure mode already
+  # documented for a missing postgres/typesense secret.

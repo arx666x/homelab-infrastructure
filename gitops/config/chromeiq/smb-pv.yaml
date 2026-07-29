@@ -1,0 +1,75 @@
+# =============================================================================
+# SMB-backed static volume for the real Musicbox library share
+# (//musicbox/music) - first SMB/CSI volume in this cluster, see
+# gitops/apps/csi-driver-smb.yaml for the driver install.
+#
+# Static (not dynamic) provisioning: this is one fixed external share, not
+# a pool of independently-provisionable volumes, so a StorageClass with a
+# provisioner isn't the right tool - a single PV+PVC pair pointing
+# straight at the smb.csi.k8s.io driver is simpler and matches upstream's
+# own recommended pattern for "one external share" use cases.
+#
+# storageClassName is set to a non-empty, cluster-unused value
+# ("smb-static") on BOTH the PV and PVC, and both must match. This is
+# required precisely because Longhorn is this cluster's default
+# StorageClass (persistence.defaultClass: true, gitops/apps/longhorn.yaml)
+# - a PVC without an explicit storageClassName match would otherwise get
+# quietly and dynamically provisioned by Longhorn instead of statically
+# binding to this PV.
+#
+# Only //musicbox/music is mounted - //musicbox/playlists isn't needed by
+# ciq-backend in this slice (Playlists tab is still a static empty-state
+# placeholder, Phase 2).
+# =============================================================================
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: chromeiq-musicbox-music-pv
+  labels:
+    app.kubernetes.io/name: musicbox-music
+    app.kubernetes.io/instance: chromeiq
+spec:
+  capacity:
+    storage: 2Ti # nominal only - the SMB driver doesn't enforce a quota
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain # never let k8s delete/reformat an external share's contents
+  storageClassName: smb-static
+  mountOptions:
+    - dir_mode=0777
+    - file_mode=0777
+    - vers=3.0
+  csi:
+    driver: smb.csi.k8s.io
+    readOnly: true
+    volumeHandle: chromeiq-musicbox-music # unique cluster-wide, arbitrary string, no dynamic provisioner involved
+    volumeAttributes:
+      source: "//musicbox/music"
+    nodeStageSecretRef:
+      name: chromeiq-smb-secret
+      namespace: chromeiq
+  claimRef:
+    # Ties this PV to exactly one PVC so nothing else can accidentally
+    # bind to it (defense in depth alongside the storageClassName trick).
+    namespace: chromeiq
+    name: chromeiq-musicbox-music
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chromeiq-musicbox-music
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: musicbox-music
+    app.kubernetes.io/instance: chromeiq
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: smb-static
+  resources:
+    requests:
+      storage: 2Ti
+  volumeName: chromeiq-musicbox-music-pv

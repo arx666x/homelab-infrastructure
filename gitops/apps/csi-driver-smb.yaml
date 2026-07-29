@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: csi-driver-smb
+  namespace: argocd
+  annotations:
+    # Grouped with longhorn (also wave 3, also a storage-provider Helm
+    # install) purely for ArgoCD-UI documentation/grouping - not a hard
+    # dependency. chromeiq's PV/PVC/Pod referencing this driver can sync
+    # in any order relative to this Application: a PVC referencing a
+    # not-yet-ready driver just stays Pending, a Pod mounting it just
+    # stays ContainerCreating - both self-heal once the driver is up,
+    # exactly like chromeiq-postgresql (storageClassName: longhorn) never
+    # needed a sync-wave relative to the longhorn Application either.
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    chart: csi-driver-smb
+    repoURL: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-smb/master/charts
+    # TODO: pin to the actual latest released chart version before/at
+    # apply time - verify against the charts/ index in that repo.
+    targetRevision: "v1.18.0"
+    helm:
+      releaseName: csi-driver-smb
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
