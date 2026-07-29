@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ciq-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "/Users/achim.reckeweg/git/ChromeIQ/ciq-frontend"],
+      "port": 5173
+    }
+  ]
+}
