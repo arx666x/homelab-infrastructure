@@ -69,6 +69,11 @@ spec:
               value: "https://ciq.reckeweg.io"
             - name: CIQ_BACKEND_MUSIC_ROOT
               value: "/music"
+            - name: CIQ_BACKEND_LASTFM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-lastfm-secret
+                  key: api-key
           volumeMounts:
             - name: music
               mountPath: /music

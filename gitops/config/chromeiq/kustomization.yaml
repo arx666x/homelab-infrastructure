@@ -11,4 +11,5 @@ resources:
   - ciq-backend.yaml
   - ciq-frontend.yaml
   # created and added  2026.07.29 AR
-  - sealed-smb-secret.yaml 
+  - sealed-smb-secret.yaml
+  - sealed-lastfm-secret.yaml 

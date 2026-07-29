@@ -437,6 +437,21 @@ else
     "username" "password"
 fi
 
+# Last.fm-API-Key fuer die Interpret-Seiten-Bio (ciq-backend/internal/
+# lastfm/client.go) - Achims eigener Key von last.fm/api/account/create,
+# kein Passwort das er sich merken muss, aber auch nicht generierbar wie
+# der Typesense-Key. Achim hat den Key ueber die Optionen-Seite (externe
+# Links, Last.fm-Zeile, API-Key-Spalte) statt im Chat uebergeben.
+if kubectl get secret chromeiq-lastfm-secret -n chromeiq &>/dev/null; then
+  seal_from_cluster "chromeiq-lastfm-secret" "chromeiq" \
+    "gitops/config/chromeiq/sealed-lastfm-secret.yaml"
+else
+  warn "chromeiq-lastfm-secret nicht im Cluster – interaktiv eingeben:"
+  seal_new "chromeiq-lastfm-secret" "chromeiq" \
+    "gitops/config/chromeiq/sealed-lastfm-secret.yaml" \
+    "api-key"
+fi
+
 # Reminder: sealed-*.yaml erst in gitops/config/chromeiq/kustomization.yaml
 # aufnehmen, nachdem sie hier echt generiert wurden (s. Kommentare in den
 # Platzhalter-Dateien) - sonst crashloopt Postgres/Typesense mangels Passwort.
