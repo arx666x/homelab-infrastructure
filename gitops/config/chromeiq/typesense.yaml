@@ -88,33 +88,40 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+          # Cold start replays the raft log (1M+ track docs) before /health
+          # responds - incident 2026-07-29 showed the old 80s liveness grace
+          # period (20s + 6*10s) killing the container mid-replay every time,
+          # so the ~330k-entry backlog never shrank and it crash-looped
+          # indefinitely. Generous grace period so a restart can actually
+          # finish catching up. Readiness stays tighter since a failed
+          # readiness only pulls it out of rotation, doesn't restart it.
           livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 40
+          readinessProbe:
             httpGet:
               path: /health
               port: http
             initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 6
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 6
-          # 1Gi limit was a rough guess at planning time, before the real
-          # collection size was known - 71.8k albums / 1.04M tracks (2026-07-29)
-          # OOMKilled the pod into a crash loop under real query load. Bumped
-          # generously; node has ample headroom (see incident notes).
+            failureThreshold: 30
+          # 1Gi/1-core limits were a rough guess at planning time, before the
+          # real collection size was known - 71.8k albums / 1.04M tracks
+          # (2026-07-29) OOMKilled the pod into a crash loop under real query
+          # load. Bumped generously; node has ample headroom.
           resources:
             requests:
               memory: 2Gi
-              cpu: 500m
+              cpu: "1"
             limits:
               memory: 4Gi
-              cpu: "1"
+              cpu: "2"
       volumes:
         - name: data
           persistentVolumeClaim:
