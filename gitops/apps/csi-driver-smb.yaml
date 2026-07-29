@@ -18,9 +18,7 @@ spec:
   source:
     chart: csi-driver-smb
     repoURL: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-smb/master/charts
-    # TODO: pin to the actual latest released chart version before/at
-    # apply time - verify against the charts/ index in that repo.
-    targetRevision: "v1.18.0"
+    targetRevision: "v1.20.3"
     helm:
       releaseName: csi-driver-smb
   destination:
