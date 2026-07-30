@@ -12,4 +12,4 @@ resources:
 # gitops/config/argocd-image-updater/imageupdater-auditique.yaml.
 images:
   - name: gitea.reckeweg.io/susann/redesign
-    newTag: rc-0.8.1
+    newTag: rc-0.8.2
