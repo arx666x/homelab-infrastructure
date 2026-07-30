@@ -1,25 +1,30 @@
 # =============================================================================
-# SMB-backed static volume for the real Musicbox library share
-# (//musicbox/music) - first SMB/CSI volume in this cluster, see
-# gitops/apps/csi-driver-smb.yaml for the driver install.
+# SMB-backed static volumes for the real Musicbox shares - first SMB/CSI
+# volumes in this cluster, see gitops/apps/csi-driver-smb.yaml for the
+# driver install.
 #
-# Static (not dynamic) provisioning: this is one fixed external share, not
+# Static (not dynamic) provisioning: these are fixed external shares, not
 # a pool of independently-provisionable volumes, so a StorageClass with a
-# provisioner isn't the right tool - a single PV+PVC pair pointing
-# straight at the smb.csi.k8s.io driver is simpler and matches upstream's
-# own recommended pattern for "one external share" use cases.
+# provisioner isn't the right tool - a single PV+PVC pair per share
+# pointing straight at the smb.csi.k8s.io driver is simpler and matches
+# upstream's own recommended pattern for "one external share" use cases.
 #
 # storageClassName is set to a non-empty, cluster-unused value
-# ("smb-static") on BOTH the PV and PVC, and both must match. This is
+# ("smb-static") on BOTH each PV and its PVC, and both must match. This is
 # required precisely because Longhorn is this cluster's default
 # StorageClass (persistence.defaultClass: true, gitops/apps/longhorn.yaml)
 # - a PVC without an explicit storageClassName match would otherwise get
 # quietly and dynamically provisioned by Longhorn instead of statically
 # binding to this PV.
 #
-# Only //musicbox/music is mounted - //musicbox/playlists isn't needed by
-# ciq-backend in this slice (Playlists tab is still a static empty-state
-# placeholder, Phase 2).
+# Two shares: //musicbox/music (read-only, the crawled library - see
+# docs/architecture.md, ciq-backend only ever reads it for cover/review/
+# lyrics) and //musicbox/playlists (read-write, added for the Playlist
+# feature - Achim confirmed the same SMB user already has RW access to
+# this share). Deliberately separate PVs/mounts rather than one shared
+# mount with different access modes per consumer, so the music share's
+# RO guarantee is structural (the PV itself is readOnly), not just a
+# volumeMount-level convention ciq-backend could accidentally drop.
 # =============================================================================
 
 ---
@@ -73,3 +78,54 @@ spec:
     requests:
       storage: 2Ti
   volumeName: chromeiq-musicbox-music-pv
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: chromeiq-musicbox-playlists-pv
+  labels:
+    app.kubernetes.io/name: musicbox-playlists
+    app.kubernetes.io/instance: chromeiq
+spec:
+  capacity:
+    storage: 10Gi # nominal only - the SMB driver doesn't enforce a quota, playlists are tiny text files
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain # never let k8s delete/reformat an external share's contents
+  storageClassName: smb-static
+  mountOptions:
+    - dir_mode=0777
+    - file_mode=0777
+    - vers=3.0
+  csi:
+    driver: smb.csi.k8s.io
+    volumeHandle: chromeiq-musicbox-playlists # unique cluster-wide, arbitrary string, no dynamic provisioner involved
+    volumeAttributes:
+      source: "//musicbox/playlists"
+    nodeStageSecretRef:
+      name: chromeiq-smb-secret # same SMB user as the music share - already has RW on //musicbox/playlists
+      namespace: chromeiq
+  claimRef:
+    # Ties this PV to exactly one PVC so nothing else can accidentally
+    # bind to it (defense in depth alongside the storageClassName trick).
+    namespace: chromeiq
+    name: chromeiq-musicbox-playlists
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chromeiq-musicbox-playlists
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: musicbox-playlists
+    app.kubernetes.io/instance: chromeiq
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: smb-static
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: chromeiq-musicbox-playlists-pv

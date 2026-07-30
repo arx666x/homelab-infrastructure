@@ -1,10 +1,13 @@
 # =============================================================================
-# ciq-backend - ChromeIQ's read-only JSON API (musik-inventarisierung-
-# konzept.md 3.4). Talks to chromeiq-postgresql/chromeiq-typesense via
-# in-cluster ClusterIP DNS (not the external *-lb Services, which stay
-# reserved for the crawler running on the Musicbox outside the cluster),
-# and reads cover/review/lyrics files from the SMB-backed music mount
-# (see smb-pv.yaml).
+# ciq-backend - ChromeIQ's JSON API (musik-inventarisierung-konzept.md
+# 3.4). Talks to chromeiq-postgresql/chromeiq-typesense via in-cluster
+# ClusterIP DNS (not the external *-lb Services, which stay reserved for
+# the crawler running on the Musicbox outside the cluster), and reads
+# cover/review/lyrics files from the SMB-backed, read-only music mount
+# (see smb-pv.yaml). Since the Playlist feature, it also gets a second,
+# read-write SMB mount (//musicbox/playlists) - the only part of the
+# catalog ciq-backend itself writes back to disk, kept on its own share
+# so the music mount's read-only guarantee stays untouched.
 # =============================================================================
 
 apiVersion: apps/v1
@@ -40,7 +43,7 @@ spec:
                     values: [amd64]
       containers:
         - name: ciq-backend
-          image: gitea.reckeweg.io/achim/ciq-backend:1.0.5
+          image: gitea.reckeweg.io/achim/ciq-backend:1.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -69,6 +72,8 @@ spec:
               value: "https://ciq.reckeweg.io"
             - name: CIQ_BACKEND_MUSIC_ROOT
               value: "/music"
+            - name: CIQ_BACKEND_PLAYLISTS_ROOT
+              value: "/playlists"
             - name: CIQ_BACKEND_LASTFM_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -78,6 +83,8 @@ spec:
             - name: music
               mountPath: /music
               readOnly: true
+            - name: playlists
+              mountPath: /playlists
           readinessProbe:
             httpGet: {path: /healthz, port: http}
             initialDelaySeconds: 5
@@ -94,6 +101,9 @@ spec:
           persistentVolumeClaim:
             claimName: chromeiq-musicbox-music
             readOnly: true
+        - name: playlists
+          persistentVolumeClaim:
+            claimName: chromeiq-musicbox-playlists
 
 ---
 apiVersion: v1
