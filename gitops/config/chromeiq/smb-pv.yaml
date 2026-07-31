@@ -98,6 +98,20 @@ spec:
     - dir_mode=0777
     - file_mode=0777
     - vers=3.0
+    # Unlike the read-only music share, this mount's whole point is that
+    # ciq-backend notices externally-edited playlist files (its own
+    # 5-minute rescan ticker, see ciq-backend/internal/api/playlist_scan.go,
+    # diffs os.Stat() mtime/size against what it last saw). The Linux CIFS
+    # client's default attribute caching can keep serving a stale mtime/
+    # size for longer than expected after an external edit (found live
+    # 2026-07-31: Achim fixed wrong-root paths inside several m3u8 files,
+    # ciq-backend's periodic rescan - and even a manual POST /api/playlists/
+    # rescan - kept showing the old paths well past one tick). cache=none
+    # disables client-side data+attribute caching entirely, trading a
+    # little SMB chattiness for correctness - an acceptable trade for tiny,
+    # low-traffic playlist text files, not something you'd want on the
+    # music share's read path.
+    - cache=none
   csi:
     driver: smb.csi.k8s.io
     volumeHandle: chromeiq-musicbox-playlists # unique cluster-wide, arbitrary string, no dynamic provisioner involved
