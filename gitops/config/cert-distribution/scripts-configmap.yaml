@@ -30,7 +30,10 @@ data:
 
     remote_fingerprint() {
       # $1 = host:port  $2 = SNI-Hostname
-      echo | openssl s_client -connect "$1" -servername "$2" 2>/dev/null \
+      # -connect_timeout: ohne den hängt s_client bei einem nicht
+      # erreichbaren Host (Standby, Firewall-Drop ohne RST) je nach
+      # OS-TCP-Timeout im schlimmsten Fall stundenlang statt fehlzuschlagen.
+      echo | openssl s_client -connect "$1" -servername "$2" -connect_timeout 10 2>/dev/null \
         | openssl x509 -noout -sha256 -fingerprint 2>/dev/null | cut -d= -f2 || true
     }
 
@@ -70,12 +73,16 @@ data:
 
     BASE="https://${DSM_HOST}:${DSM_PORT}/webapi"
 
+    # --connect-timeout/--max-time: ohne die kann jeder Call hier bei einem
+    # nicht erreichbaren DSM stundenlang hängen statt fehlzuschlagen.
+    CURL=(curl -sk --connect-timeout 10 --max-time 30)
+
     # -G/--data-urlencode statt Query-String-Interpolation: Sonderzeichen in
     # Account/Passwort (%, &, +, #, Leerzeichen, ...) würden sonst die
     # Query-String-Interpretation auf DSM-Seite kaputt machen und zu einem
     # falschen "400 - No such account or incorrect password" führen, obwohl
     # Account und Passwort eigentlich stimmen.
-    SID="$(curl -sk -G "${BASE}/auth.cgi" \
+    SID="$("${CURL[@]}" -G "${BASE}/auth.cgi" \
       --data-urlencode "api=SYNO.API.Auth" \
       --data-urlencode "version=3" \
       --data-urlencode "method=login" \
@@ -94,20 +101,20 @@ data:
     # bei jedem Lauf einen neuen Zertifikats-Slot anzulegen.
     # Listing läuft über die .CRT-Sub-API, nicht über SYNO.Core.Certificate
     # selbst (das liefert bei method=list einen "103 method does not exist").
-    CERT_ID="$(curl -sk "${BASE}/entry.cgi?api=SYNO.Core.Certificate.CRT&method=list&version=1&_sid=${SID}" \
+    CERT_ID="$("${CURL[@]}" "${BASE}/entry.cgi?api=SYNO.Core.Certificate.CRT&method=list&version=1&_sid=${SID}" \
       | jq -r '.data.certificates[]? | select(.desc=="cert-manager") | .id' | head -n1)"
 
     IMPORT_URL="${BASE}/entry.cgi?api=SYNO.Core.Certificate&method=import&version=1&_sid=${SID}"
 
     if [ -n "$CERT_ID" ]; then
-      RESULT="$(curl -sk \
+      RESULT="$("${CURL[@]}" \
         -F "key=@${CERT_DIR}/tls.key" \
         -F "cert=@${WORK_DIR}/leaf.pem" \
         -F "inter_cert=@${WORK_DIR}/chain.pem" \
         -F "id=${CERT_ID}" -F "desc=cert-manager" -F "as_default=true" \
         "$IMPORT_URL")"
     else
-      RESULT="$(curl -sk \
+      RESULT="$("${CURL[@]}" \
         -F "key=@${CERT_DIR}/tls.key" \
         -F "cert=@${WORK_DIR}/leaf.pem" \
         -F "inter_cert=@${WORK_DIR}/chain.pem" \
@@ -115,7 +122,7 @@ data:
         "$IMPORT_URL")"
     fi
 
-    curl -sk "${BASE}/auth.cgi?api=SYNO.API.Auth&version=1&method=logout&session=Certificate" >/dev/null || true
+    "${CURL[@]}" "${BASE}/auth.cgi?api=SYNO.API.Auth&version=1&method=logout&session=Certificate" >/dev/null || true
 
     if echo "$RESULT" | jq -e '.success == true' >/dev/null 2>&1; then
       echo "  [OK] DSM-Zertifikat importiert (id=${CERT_ID:-neu})."
@@ -145,10 +152,14 @@ data:
 
     install -m 600 "$SSH_KEY" /tmp/cert-distribution/id_ed25519
 
+    # ConnectTimeout: ohne den hängt ssh bei einem nicht erreichbaren Host
+    # (Standby, Firewall-Drop ohne RST) je nach OS-TCP-Timeout im
+    # schlimmsten Fall stundenlang statt fehlzuschlagen.
     cat "${CERT_DIR}/tls.key" "${CERT_DIR}/tls.crt" \
       | ssh -i /tmp/cert-distribution/id_ed25519 \
             -o StrictHostKeyChecking=accept-new \
             -o BatchMode=yes \
+            -o ConnectTimeout=10 \
             "${TRUENAS_SSH_USER}@${TRUENAS_HOST}"
 
     echo "  [OK] Zertifikat an TrueNAS übertragen (Remote-Script validiert und wendet an)."
@@ -178,10 +189,14 @@ data:
     # FTL will Cert+Key kombiniert in EINER PEM-Datei (anders als TrueNAS, wo
     # midclt getrennte Felder erwartet) - Reihenfolge im Stream ist egal, das
     # Remote-Script erkennt beide Blocktypen selbst.
+    # ConnectTimeout: ohne den hängt ssh bei einem nicht erreichbaren Host
+    # (Standby, Firewall-Drop ohne RST) je nach OS-TCP-Timeout im
+    # schlimmsten Fall stundenlang statt fehlzuschlagen.
     cat "${CERT_DIR}/tls.crt" "${CERT_DIR}/tls.key" \
       | ssh -i /tmp/cert-distribution/id_ed25519 \
             -o StrictHostKeyChecking=accept-new \
             -o BatchMode=yes \
+            -o ConnectTimeout=10 \
             "${PIHOLE_SSH_USER}@${PIHOLE_HOST}"
 
     echo "  [OK] Zertifikat an Pi-hole übertragen (Remote-Script validiert und wendet an)."

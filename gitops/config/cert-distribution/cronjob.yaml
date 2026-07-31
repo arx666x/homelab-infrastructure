@@ -10,6 +10,10 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
+      # Sicherheitsnetz: falls trotz der Timeouts in den deploy-Scripts
+      # irgendwo etwas hängen bleibt, läuft der Job spätestens nach 5min
+      # in einen DeadlineExceeded statt stundenlang zu blockieren.
+      activeDeadlineSeconds: 300
       template:
         spec:
           serviceAccountName: cert-distributor
