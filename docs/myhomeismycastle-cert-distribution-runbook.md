@@ -458,6 +458,32 @@ oder (bei zweitem Lauf) `Fingerprint ... stimmt bereits überein, überspringe.`
 | `pihole-cert-deploy.sh` bricht mit "SAN nicht enthalten" ab | Wildcard-Cert enthält `dns01.reckeweg.io` nicht (sollte durch `*.reckeweg.io` immer der Fall sein) | `openssl x509 -in tls.crt -noout -text \| grep DNS:` prüfen |
 | `sudo /usr/local/bin/pihole-cert-deploy.sh` verlangt ein Passwort statt durchzulaufen | sudoers-Regel fehlt/falsch geschrieben | `sudo -l -U certdeploy` prüfen, Datei mit `visudo -c -f /etc/sudoers.d/certdeploy` auf Syntax prüfen |
 | FTL liefert nach erfolgreichem Deploy trotzdem das alte/ein neues selbstsigniertes Zertifikat aus | `systemctl restart pihole-FTL` im Script schlug fehl, oder `[webserver.tls].validity` steht noch auf dem Default (47) und FTL hat beim nächsten Selfcheck ein eigenes generiert | `sudo journalctl -u pihole-FTL -n 50 --no-pager`, `sudo pihole-FTL --config webserver.tls.validity` (muss `0` sein) |
+| CronJob-Pod läuft Stunden statt der üblichen ~5-7s, bevor er als `Failed` markiert wird | `openssl s_client`/`curl`/`ssh` hatten bis 2026-07-31 keinen Timeout - ein kurzzeitig nicht erreichbares Ziel (Host im Standby, Firewall-Drop ohne RST) ließ den jeweiligen Aufruf am TCP-Connect hängen, begrenzt nur durch den OS-seitigen TCP-Timeout | Seit 2026-07-31 behoben (siehe Incident unten): `-connect_timeout 10` (openssl), `--connect-timeout 10 --max-time 30` (curl), `-o ConnectTimeout=10` (ssh) in allen drei deploy-Scripts, plus `activeDeadlineSeconds: 300` im CronJob als Sicherheitsnetz |
+
+### Incident 2026-07-31: 10h-Hang durch fehlende Netzwerk-Timeouts
+
+Der planmäßige Lauf um 03:20 Uhr (`cert-distributor-29757680`) lief **10
+Stunden** statt der üblichen 5-7 Sekunden, bevor er fehlschlug. Der Pod war
+zum Zeitpunkt der Analyse bereits gelöscht (keine `kubectl events` mehr
+vorhanden), ein manuell angestoßener Testlauf lief sofort und sauber durch
+(alle drei Ziele: Fingerprint stimmte bereits überein) - das Problem war
+also transient, kein dauerhafter Konfigurationsfehler.
+
+Root Cause: keiner der Netzwerk-Calls in
+[`scripts-configmap.yaml`](../gitops/config/cert-distribution/scripts-configmap.yaml)
+hatte einen Timeout gesetzt (`openssl s_client -connect` in
+`remote_fingerprint()`, `curl` gegen die DSM-API, `ssh` zu TrueNAS/Pi-hole).
+War eines der drei Ziele beim 03:20-Lauf kurzzeitig nicht erreichbar, hing
+der jeweilige Aufruf am TCP-Connect fest - begrenzt nur durch OS-seitige
+TCP-Timeouts, die Stunden dauern können, statt in Sekunden sichtbar
+fehlzuschlagen.
+
+Fix: Timeouts an allen drei Stellen ergänzt (`-connect_timeout 10` bei
+openssl, `--connect-timeout 10 --max-time 30` bei curl, `-o
+ConnectTimeout=10` bei ssh) sowie `activeDeadlineSeconds: 300` im
+Job-Template als zusätzliches Sicherheitsnetz, falls trotzdem etwas hängen
+bleibt (z.B. nach erfolgreichem TCP-Connect). Mit einem manuellen Testlauf
+nach dem Fix verifiziert - weiterhin sauberer Durchlauf für alle drei Ziele.
 
 ## 8. Pi-hole (dns01.reckeweg.io)
 
