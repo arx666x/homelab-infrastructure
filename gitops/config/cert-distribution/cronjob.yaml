@@ -11,9 +11,11 @@ spec:
     spec:
       backoffLimit: 1
       # Sicherheitsnetz: falls trotz der Timeouts in den deploy-Scripts
-      # irgendwo etwas hängen bleibt, läuft der Job spätestens nach 5min
-      # in einen DeadlineExceeded statt stundenlang zu blockieren.
-      activeDeadlineSeconds: 300
+      # irgendwo etwas hängen bleibt, läuft der Job spätestens nach 10min
+      # in einen DeadlineExceeded statt stundenlang zu blockieren. 10min
+      # (nicht 5) mit Puffer für backoffLimit=1 (zwei Versuche) x DSM-Import
+      # (bis zu ~90s je Versuch, siehe CURL --max-time in deploy-dsm.sh).
+      activeDeadlineSeconds: 600
       template:
         spec:
           serviceAccountName: cert-distributor

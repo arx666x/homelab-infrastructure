@@ -30,10 +30,17 @@ data:
 
     remote_fingerprint() {
       # $1 = host:port  $2 = SNI-Hostname
-      # -connect_timeout: ohne den hängt s_client bei einem nicht
-      # erreichbaren Host (Standby, Firewall-Drop ohne RST) je nach
-      # OS-TCP-Timeout im schlimmsten Fall stundenlang statt fehlzuschlagen.
-      echo | openssl s_client -connect "$1" -servername "$2" -connect_timeout 10 2>/dev/null \
+      # timeout statt "openssl s_client -connect_timeout": die Option gibt es
+      # in der von Alpine 3.20 installierten openssl-Version nicht ("Unknown
+      # option") - s_client bricht dann sofort mit Fehler ab, remote_fingerprint
+      # liefert wegen des "|| true" leer zurück, OHNE dass der Fehler auffällt.
+      # Praktische Folge (live beobachtet am 2026-08-01): needs_deploy hält
+      # jedes Ziel für "Zertifikat nicht lesbar" und deployt bei JEDEM Lauf neu,
+      # statt bei unverändertem Zertifikat zu überspringen. busybox' timeout
+      # (Teil des Alpine-Base-Image, kein zusätzliches apk-Paket nötig) bricht
+      # dagegen zuverlässig ab, unabhängig von der openssl-Version/den von ihr
+      # unterstützten Flags.
+      echo | timeout 10 openssl s_client -connect "$1" -servername "$2" 2>/dev/null \
         | openssl x509 -noout -sha256 -fingerprint 2>/dev/null | cut -d= -f2 || true
     }
 
@@ -75,7 +82,16 @@ data:
 
     # --connect-timeout/--max-time: ohne die kann jeder Call hier bei einem
     # nicht erreichbaren DSM stundenlang hängen statt fehlzuschlagen.
-    CURL=(curl -sk --connect-timeout 10 --max-time 30)
+    # max-time bewusst bei 90s (nicht z.B. 30s): der eigentliche Import-Call
+    # unten (method=import) braucht wegen "restart_httpd":true auf DSM-Seite
+    # real ~30-35s, bevor die Response überhaupt zurückkommt (live gemessen
+    # am 2026-08-01, 33.86s bei einem erfolgreichen Import) - ein knapperes
+    # Timeout killt einen völlig gesunden, nur langsamen Import und lässt das
+    # Script mit "success" fälschlich als Fehlschlag erscheinen.
+    # --connect-timeout bleibt bei 10s: der bindet nur die TCP/TLS-Verbindungs-
+    # phase, ein wirklich nicht erreichbares DSM schlägt also weiterhin
+    # schnell fehl.
+    CURL=(curl -sk --connect-timeout 10 --max-time 90)
 
     # -G/--data-urlencode statt Query-String-Interpolation: Sonderzeichen in
     # Account/Passwort (%, &, +, #, Leerzeichen, ...) würden sonst die

@@ -458,7 +458,9 @@ oder (bei zweitem Lauf) `Fingerprint ... stimmt bereits überein, überspringe.`
 | `pihole-cert-deploy.sh` bricht mit "SAN nicht enthalten" ab | Wildcard-Cert enthält `dns01.reckeweg.io` nicht (sollte durch `*.reckeweg.io` immer der Fall sein) | `openssl x509 -in tls.crt -noout -text \| grep DNS:` prüfen |
 | `sudo /usr/local/bin/pihole-cert-deploy.sh` verlangt ein Passwort statt durchzulaufen | sudoers-Regel fehlt/falsch geschrieben | `sudo -l -U certdeploy` prüfen, Datei mit `visudo -c -f /etc/sudoers.d/certdeploy` auf Syntax prüfen |
 | FTL liefert nach erfolgreichem Deploy trotzdem das alte/ein neues selbstsigniertes Zertifikat aus | `systemctl restart pihole-FTL` im Script schlug fehl, oder `[webserver.tls].validity` steht noch auf dem Default (47) und FTL hat beim nächsten Selfcheck ein eigenes generiert | `sudo journalctl -u pihole-FTL -n 50 --no-pager`, `sudo pihole-FTL --config webserver.tls.validity` (muss `0` sein) |
-| CronJob-Pod läuft Stunden statt der üblichen ~5-7s, bevor er als `Failed` markiert wird | `openssl s_client`/`curl`/`ssh` hatten bis 2026-07-31 keinen Timeout - ein kurzzeitig nicht erreichbares Ziel (Host im Standby, Firewall-Drop ohne RST) ließ den jeweiligen Aufruf am TCP-Connect hängen, begrenzt nur durch den OS-seitigen TCP-Timeout | Seit 2026-07-31 behoben (siehe Incident unten): `-connect_timeout 10` (openssl), `--connect-timeout 10 --max-time 30` (curl), `-o ConnectTimeout=10` (ssh) in allen drei deploy-Scripts, plus `activeDeadlineSeconds: 300` im CronJob als Sicherheitsnetz |
+| CronJob-Pod läuft Stunden statt der üblichen ~5-7s, bevor er als `Failed` markiert wird | `openssl s_client`/`curl`/`ssh` hatten bis 2026-07-31 keinen Timeout - ein kurzzeitig nicht erreichbares Ziel (Host im Standby, Firewall-Drop ohne RST) ließ den jeweiligen Aufruf am TCP-Connect hängen, begrenzt nur durch den OS-seitigen TCP-Timeout | Seit 2026-07-31 behoben (siehe Incident 2026-07-31 unten): Timeouts in allen drei deploy-Scripts plus `activeDeadlineSeconds` im CronJob als Sicherheitsnetz |
+| `needs_deploy` zeigt bei JEDEM Ziel `[WARN] Konnte aktuelles Zertifikat ... nicht lesen - deploye sicherheitshalber` statt bei unverändertem Zertifikat zu überspringen | `openssl s_client -connect_timeout` ist in der Alpine-3.20-openssl-Version kein gültiger Flag ("Unknown option"); `remote_fingerprint()` schluckt den Fehler wegen `\|\| true` und liefert immer leer zurück | Seit 2026-08-01 behoben (siehe Incident 2026-08-01 unten): `timeout 10 openssl s_client ...` statt `-connect_timeout 10` |
+| `deploy-dsm.sh` schlägt mit curl-Exit-Code 28 fehl, kein `[ERROR]`-Text im Log, obwohl DSM erreichbar ist | DSM braucht für `method=import` (wegen `restart_httpd:true`) real ~30-35s Antwortzeit - ein zu knappes `--max-time` killt den Call, bevor DSM antwortet; unter `set -e` bricht das Script bei `RESULT="$(curl ...)"` sofort mit dem rohen curl-Exit-Code ab, die eigene `[ERROR]`-Behandlung wird nie erreicht | Seit 2026-08-01 behoben (siehe Incident 2026-08-01 unten): `--max-time 90` statt `30` |
 
 ### Incident 2026-07-31: 10h-Hang durch fehlende Netzwerk-Timeouts
 
@@ -484,6 +486,55 @@ ConnectTimeout=10` bei ssh) sowie `activeDeadlineSeconds: 300` im
 Job-Template als zusätzliches Sicherheitsnetz, falls trotzdem etwas hängen
 bleibt (z.B. nach erfolgreichem TCP-Connect). Mit einem manuellen Testlauf
 nach dem Fix verifiziert - weiterhin sauberer Durchlauf für alle drei Ziele.
+
+**Nachtrag 2026-08-01: dieser Fix selbst hatte zwei Bugs** - siehe Incident
+unten. Retry wäre bei beiden kein Fix gewesen: beide Fehler waren
+deterministisch (falscher Flag bzw. zu knappes Timeout), ein zweiter
+Versuch unter identischen Bedingungen liefert exakt dasselbe Ergebnis.
+
+### Incident 2026-08-01: zwei Regressionen aus dem 2026-07-31-Timeout-Fix
+
+Zwei Tage in Folge (`cert-distributor-29757680` am 07-31, `-29759120` am
+08-01) schlug der planmäßige 03:20-Lauf fehl - diesmal nicht durch
+stundenlanges Hängen (das `kubectl get job` DURATION-Feld zeigt bei nie
+gesetztem `completionTime` irreführend die Zeit seit Start bis zur
+Abfrage, nicht die tatsächliche Laufzeit), sondern durch einen echten,
+reproduzierbaren Fehlschlag innerhalb von ~90s
+(`BackoffLimitExceeded` nach genau 2 Versuchen). Mit einem live
+beobachteten manuellen Testlauf (`kubectl logs --previous` auf den
+gecrashten Container) und einem `bash -x`-Debug-Pod mit denselben
+Volumes/Secrets wie der echte CronJob reproduziert und isoliert:
+
+**Bug 1 - `openssl s_client -connect_timeout` existiert nicht in Alpine
+3.20:** der Flag aus dem 07-31-Fix wird von der dort installierten
+openssl-Version nicht unterstützt (`Unknown option`). Die Fehlermeldung
+verschwindet im `2>/dev/null \|\| true` von `remote_fingerprint()` -
+sichtbarer Effekt: `needs_deploy` hält das Zertifikat auf JEDEM Ziel für
+"nicht lesbar" und deployt bei jedem täglichen Lauf neu, statt bei
+unverändertem Zertifikat zu überspringen (unnötige `ui_restart`/FTL-Neustarts
+auf TrueNAS/Pi-hole, jeden Tag). Fix: `timeout 10 openssl s_client ...`
+(busybox-`timeout`, Teil des Alpine-Base-Image) statt des
+openssl-eigenen, versionsabhängigen Flags.
+
+**Bug 2 - DSM-Import-Call braucht real ~30-35s, `--max-time 30` war zu
+knapp:** mit `curl -v` und `time` isoliert nachgestellt - ein
+erfolgreicher `method=import`-Call (der wegen `"restart_httpd":true` einen
+DSM-Webserver-Neustart auslöst) dauerte **33.86s**, bevor die Response
+(`{"success":true}`) zurückkam. Mit `--max-time 30` killt curl den Call
+kurz davor (Exit-Code 28). Unter `set -euo pipefail` bricht
+`RESULT="$(curl ...)"` dann sofort ab, BEVOR die eigene
+`[ERROR] DSM-Import fehlgeschlagen`-Meldung oder der Logout-Call erreicht
+werden - im Log stand nur die `[WARN]`-Zeile von Bug 1, dann kommentarlos
+`== TrueNAS ==`. Fix: `--max-time 90` (mit Sicherheitsmarge über die
+gemessenen ~34s), `--connect-timeout 10` unverändert (bindet nur die
+TCP/TLS-Verbindungsphase, ein wirklich totes DSM schlägt weiter schnell
+fehl). `activeDeadlineSeconds` im CronJob dazu von `300` auf `600`
+angehoben (backoffLimit=1 = zwei Versuche à bis zu ~90s DSM-Import +
+TrueNAS/Pi-hole-SSH + `apk add`).
+
+Mit einem manuellen Testlauf nach dem Fix verifiziert: alle drei Ziele
+wieder mit `Fingerprint stimmt bereits überein, überspringe.` - korrektes
+Skip-Verhalten ist zurück, kein Timeout mehr.
 
 ## 8. Pi-hole (dns01.reckeweg.io)
 
