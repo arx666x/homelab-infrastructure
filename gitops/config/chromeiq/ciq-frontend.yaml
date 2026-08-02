@@ -38,7 +38,7 @@ spec:
                     values: [amd64]
       containers:
         - name: ciq-frontend
-          image: gitea.reckeweg.io/achim/ciq-frontend:1.1.15
+          image: gitea.reckeweg.io/achim/ciq-frontend:1.1.16
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
