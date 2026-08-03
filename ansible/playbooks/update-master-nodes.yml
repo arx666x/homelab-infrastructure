@@ -4,15 +4,25 @@
 # Koordiniertes k3s-Upgrade der Master-Nodes (gmkt-01x, gmkt-02x, gmkt-03x)
 # mit etcd-Quorum-Sicherheit und OS-Update.
 #
+# WICHTIG: gmkt-01x/02x/03x sind nicht nur Control-Plane, sondern (ohne
+# NoSchedule-Taint) auch vollwertige Longhorn-Storage-Nodes mit Disk und
+# regulären Workloads (z.B. gitea-postgresql). Ein reines "kubectl drain"
+# evakuiert zwar die Pods, garantiert aber NICHT, dass das darunterliegende
+# Longhorn-Volume vor dem Reboot sauber detached ist — siehe Incident
+# 2026-08-03 (docs/upgrades/argocd.md), bei dem genau diese fehlende
+# Longhorn-Eviction zu einer Postgres-Katalog-Korruption führte.
+#
 # Ablauf pro Node:
 #   1. etcd-Quorum und Cluster-Health prüfen (Pre-Check)
 #   2. etcd-Snapshot erstellen (nur auf gmkt-01x, einmalig pro Runde)
-#   3. kubectl drain
-#   4. apt upgrade
-#   5. k3s-Binary direkt von GitHub herunterladen (ohne Install-Script)
-#   6. k3s-Server neu starten
-#   7. Warten bis Node wieder Ready und etcd wieder im Quorum
-#   8. kubectl uncordon
+#   3. Longhorn Disk Eviction aktivieren, auf Replica-Migration warten
+#   4. kubectl drain
+#   5. apt upgrade
+#   6. k3s-Binary direkt von GitHub herunterladen (ohne Install-Script)
+#   7. k3s-Server neu starten
+#   8. Warten bis Node wieder Ready und etcd wieder im Quorum
+#   9. kubectl uncordon
+#  10. Longhorn Disk Scheduling wieder aktivieren, auf Replica-Rebuild warten
 #
 # WICHTIG: Master IMMER EINZELN (serial: 1) und IMMER VOR den Workers upgraden!
 # Bei 3-Node-etcd darf maximal 1 Master gleichzeitig down sein.
@@ -38,11 +48,14 @@
     k3s_version: ""                  # PFLICHT: -e k3s_version=v1.29.15+k3s1
     skip_os_update: false            # OS-Update überspringen: -e skip_os_update=true
     etcd_snapshot: true              # etcd-Snapshot vor erstem Master: -e etcd_snapshot=false
+    skip_longhorn: false             # Longhorn-Eviction überspringen: -e skip_longhorn=true
     k8s_delegate: master01          # Kubernetes-Calls über diesen Master
     kubectl_bin: /usr/local/bin/kubectl
     k3s_bin: /usr/local/bin/k3s
     node_ready_timeout: 300          # Sekunden warten bis Node wieder Ready
     drain_timeout: 300               # Sekunden für kubectl drain
+    longhorn_namespace: longhorn-system
+    longhorn_wait_timeout: 1800      # Sekunden warten auf Longhorn (30 min)
 
   pre_tasks:
 
@@ -149,6 +162,71 @@
       debug:
         msg: "{{ etcd_snapshot_result.stdout_lines | default(['Snapshot übersprungen']) }}"
       when: inventory_hostname == k8s_delegate
+
+    # -------------------------------------------------------------------------
+    # LONGHORN DRAIN (vor kubectl drain — sonst kein garantiertes Detach vor
+    # dem Reboot, siehe Incident 2026-08-03 in docs/upgrades/argocd.md)
+    # -------------------------------------------------------------------------
+
+    - name: "[ LONGHORN ] Disk-ID ermitteln"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} get node.longhorn.io/{{ k8s_node_name }} \
+          -o jsonpath='{.spec.disks}' | python3 -c \
+          "import sys,json; d=json.load(sys.stdin); print(list(d.keys())[0])"
+      register: longhorn_disk_id_result
+      changed_when: false
+      when:
+        - not skip_longhorn | bool
+        - k3s_installed_ver != k3s_version
+
+    - name: "[ LONGHORN ] Disk-ID extrahieren"
+      set_fact:
+        longhorn_disk_id: "{{ longhorn_disk_id_result.stdout }}"
+      when:
+        - not skip_longhorn | bool
+        - longhorn_disk_id_result is defined
+        - k3s_installed_ver != k3s_version
+
+    - name: "[ LONGHORN ] Disk-ID anzeigen"
+      debug:
+        msg: "Longhorn Disk ID auf {{ inventory_hostname }}: {{ longhorn_disk_id }}"
+      when:
+        - not skip_longhorn | bool
+        - k3s_installed_ver != k3s_version
+
+    - name: "[ LONGHORN ] Eviction aktivieren + Scheduling deaktivieren"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} patch node.longhorn.io/{{ k8s_node_name }} \
+          --type=merge \
+          -p '{"spec":{"allowScheduling":false,"disks":{"{{ longhorn_disk_id }}":{"allowScheduling":false,"evictionRequested":true}}}}'
+      when:
+        - not skip_longhorn | bool
+        - k3s_installed_ver != k3s_version
+      changed_when: true
+
+    - name: "[ LONGHORN ] Warten bis alle Replicas evakuiert sind"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} get replicas.longhorn.io \
+          -o jsonpath='{range .items[?(@.spec.nodeID=="{{ k8s_node_name }}")]}{.metadata.name}{"\n"}{end}' \
+          | grep -v '^[[:space:]]*$' | wc -l | tr -d ' '
+      register: replica_count
+      until: replica_count.stdout | int == 0
+      retries: "{{ (longhorn_wait_timeout / 10) | int }}"
+      delay: 10
+      when:
+        - not skip_longhorn | bool
+        - k3s_installed_ver != k3s_version
+      changed_when: false
+
+    - name: "[ LONGHORN ] Replica-Anzahl nach Eviction anzeigen"
+      debug:
+        msg: "Replicas auf {{ inventory_hostname }}: {{ replica_count.stdout }}"
+      when:
+        - not skip_longhorn | bool
+        - k3s_installed_ver != k3s_version
 
     # -------------------------------------------------------------------------
     # KUBERNETES DRAIN
@@ -395,6 +473,36 @@
         {{ kubectl_bin }} uncordon {{ k8s_node_name }}
       changed_when: true
       when: k3s_installed_ver != k3s_version
+
+    # -------------------------------------------------------------------------
+    # LONGHORN REAKTIVIEREN
+    # -------------------------------------------------------------------------
+
+    - name: "[ LONGHORN ] Eviction aufheben + Scheduling aktivieren"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} patch node.longhorn.io/{{ k8s_node_name }} \
+          --type=merge \
+          -p '{"spec":{"allowScheduling":true,"disks":{"{{ longhorn_disk_id }}":{"allowScheduling":true,"evictionRequested":false}}}}'
+      when:
+        - not skip_longhorn | bool
+        - k3s_installed_ver != k3s_version
+      changed_when: true
+
+    - name: "[ LONGHORN ] Warten bis Longhorn-Node wieder Schedulable ist"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} \
+          -n {{ longhorn_namespace }} get node.longhorn.io/{{ k8s_node_name }} \
+          -o jsonpath='{.status.conditions[?(@.type=="Schedulable")].status}'
+      register: lh_schedulable
+      until: lh_schedulable.stdout == "True"
+      retries: 30
+      delay: 10
+      when:
+        - not skip_longhorn | bool
+        - k3s_installed_ver != k3s_version
+      changed_when: false
 
     - name: "[ POST ] Finale Versions-Übersicht aller Nodes"
       delegate_to: "{{ k8s_delegate }}"

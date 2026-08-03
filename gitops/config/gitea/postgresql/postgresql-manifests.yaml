@@ -33,6 +33,12 @@ spec:
         app.kubernetes.io/instance: gitea
         app.kubernetes.io/component: database
     spec:
+      # 60s statt Default-30s: gibt "pg_ctl stop -m fast" im preStop-Hook
+      # genug Zeit für einen sauberen Shutdown, bevor Kubernetes SIGKILL
+      # schickt. Siehe Incident 2026-08-03 (docs/upgrades/argocd.md) —
+      # unsauberer Postgres-Shutdown beim Node-Reboot führte zu
+      # Katalog-Korruption.
+      terminationGracePeriodSeconds: 60
       securityContext:
         fsGroup: 999
         runAsUser: 999
@@ -70,6 +76,16 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+          lifecycle:
+            preStop:
+              exec:
+                # Fast Shutdown statt auf Client-Disconnects zu warten
+                # (Smart Shutdown via SIGTERM kann unter terminationGrace-
+                # PeriodSeconds hängen bleiben und dann per SIGKILL enden).
+                command:
+                  - /bin/sh
+                  - -c
+                  - exec pg_ctl stop -D "$PGDATA" -m fast -w -t 55
           livenessProbe:
             exec:
               command:

@@ -31,6 +31,17 @@ tls_sans:
   - "localhost"
   - "127.0.0.1"
 
+# Kubelet Graceful Node Shutdown: sorgt dafuer, dass der Kubelet bei einem
+# systemd-Shutdown/Reboot Pods VOR dem eigentlichen Herunterfahren des Nodes
+# gracefully terminiert (SIGTERM + terminationGracePeriodSeconds), statt sie
+# abrupt mit dem Rest des Systems zu killen. Ergaenzt (ersetzt NICHT) das
+# explizite "kubectl drain" in den update-*-nodes.yml Playbooks - greift vor
+# allem bei ungeplanten Reboots/Crashes, wo kein Drain vorausging.
+# Siehe Incident 2026-08-03 (docs/upgrades/argocd.md).
+kubelet_graceful_shutdown_args: >-
+  --kubelet-arg=shutdown-grace-period=45s
+  --kubelet-arg=shutdown-grace-period-critical-pods=15s
+
 # k3s server args base (will be extended in master.yml)
 extra_server_args_base: >-
   --disable traefik
@@ -41,12 +52,14 @@ extra_server_args_base: >-
   --kube-proxy-arg metrics-bind-address=0.0.0.0
   --kube-scheduler-arg bind-address=0.0.0.0
   --etcd-expose-metrics true
+  {{ kubelet_graceful_shutdown_args }}
   {% for san in tls_sans %}
   --tls-san={{ san }}
   {% endfor %}
 
 # k3s agent args base (will be extended in worker.yml)
-extra_agent_args_base: ""
+extra_agent_args_base: >-
+  {{ kubelet_graceful_shutdown_args }}
 
 # Longhorn Configuration
 longhorn_data_path: "/mnt/longhorn"

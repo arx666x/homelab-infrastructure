@@ -1,0 +1,246 @@
+---
+# enable-graceful-node-shutdown.yml
+#
+# Retrofit: ergänzt die Kubelet-Graceful-Node-Shutdown-Flags auf bereits
+# laufenden Master- und Worker-Nodes. Für NEUE Nodes greifen die Flags
+# automatisch über group_vars/all.yml (extra_server_args_base /
+# extra_agent_args_base) via install-k3s-direct.yml / add-worker.yml.
+#
+# Kubelet Graceful Node Shutdown sorgt dafür, dass der Kubelet bei einem
+# systemd-initiierten Shutdown/Reboot Pods VOR dem eigentlichen Herunterfahren
+# gracefully terminiert (SIGTERM + terminationGracePeriodSeconds), statt sie
+# abrupt mit dem restlichen System zu killen. Das ist ein Sicherheitsnetz für
+# UNGEPLANTE Reboots/Crashes — ersetzt NICHT das explizite "kubectl drain" in
+# den update-*-nodes.yml Playbooks, das bei GEPLANTEN Updates weiterhin die
+# primäre Absicherung ist.
+#
+# Hintergrund: Incident 2026-08-03 (siehe docs/upgrades/argocd.md) — ein
+# unsauberer Postgres-Shutdown beim Node-Reboot führte zu Katalog-Korruption
+# in gitea-postgresql und blockierte in der Folge den ArgoCD-Upgrade.
+#
+# WICHTIG:
+#   - Node wird für den Unit-File-Patch per "kubectl drain" evakuiert und
+#     k3s(-agent) neu gestartet (kein Reboot nötig, aber kurzer Ausfall der
+#     auf dem Node laufenden Pods).
+#   - Master: IMMER seriell (serial: 1), NIE mehrere Master gleichzeitig
+#     (etcd-Quorum!). Playbook erzwingt das über serial: 1 pro Play.
+#   - Idempotent: Nodes, die das Flag schon gesetzt haben, werden übersprungen
+#     (kein Drain, kein Neustart).
+#
+# Ausführung:
+#   ansible-playbook enable-graceful-node-shutdown.yml --limit master
+#   ansible-playbook enable-graceful-node-shutdown.yml --limit worker
+#   ansible-playbook enable-graceful-node-shutdown.yml            # Master zuerst, dann Worker
+#   ansible-playbook enable-graceful-node-shutdown.yml --check    # Dry-Run (zeigt nur an, ob Flag fehlt)
+
+- name: Graceful Node Shutdown auf Master-Nodes aktivieren
+  hosts: master
+  serial: 1
+  max_fail_percentage: 0
+  gather_facts: false
+
+  vars:
+    k8s_delegate: master01
+    kubectl_bin: /usr/local/bin/kubectl
+    drain_timeout: 300
+    node_ready_timeout: 180
+    unit_file: /etc/systemd/system/k3s.service
+    service_name: k3s
+
+  tasks:
+
+    - name: "[ PRE ] Node-Name ermitteln"
+      set_fact:
+        k8s_node_name: "{{ hostvars[inventory_hostname]['hostname'] }}"
+
+    - name: "[ PRE ] Prüfen ob Flag schon gesetzt ist"
+      become: true
+      command: "grep -c shutdown-grace-period= {{ unit_file }}"
+      register: flag_present
+      changed_when: false
+      failed_when: false
+
+    - name: "[ SKIP ] Bereits vorhanden — nichts zu tun"
+      debug:
+        msg: "{{ inventory_hostname }}: Flag bereits gesetzt, überspringe."
+      when: flag_present.stdout | int > 0
+
+    - name: "[ K8S ] Node drainieren"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} drain {{ k8s_node_name }} \
+          --ignore-daemonsets \
+          --delete-emptydir-data \
+          --timeout={{ drain_timeout }}s
+      changed_when: true
+      when: flag_present.stdout | int == 0
+
+    - name: "[ UNIT ] shutdown-grace-period Flag einfügen"
+      become: true
+      lineinfile:
+        path: "{{ unit_file }}"
+        regexp: "shutdown-grace-period="
+        line: "\t'--kubelet-arg=shutdown-grace-period=45s' \\"
+        insertafter: "flannel-iface"
+        state: present
+      when: flag_present.stdout | int == 0
+
+    - name: "[ UNIT ] shutdown-grace-period-critical-pods Flag einfügen"
+      become: true
+      lineinfile:
+        path: "{{ unit_file }}"
+        regexp: "shutdown-grace-period-critical-pods="
+        line: "\t'--kubelet-arg=shutdown-grace-period-critical-pods=15s' \\"
+        insertafter: "shutdown-grace-period=45s"
+        state: present
+      when: flag_present.stdout | int == 0
+
+    - name: "[ UNIT ] daemon-reload"
+      become: true
+      systemd:
+        daemon_reload: true
+      when: flag_present.stdout | int == 0
+
+    - name: "[ SERVICE ] {{ service_name }} neu starten"
+      become: true
+      systemd:
+        name: "{{ service_name }}"
+        state: restarted
+      when: flag_present.stdout | int == 0
+
+    - name: "[ POST ] Warten bis Node wieder Ready ist"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} get node {{ k8s_node_name }} \
+          -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready
+      until: node_ready.stdout == "True"
+      retries: "{{ (node_ready_timeout / 10) | int }}"
+      delay: 10
+      changed_when: false
+      when: flag_present.stdout | int == 0
+
+    - name: "[ K8S ] Node uncordon"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} uncordon {{ k8s_node_name }}
+      changed_when: true
+      when: flag_present.stdout | int == 0
+
+    - name: "[ VERIFY ] Flag jetzt gesetzt?"
+      become: true
+      command: "grep shutdown-grace-period= {{ unit_file }}"
+      register: flag_verify
+      changed_when: false
+      when: flag_present.stdout | int == 0
+
+    - name: "[ VERIFY ] Ergebnis anzeigen"
+      debug:
+        msg: "{{ flag_verify.stdout_lines }}"
+      when: flag_present.stdout | int == 0
+
+- name: Graceful Node Shutdown auf Worker-Nodes aktivieren
+  hosts: worker
+  serial: 1
+  max_fail_percentage: 0
+  gather_facts: false
+
+  vars:
+    k8s_delegate: master01
+    kubectl_bin: /usr/local/bin/kubectl
+    drain_timeout: 300
+    node_ready_timeout: 180
+    unit_file: /etc/systemd/system/k3s-agent.service
+    service_name: k3s-agent
+
+  tasks:
+
+    - name: "[ PRE ] Node-Name ermitteln"
+      set_fact:
+        k8s_node_name: "{{ hostvars[inventory_hostname]['hostname'] }}"
+
+    - name: "[ PRE ] Prüfen ob Flag schon gesetzt ist"
+      become: true
+      command: "grep -c shutdown-grace-period= {{ unit_file }}"
+      register: flag_present
+      changed_when: false
+      failed_when: false
+
+    - name: "[ SKIP ] Bereits vorhanden — nichts zu tun"
+      debug:
+        msg: "{{ inventory_hostname }}: Flag bereits gesetzt, überspringe."
+      when: flag_present.stdout | int > 0
+
+    - name: "[ K8S ] Node drainieren"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} drain {{ k8s_node_name }} \
+          --ignore-daemonsets \
+          --delete-emptydir-data \
+          --timeout={{ drain_timeout }}s
+      changed_when: true
+      when: flag_present.stdout | int == 0
+
+    - name: "[ UNIT ] shutdown-grace-period Flag einfügen"
+      become: true
+      lineinfile:
+        path: "{{ unit_file }}"
+        regexp: "shutdown-grace-period="
+        line: "\t'--kubelet-arg=shutdown-grace-period=45s' \\"
+        insertafter: "flannel-iface"
+        state: present
+      when: flag_present.stdout | int == 0
+
+    - name: "[ UNIT ] shutdown-grace-period-critical-pods Flag einfügen"
+      become: true
+      lineinfile:
+        path: "{{ unit_file }}"
+        regexp: "shutdown-grace-period-critical-pods="
+        line: "\t'--kubelet-arg=shutdown-grace-period-critical-pods=15s' \\"
+        insertafter: "shutdown-grace-period=45s"
+        state: present
+      when: flag_present.stdout | int == 0
+
+    - name: "[ UNIT ] daemon-reload"
+      become: true
+      systemd:
+        daemon_reload: true
+      when: flag_present.stdout | int == 0
+
+    - name: "[ SERVICE ] {{ service_name }} neu starten"
+      become: true
+      systemd:
+        name: "{{ service_name }}"
+        state: restarted
+      when: flag_present.stdout | int == 0
+
+    - name: "[ POST ] Warten bis Node wieder Ready ist"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} get node {{ k8s_node_name }} \
+          -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready
+      until: node_ready.stdout == "True"
+      retries: "{{ (node_ready_timeout / 10) | int }}"
+      delay: 10
+      changed_when: false
+      when: flag_present.stdout | int == 0
+
+    - name: "[ K8S ] Node uncordon"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} uncordon {{ k8s_node_name }}
+      changed_when: true
+      when: flag_present.stdout | int == 0
+
+    - name: "[ VERIFY ] Flag jetzt gesetzt?"
+      become: true
+      command: "grep shutdown-grace-period= {{ unit_file }}"
+      register: flag_verify
+      changed_when: false
+      when: flag_present.stdout | int == 0
+
+    - name: "[ VERIFY ] Ergebnis anzeigen"
+      debug:
+        msg: "{{ flag_verify.stdout_lines }}"
+      when: flag_present.stdout | int == 0
