@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `traefik`
-- **Aktuelle Version:** Chart v41.0.2 (Traefik Proxy v3.7.6)
+- **Aktuelle Version:** Chart v41.1.0 (Traefik Proxy v3.7.9)
 - **Quelle:** Helm-Chart-Repo `https://traefik.github.io/charts` (Chart `traefik`)
 - **ArgoCD App-Name:** `traefik`
 - **Versions-Check-Quelle:** Helm-Repo-Index von `https://traefik.github.io/charts` (Chart-Version, nicht direkt die Proxy-Version)
@@ -21,6 +21,7 @@
 | 2026-06-18 | 40.3.0 → 41.0.0 | Major | Manuell | Abgeschlossen | Breaking Changes bei Logging-Keys (`logs.general`→`log` etc.) und `providers.file.content` betreffen unsere minimale Values-Konfiguration nicht | Proxy v3.7.4 → v3.7.5; Commit `bcbbeff` |
 | 2026-06-29 | 41.0.0 → 41.0.1 | Minor | Manuell | Abgeschlossen | Patch-Release, nur Chart-Fixes (Fail-fast bei Uppercase-Keys nach RFC 1123), kein Proxy-Versionswechsel | Commit `151a049` |
 | 2026-07-13 | 41.0.1 → 41.0.2 | Patch | Manuell | Abgeschlossen | Neues CRD `uplinks.hub.traefik.io` (Fix #1920) — vorab per `helm show crds \| kubectl apply --server-side` angewendet; undokumentierter Proxy-Sprung v3.7.5→v3.7.6 und Hub v3.19.3→v3.20.6 | PR [#5](https://gitea.reckeweg.io/achim/homelab-infrastructure/pulls/5) |
+| 2026-08-03 | 41.0.2 → 41.1.0 | Minor | Manuell | Abgeschlossen | Proxy-Sprung v3.7.6→v3.7.9, Hub v3.20.6→v3.20.7; neue/aktualisierte CRDs ausschließlich `hub.traefik.io` (Hub in unseren Values nicht konfiguriert, daher inert); RBAC-Erweiterung (configmaps write für Hub) betrifft uns nicht | `upgrade-agent` hatte den Sprung bereits als PR-Branch vorbereitet (`chore/upgrade-traefik-41.1.0`), Branch war aber auf veraltetem Basisstand (vor den übrigen Fixes des Tages) — nicht gemergt, nur die `targetRevision`-Zeile manuell übernommen. Smoke-Tests (gitea/argocd/grafana) und Log-Check ohne neue Fehler |
 
 ### Reklassifizierungen (Minor → Major)
 
