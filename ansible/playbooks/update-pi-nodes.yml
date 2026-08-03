@@ -158,6 +158,35 @@
         msg: "{{ drain_result.stdout_lines[-3:] }}"
 
     # -------------------------------------------------------------------------
+    # WAIT FOR VOLUME DETACH: die Replica-Eviction oben stellt nur sicher,
+    # dass keine Replica-DATEN mehr auf diesem Node liegen — nicht, dass ein
+    # hier laufender Pod sein Volume (Engine/Attachment) bereits sauber
+    # detached hat. "kubectl drain" wartet nur auf Pod-Terminierung, das
+    # CSI-Detach kann danach noch kurz nachlaufen. Ohne diesen Wait kann der
+    # Reboot mitten in einen laufenden Detach/Flush hineinlaufen -> Filesystem-
+    # Korruption (siehe Incident 2026-08-03, docs/upgrades/kube-prometheus-stack.md:
+    # Prometheus-Volume auf k3s-02a betroffen trotz Replica-Eviction).
+    # -------------------------------------------------------------------------
+
+    - name: "[ LONGHORN ] Warten bis keine Volumes mehr auf diesem Node attached sind"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} get volumes.longhorn.io \
+          -o jsonpath='{range .items[?(@.status.currentNodeID=="{{ k8s_node_name }}")]}{.metadata.name}{"\n"}{end}' \
+          | grep -v '^[[:space:]]*$' | wc -l | tr -d ' '
+      register: attached_volume_count
+      until: attached_volume_count.stdout | int == 0
+      retries: "{{ (longhorn_wait_timeout / 10) | int }}"
+      delay: 10
+      when: not skip_longhorn
+      changed_when: false
+
+    - name: "[ LONGHORN ] Attached-Volume-Anzahl nach Drain anzeigen"
+      debug:
+        msg: "Noch attached auf {{ inventory_hostname }}: {{ attached_volume_count.stdout }}"
+      when: not skip_longhorn
+
+    # -------------------------------------------------------------------------
     # APT UPDATE
     # -------------------------------------------------------------------------
 

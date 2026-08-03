@@ -176,9 +176,7 @@
           "import sys,json; d=json.load(sys.stdin); print(list(d.keys())[0])"
       register: longhorn_disk_id_result
       changed_when: false
-      when:
-        - not skip_longhorn | bool
-        - k3s_installed_ver != k3s_version
+      when: not skip_longhorn | bool
 
     - name: "[ LONGHORN ] Disk-ID extrahieren"
       set_fact:
@@ -186,14 +184,11 @@
       when:
         - not skip_longhorn | bool
         - longhorn_disk_id_result is defined
-        - k3s_installed_ver != k3s_version
 
     - name: "[ LONGHORN ] Disk-ID anzeigen"
       debug:
         msg: "Longhorn Disk ID auf {{ inventory_hostname }}: {{ longhorn_disk_id }}"
-      when:
-        - not skip_longhorn | bool
-        - k3s_installed_ver != k3s_version
+      when: not skip_longhorn | bool
 
     - name: "[ LONGHORN ] Eviction aktivieren + Scheduling deaktivieren"
       delegate_to: "{{ k8s_delegate }}"
@@ -201,9 +196,7 @@
         {{ kubectl_bin }} -n {{ longhorn_namespace }} patch node.longhorn.io/{{ k8s_node_name }} \
           --type=merge \
           -p '{"spec":{"allowScheduling":false,"disks":{"{{ longhorn_disk_id }}":{"allowScheduling":false,"evictionRequested":true}}}}'
-      when:
-        - not skip_longhorn | bool
-        - k3s_installed_ver != k3s_version
+      when: not skip_longhorn | bool
       changed_when: true
 
     - name: "[ LONGHORN ] Warten bis alle Replicas evakuiert sind"
@@ -216,22 +209,25 @@
       until: replica_count.stdout | int == 0
       retries: "{{ (longhorn_wait_timeout / 10) | int }}"
       delay: 10
-      when:
-        - not skip_longhorn | bool
-        - k3s_installed_ver != k3s_version
+      when: not skip_longhorn | bool
       changed_when: false
 
     - name: "[ LONGHORN ] Replica-Anzahl nach Eviction anzeigen"
       debug:
         msg: "Replicas auf {{ inventory_hostname }}: {{ replica_count.stdout }}"
-      when:
-        - not skip_longhorn | bool
-        - k3s_installed_ver != k3s_version
+      when: not skip_longhorn | bool
 
     # -------------------------------------------------------------------------
     # KUBERNETES DRAIN
     # -------------------------------------------------------------------------
 
+    # WICHTIG: NICHT an k3s_installed_ver != k3s_version koppeln! Der Reboot-Task
+    # weiter unten läuft immer unconditional (auch bei reinem OS-Update ohne
+    # k3s-Versionswechsel) — Drain muss daher IMMER vorher laufen, sonst wird
+    # ungedraint gebootet (Root Cause des Incidents 2026-08-03, siehe
+    # docs/upgrades/argocd.md: gitea-postgresql-Korruption trat genau deshalb
+    # auf, weil dieser Lauf keinen k3s-Versionsbump brauchte und Drain+Longhorn-
+    # Eviction dadurch komplett übersprungen wurden).
     - name: "[ K8S ] Node drainieren"
       delegate_to: "{{ k8s_delegate }}"
       shell: |
@@ -241,12 +237,39 @@
           --timeout={{ drain_timeout }}s
       register: drain_result
       changed_when: true
-      # Nur drainieren wenn tatsächlich ein Update stattfindet
-      when: k3s_installed_ver != k3s_version
 
     - name: "[ K8S ] Drain-Ergebnis anzeigen"
       debug:
         msg: "{{ drain_result.stdout_lines[-3:] | default(['kein Drain durchgeführt']) }}"
+
+    # -------------------------------------------------------------------------
+    # WAIT FOR VOLUME DETACH: "kubectl drain" wartet nur auf Pod-Terminierung,
+    # nicht darauf dass Longhorn das zugehoerige Volume (Engine/Frontend)
+    # tatsaechlich von diesem Node detached hat. Reine Replica-Eviction (oben)
+    # deckt das nicht ab, wenn dieser Node keine Replica sondern nur den
+    # Attachment-Punkt (currentNodeID) hatte. Ohne diesen Wait kann der Reboot
+    # mitten in einen laufenden Detach/Flush hineinlaufen -> Filesystem-
+    # Korruption (siehe Incident 2026-08-03, docs/upgrades/kube-prometheus-stack.md:
+    # Prometheus-Volume auf einem Worker betroffen trotz Replica-Eviction dort).
+    # -------------------------------------------------------------------------
+
+    - name: "[ LONGHORN ] Warten bis keine Volumes mehr auf diesem Node attached sind"
+      delegate_to: "{{ k8s_delegate }}"
+      shell: |
+        {{ kubectl_bin }} -n {{ longhorn_namespace }} get volumes.longhorn.io \
+          -o jsonpath='{range .items[?(@.status.currentNodeID=="{{ k8s_node_name }}")]}{.metadata.name}{"\n"}{end}' \
+          | grep -v '^[[:space:]]*$' | wc -l | tr -d ' '
+      register: attached_volume_count
+      until: attached_volume_count.stdout | int == 0
+      retries: "{{ (longhorn_wait_timeout / 10) | int }}"
+      delay: 10
+      when: not skip_longhorn | bool
+      changed_when: false
+
+    - name: "[ LONGHORN ] Attached-Volume-Anzahl nach Drain anzeigen"
+      debug:
+        msg: "Noch attached auf {{ inventory_hostname }}: {{ attached_volume_count.stdout }}"
+      when: not skip_longhorn | bool
 
     # -------------------------------------------------------------------------
     # OS UPDATE (optional)
@@ -472,7 +495,6 @@
       shell: |
         {{ kubectl_bin }} uncordon {{ k8s_node_name }}
       changed_when: true
-      when: k3s_installed_ver != k3s_version
 
     # -------------------------------------------------------------------------
     # LONGHORN REAKTIVIEREN
@@ -484,9 +506,7 @@
         {{ kubectl_bin }} -n {{ longhorn_namespace }} patch node.longhorn.io/{{ k8s_node_name }} \
           --type=merge \
           -p '{"spec":{"allowScheduling":true,"disks":{"{{ longhorn_disk_id }}":{"allowScheduling":true,"evictionRequested":false}}}}'
-      when:
-        - not skip_longhorn | bool
-        - k3s_installed_ver != k3s_version
+      when: not skip_longhorn | bool
       changed_when: true
 
     - name: "[ LONGHORN ] Warten bis Longhorn-Node wieder Schedulable ist"
@@ -499,9 +519,7 @@
       until: lh_schedulable.stdout == "True"
       retries: 30
       delay: 10
-      when:
-        - not skip_longhorn | bool
-        - k3s_installed_ver != k3s_version
+      when: not skip_longhorn | bool
       changed_when: false
 
     - name: "[ POST ] Finale Versions-Übersicht aller Nodes"
