@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `monitoring`
-- **Aktuelle Version:** 87.19.2 (Helm Chart; Prometheus-Operator v0.92.1)
+- **Aktuelle Version:** 88.1.3 (Helm Chart; Prometheus-Operator v0.93.0)
 - **Quelle:** Helm-Chart-Repo `https://prometheus-community.github.io/helm-charts` (Chart: `kube-prometheus-stack`); Prometheus-Operator CRD-Releases: `https://github.com/prometheus-operator/prometheus-operator/releases`; offizielles `UPGRADE.md`: `https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/UPGRADE.md`
 - **ArgoCD App-Name:** `kube-prometheus-stack`
 - **Versions-Check-Quelle:** homelab-version-checker vergleicht `targetRevision` in `gitops/apps/monitoring.yaml` gegen die neueste Chart-Version im Helm-Repo-Index von `prometheus-community.github.io/helm-charts`
@@ -35,6 +35,7 @@
 | 2026-07-13 | 87.10.1 → 87.15.1 | Minor | Automatisch | Abgeschlossen | Nur Dependency-Image-Updates (kube-state-metrics 7.5.x→7.8.1, prometheus-node-exporter, Prometheus 3.13.1), kein Operator/CRD-Change, keine Breaking Changes laut Release Notes | Commit `af699f0` durch upgrade-agent; bislang nicht in diesem Changelog erfasst, jetzt nachgetragen |
 | 2026-07-20 | 87.15.1 → 87.17.0 | Minor | Automatisch | Abgeschlossen | Scrape-Config-Ergänzung (kube-scheduler resource metrics, PR #7118), externalUrl-Fix (PR #7107), node-exporter-Dependency-Bump v4.56.1; kein Operator/CRD-Change | Commit `35e4ad9` durch upgrade-agent; bislang nicht in diesem Changelog erfasst, jetzt nachgetragen |
 | 2026-07-27 | 87.17.0 → 87.19.2 | Minor | Manuell | Abgeschlossen | kube-state-metrics Dependency-Major-Bump 7.8.1→8.0.0 (Chart-Upgrade-Hinweis: nur Drop von `CiliumNetworkPolicy`-Support, hier nicht genutzt, kein Cilium im Cluster), Grafana 12.7.2→12.8.1; kein Operator/CRD-Change (Operator bleibt v0.92.1) | Auf Wunsch des Nutzers direkt ausgeführt (nicht über upgrade-agent); Release-Notes/Dependency-Diff vorab per GitHub-Compare-API geprüft |
+| 2026-08-03 | 87.19.2 → 88.1.3 | Major (nominell Minor, aber Operator-Bump) | Manuell | Abgeschlossen | Prometheus-Operator v0.92.1 → v0.93.0, alle 10 CRDs vorab server-side --force-conflicts applyed; laut offiziellem UPGRADE.md keine weiteren Breaking Changes (kein Grafana-/kube-state-metrics-Major-Bump in dieser Linie); upgrade-agent hatte den Sprung bereits am selben Tag 04:02 UTC als PR-Branch vorbereitet und zurecht als "Manual review required" markiert (Operator-CRD-Änderung) | `origin/chore/upgrade-kube-prometheus-stack-88.1.3` Branch war Basis-veraltet (vor allen anderen Fixes des Tages) und wurde NICHT gemergt, nur die eine Zeile (`targetRevision`) manuell übernommen. Beim Pre-Check unabhängig entdeckt: `prometheus-kube-prometheus-stack-prometheus-0` hing seit ~92 Min in `Init:0/1` mit demselben `fsck`-Fehler wie beim gitea-postgresql-/windows-ad-Vorfall vom selben Tag (Volume `pvc-73e5e5c2-...` auf `k3s-02a`, einem Worker) — vor dem Versions-Hop mit derselben Helper-Pod/`fsck -y`-Technik repariert. Cluster-weiter Sweep aller Longhorn-Volumes danach durchgeführt: keine weiteren betroffenen Volumes gefunden. Beim manuellen Stop-Versuch (StatefulSet auf 0) zeigte sich: nicht ArgoCD-selfHeal, sondern der Prometheus-Operator selbst reconciled `spec.replicas` aus der `Prometheus`-CR zurück — schneller als jeder manuelle Scale-Versuch; da das Volume ohnehin schon attached war, war das Stoppen aber gar nicht nötig, `fsck -y` lief direkt auf dem laufenden (aber mount-fehlschlagenden) Pod-Node |
 
 **Nicht produktiv gelandeter Zwischenschritt:** Commit `85b2150` ("chore: upgrade kube-prometheus-stack 86.2.3 → 86.3.2", Auto-Upgrade durch den upgrade-agent, 2026-06-22) existiert nur auf dem nie gemergten Branch `origin/chore/upgrade-kube-prometheus-stack-86.3.2`. Er wurde durch die manuelle Migration auf 87.3.0 (`ab63282`, 2026-06-29) überholt und ist nie in `main`/den Cluster gelangt — daher kein Eintrag in der Changelog-Tabelle oben.
 
@@ -144,6 +145,7 @@ kubectl get servicemonitors -n monitoring
 | 20      | 87.10.1 → 87.15.1 | v0.92.1 (unverändert) | Automatisches Minor-Update (Commit `af699f0`), reine Dependency-Image-Updates |
 | 21      | 87.15.1 → 87.17.0 | v0.92.1 (unverändert) | Automatisches Minor-Update (Commit `35e4ad9`), Scrape-Config-Ergänzung kube-scheduler-Metriken |
 | 22      | 87.17.0 → 87.19.2 | v0.92.1 (unverändert) | Manuelles Minor-Update, kube-state-metrics Dependency-Major-Bump 7.8.1→8.0.0 (CiliumNetworkPolicy-Drop, nicht genutzt), Grafana 12.8.1 |
+| 23      | 87.19.2 → 88.1.3 | **v0.93.0** | CRD-Update (alle 10 CRDs), sonst keine Breaking Changes laut UPGRADE.md |
 
 ### Besondere Breaking Changes im Detail
 
