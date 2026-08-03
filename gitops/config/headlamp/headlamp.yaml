@@ -81,7 +81,7 @@ spec:
         # Die 404s fuer fehlende Locale-Dateien sind kosmetisch (fallback: en)
         # -----------------------------------------------------------------
         - name: fix-static-plugins
-          image: ghcr.io/headlamp-k8s/headlamp:v0.43.0
+          image: ghcr.io/headlamp-k8s/headlamp:v0.44.0
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -99,7 +99,7 @@ spec:
 
       containers:
         - name: headlamp
-          image: ghcr.io/headlamp-k8s/headlamp:v0.43.0
+          image: ghcr.io/headlamp-k8s/headlamp:v0.44.0
           args:
             # -in-cluster MUSS trotz OIDC drinbleiben - Headlamp selbst
             # lehnt die -oidc-*-Flags sonst beim Start ab ("flags are only
