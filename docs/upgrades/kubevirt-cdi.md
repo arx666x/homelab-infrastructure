@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `kubevirt` (KubeVirt-Operator + virt-*-Komponenten), `cdi` (CDI-Operator)
-- **Aktuelle Version:** KubeVirt v1.8.4 | CDI v1.65.0
+- **Aktuelle Version:** KubeVirt v1.9.0 | CDI v1.65.0
 - **Quelle:** GitHub Releases (Operator-Manifeste als Remote-Kustomize-Base, kein Helm-Chart)
   - KubeVirt: `https://github.com/kubevirt/kubevirt/releases`
   - CDI: `https://github.com/kubevirt/containerized-data-importer/releases`
@@ -22,6 +22,7 @@
 | unbekannt | KubeVirt v1.7.3 → v1.8.2, CDI bleibt v1.65.0 | Major | Manuell | Abgeschlossen | Breaking: macvtap-Binding entfernt, SLIRP-Binding entfernt, VirtioFS Feature-Gate entfernt (jetzt GA), Metrik-Umbenennung `kubevirt_vmi_migration_data_total_bytes` → `..._bytes_total` | Commit `868cedb`; windows-ad nutzt keines der entfernten Features → kein Risiko |
 | 2026-06-14 | KubeVirt v1.8.2 → v1.8.3, CDI bleibt v1.65.0 | Minor | Manuell | Abgeschlossen | Reiner Security-/Bugfix-Patch: Symlink-Traversal in VMExport behoben, virt-api Autorisierungsfehler behoben, CVE GHSA-p77j-4mvh-x3m3 gepatcht | Commit `967cb82` |
 | 2026-06-29 | KubeVirt v1.8.3 → v1.8.4, CDI bleibt v1.65.0 | Minor | Manuell | Abgeschlossen | gRPC-Connection-Leak in `virt-handler` behoben (unbegrenztes Memory-Wachstum); CVE-2026-35469 (`moby/spdystream`) gepatcht | Commit `2caf775` |
+| 2026-08-03 | KubeVirt v1.8.4 → v1.9.0, CDI bleibt v1.65.0 | Minor | Manuell (kustomization.yaml Release-URL) | Abgeschlossen | Kein Breaking Change relevant für dieses Setup: aktive Feature Gates (`LiveMigration`, `Snapshot`, `HotplugVolumes`, `HostDisk`) nicht entfernt (`HotplugVolumes` graduiert nur zu Beta); strengere Netzwerk-Binding-Validierung betrifft windows-ad nicht (nutzt bereits explizit `masquerade: {}`); cgroup v1 nur deprecated, Removal erst nächstes Release. Neue Komponenten automatisch dazugekommen: `virt-exportproxy` (VMExport GA), `virt-template-apiserver`/`virt-template-controller` (Template-Feature-Gate jetzt default-on) | Beim Pre-Check unabhängig entdeckt: `virt-launcher-windows-ad-dc` hängt in `Init:0/1` mit `fsck`-Fehler auf dem Longhorn-Volume (`pvc-8131dc95-...`) — vermutlich derselbe Root Cause wie der gitea-postgresql-Vorfall vom selben Tag (Node-Reboot vor dem Longhorn-Eviction-Fix in `update-master-nodes.yml`). Nicht durch dieses Upgrade verursacht, bewusst separat behandelt (siehe Stolperfalle "windows-ad VM ist vom Upgrade-Prozess entkoppelt") |
 
 ### Reklassifizierungen (Minor → Major)
 
