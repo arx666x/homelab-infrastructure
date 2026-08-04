@@ -43,15 +43,21 @@ spec:
                     values: [amd64]
       containers:
         - name: ciq-backend
-          image: gitea.reckeweg.io/achim/ciq-backend:1.1.12
+          image: gitea.reckeweg.io/achim/ciq-backend:1.1.13
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080
               protocol: TCP
           env:
+            # Achims Findings (2026-08-03/04): Postgres+Typesense moved off
+            # the in-cluster Longhorn-backed instances onto the Musicbox
+            # (repeated Longhorn checkpoint I/O stalls under crawler write
+            # load, see project memory). Same chromeiq DB user/password and
+            # Typesense API key as before - only the host moved, secrets
+            # below are unchanged and still correct.
             - name: CIQ_BACKEND_POSTGRES_HOST
-              value: "chromeiq-postgresql.chromeiq.svc.cluster.local"
+              value: "ciq-db.reckeweg.io"
             - name: CIQ_BACKEND_POSTGRES_DB
               value: "chromeiq"
             - name: CIQ_BACKEND_POSTGRES_USER
@@ -62,7 +68,7 @@ spec:
                   name: chromeiq-postgresql-secret
                   key: password
             - name: CIQ_BACKEND_TYPESENSE_URL
-              value: "http://chromeiq-typesense.chromeiq.svc.cluster.local:8108"
+              value: "http://ciq-search.reckeweg.io:8108"
             - name: CIQ_BACKEND_TYPESENSE_API_KEY
               valueFrom:
                 secretKeyRef:
