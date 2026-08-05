@@ -43,7 +43,7 @@ spec:
                     values: [amd64]
       containers:
         - name: ciq-backend
-          image: gitea.reckeweg.io/achim/ciq-backend:1.1.15
+          image: gitea.reckeweg.io/achim/ciq-backend:1.1.16
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -85,6 +85,31 @@ spec:
                 secretKeyRef:
                   name: chromeiq-lastfm-secret
                   key: api-key
+            # Subsonic-compatible REST API (architecture.md 3.7/8, roadmap
+            # Phase 4) - opens SonoPhone/SonoPad/Substreamer against
+            # ciq-backend directly instead of Navidrome+bonob. HOLD POINT
+            # (2026-08-05): migrations 0016/0017 (subsonic_users table +
+            # supporting indexes) are ciq-crawler-owned and only applied on
+            # its *next* startup - do not `argocd app sync chromeiq` with
+            # this block active until that has happened, or every Subsonic
+            # login attempt 500s until the table exists (the backend itself
+            # stays up either way, s. main.go's non-fatal bootstrap
+            # handling - just the feature is unusable until then).
+            - name: CIQ_BACKEND_SUBSONIC_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-subsonic-secret
+                  key: encryption-key
+            - name: CIQ_BACKEND_SUBSONIC_USER
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-subsonic-secret
+                  key: username
+            - name: CIQ_BACKEND_SUBSONIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-subsonic-secret
+                  key: password
           volumeMounts:
             - name: music
               mountPath: /music
