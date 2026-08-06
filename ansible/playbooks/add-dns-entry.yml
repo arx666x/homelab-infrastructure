@@ -1,0 +1,108 @@
+---
+# add-dns-entry.yml
+#
+# EINZIGER unterstuetzter Weg, einen internen *.reckeweg.io-Host in Pi-hole
+# anzulegen ODER zu entfernen - seit 2026-08-06 bewusst NICHT mehr ueber die
+# Pi-hole-Web-UI ("Local DNS Records"). Grund: die UI legt nur einen
+# A-Record in dns.hosts (custom.list) an, ohne den noetigen AAAA-NODATA-
+# Block in misc.dnsmasq_lines. Weil es kein NAT-Hairpin auf der FritzBox
+# gibt (siehe Netzwerk_BROWSER-ISSUES.md / Netzwerk_NETWORK-GUIDE.md),
+# landet jede App mit Dual-Stack-Aufloesung (Safari, Chrome, curl - alles,
+# was ueber getaddrinfo() laeuft, NICHT dig) dann in einer toten Verbindung,
+# sobald sie die per Wildcard oeffentlich sichtbare, echte IPv6-Adresse
+# bevorzugt. Genau das hat am 2026-08-06 ciq.reckeweg.io/ciq-api.reckeweg.io
+# (und vier weitere ChromeIQ-Hosts) lahmgelegt. Details siehe
+# Netzwerk_PiHole-HA.md, Abschnitt "2026-08-06: ciq/ciq-api-Ausfall — Root
+# Cause und neue Policy".
+#
+# Das eigentliche Setzen/Entfernen macht scripts/pihole-add-dns-entry.sh (im
+# selben Repo) - dieses Playbook verteilt es nur nach /usr/local/bin auf
+# beide [dns]-Inventory-Hosts und ruft es dort auf. Das Skript selbst ist
+# in beide Richtungen idempotent und fasst IMMER dns.hosts +
+# misc.dnsmasq_lines zusammen an, damit nie ein halbfertiger Zustand
+# entstehen kann (z.B. nur aus einer Quelle entfernt).
+#
+# WARUM EIN EIGENES PLAYBOOK UND NICHT NUR DAS SKRIPT PER HAND: dns.hosts
+# wird laut Doku automatisch zwischen dns01/dns02 repliziert, ABER
+# misc.dnsmasq_lines NIE (nebula-sync deckt nur die Gravity-DB ab, siehe
+# Netzwerk_PiHole-HA.md "Offene Punkte"). Wer das Skript nur auf einem Node
+# per Hand aufruft, vergisst leicht den zweiten - genau das strukturelle
+# Risiko, das dieses Playbook beseitigt, indem es IMMER beide Nodes in
+# einem Lauf trifft.
+#
+# Nur das Skript verteilen/aktualisieren (kein neuer Eintrag, keine Loeschung):
+#   ansible-playbook -i inventory/hosts.ini playbooks/add-dns-entry.yml
+#
+# Verteilen UND auf beiden Nodes einen neuen Eintrag anlegen:
+#   ansible-playbook -i inventory/hosts.ini playbooks/add-dns-entry.yml \
+#     -e dns_host=ciq.reckeweg.io -e dns_ip=192.168.20.100
+#
+# Verteilen UND auf beiden Nodes einen Eintrag entfernen:
+#   ansible-playbook -i inventory/hosts.ini playbooks/add-dns-entry.yml \
+#     -e dns_action=remove -e dns_host=ciq.reckeweg.io
+#
+# Danach zur Kontrolle von aussen (Mac, nicht auf dns01/dns02):
+#   dig +short A    ciq.reckeweg.io @192.168.11.56
+#   dig +short AAAA ciq.reckeweg.io @192.168.11.56   # muss leer sein (NODATA), ausser nach --remove
+
+- name: pihole-add-dns-entry.sh auf DNS-Nodes verteilen (und optional anlegen/entfernen)
+  hosts: dns
+  become: true
+  gather_facts: false
+
+  vars:
+    dns_action: add   # add (Default) oder remove: -e dns_action=remove
+
+  tasks:
+    - name: dns_action validieren
+      ansible.builtin.fail:
+        msg: "dns_action muss 'add' oder 'remove' sein, nicht '{{ dns_action }}'"
+      when: dns_action not in ['add', 'remove']
+      run_once: true
+
+    - name: dns_ip erforderlich, wenn dns_action=add
+      ansible.builtin.fail:
+        msg: "Beim Anlegen (dns_action=add, Default) sind dns_host UND dns_ip erforderlich."
+      when:
+        - dns_action == 'add'
+        - dns_host is defined
+        - dns_ip is not defined
+      run_once: true
+
+    - name: Script nach /usr/local/bin kopieren
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../scripts/pihole-add-dns-entry.sh"
+        dest: /usr/local/bin/pihole-add-dns-entry.sh
+        mode: "0755"
+        owner: root
+        group: root
+
+    - name: "{{ dns_host }} anlegen -> {{ dns_ip | default('') }}"
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/pihole-add-dns-entry.sh
+          - "{{ dns_host }}"
+          - "{{ dns_ip }}"
+      register: add_result
+      changed_when: "'hinzugefuegt' in add_result.stdout"
+      when:
+        - dns_host is defined
+        - dns_ip is defined
+        - dns_action == 'add'
+
+    - name: "{{ dns_host }} entfernen"
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/pihole-add-dns-entry.sh
+          - --remove
+          - "{{ dns_host }}"
+      register: remove_result
+      changed_when: "'entfernt' in remove_result.stdout"
+      when:
+        - dns_host is defined
+        - dns_action == 'remove'
+
+    - name: Ausgabe anzeigen
+      ansible.builtin.debug:
+        msg: "{{ (add_result if dns_action == 'add' else remove_result).stdout_lines }}"
+      when: dns_host is defined
