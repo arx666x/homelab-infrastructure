@@ -20,3 +20,4 @@ resources:
   # signing key, SMTP relay for password-reset mail)
   - sealed-jwt-secret.yaml
   - sealed-smtp-secret.yaml
+  - sealed-bootstrap-admin-secret.yaml

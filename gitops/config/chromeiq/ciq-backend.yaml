@@ -165,6 +165,23 @@ spec:
                   key: from-address
             - name: CIQ_BACKEND_SMTP_TLS
               value: "starttls"
+            # Idempotent bootstrap admin (internal/api/auth.go main.go
+            # startup) - without this, the users table stays empty and
+            # nobody (including Achim) can log in once every route requires
+            # a scope. Only creates the row if it doesn't already exist -
+            # safe to leave in place across restarts; change the password
+            # via the User-Management UI after first login, this env var
+            # is not re-applied to an existing row.
+            - name: CIQ_BACKEND_BOOTSTRAP_ADMIN_LOGIN
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-bootstrap-admin-secret
+                  key: login
+            - name: CIQ_BACKEND_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-bootstrap-admin-secret
+                  key: password
           volumeMounts:
             - name: music
               mountPath: /music
