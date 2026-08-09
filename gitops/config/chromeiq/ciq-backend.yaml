@@ -117,6 +117,54 @@ spec:
                 secretKeyRef:
                   name: chromeiq-subsonic-secret
                   key: password
+            # Local user management + auth (konzeptdokument 3.9, decision
+            # 2026-08-09) - JWT signing key for the app's own session
+            # tokens, and SMTP relay for password-reset mail. Same
+            # HOLD POINT pattern as the Subsonic block above: migration
+            # 0024_users_and_scopes is ciq-crawler-owned and only applied
+            # on its *next* startup, and none of this is wired up in any
+            # ciq-backend image built/deployed so far - these env vars are
+            # inert until an image containing the auth code is actually
+            # rolled out. SMTP reuses the same Gmail app password already
+            # sealed for Alertmanager (gitops/config/monitoring), with the
+            # correct username - the monitoring secret's own "gmail-user"
+            # key has a stray trailing ">" and was never actually used
+            # there (Alertmanager's config hardcodes the username instead),
+            # not copied here.
+            - name: CIQ_BACKEND_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-jwt-secret
+                  key: secret
+            - name: CIQ_BACKEND_PUBLIC_BASE_URL
+              value: "https://ciq.reckeweg.io"
+            - name: CIQ_BACKEND_SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-smtp-secret
+                  key: host
+            - name: CIQ_BACKEND_SMTP_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-smtp-secret
+                  key: port
+            - name: CIQ_BACKEND_SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-smtp-secret
+                  key: username
+            - name: CIQ_BACKEND_SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-smtp-secret
+                  key: password
+            - name: CIQ_BACKEND_SMTP_FROM_ADDRESS
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-smtp-secret
+                  key: from-address
+            - name: CIQ_BACKEND_SMTP_TLS
+              value: "starttls"
           volumeMounts:
             - name: music
               mountPath: /music

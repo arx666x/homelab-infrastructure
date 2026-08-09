@@ -16,3 +16,7 @@ resources:
   - sealed-lastfm-secret.yaml
   # created and added 2026.08.05 AR - Subsonic API bootstrap credentials
   - sealed-subsonic-secret.yaml
+  # created and added 2026.08.09 AR - local user management + auth (JWT
+  # signing key, SMTP relay for password-reset mail)
+  - sealed-jwt-secret.yaml
+  - sealed-smtp-secret.yaml

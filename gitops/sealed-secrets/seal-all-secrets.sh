@@ -452,6 +452,60 @@ else
     "api-key"
 fi
 
+# JWT-Signing-Key fuer die lokale Nutzerverwaltung (konzeptdokument 3.9,
+# Entscheidung 2026-08-09) - wie der Typesense-API-Key ein generierter
+# Wert, den sich niemand merken muss, kein interaktiver Prompt noetig.
+if kubectl get secret chromeiq-jwt-secret -n chromeiq &>/dev/null; then
+  seal_from_cluster "chromeiq-jwt-secret" "chromeiq" \
+    "gitops/config/chromeiq/sealed-jwt-secret.yaml"
+else
+  info "chromeiq-jwt-secret nicht im Cluster – generiere neuen Signing-Key:"
+  JWT_SECRET="$(openssl rand -hex 32)"
+  kubectl create secret generic "chromeiq-jwt-secret" \
+    --namespace="chromeiq" \
+    --from-literal="secret=${JWT_SECRET}" \
+    --dry-run=client -o json \
+    | kubeseal --cert "$CERT" --format yaml \
+    > "$REPO_ROOT/gitops/config/chromeiq/sealed-jwt-secret.yaml"
+  success "gitops/config/chromeiq/sealed-jwt-secret.yaml"
+fi
+
+# SMTP-Relay fuer Passwort-Reset-Mails (konzeptdokument 3.9) - bewusst
+# derselbe Gmail-App-Passwort-Wert wie fuer Alertmanager
+# (gitops/config/monitoring/sealed-alertmanager-credentials.yaml, Key
+# "gmail-password"), damit nicht zwei App-Passwoerter im selben Google-
+# Konto verwaltet werden muessen. Username bewusst fest verdrahtet statt
+# aus dem Monitoring-Secret uebernommen: dessen "gmail-user"-Key hat einen
+# verwaisten schliessenden ">" (nie aufgefallen, weil Alertmanagers eigene
+# Config den Username stattdessen hart im YAML traegt statt aus dem Secret
+# zu lesen) - hier richtig gesetzt.
+if kubectl get secret chromeiq-smtp-secret -n chromeiq &>/dev/null; then
+  seal_from_cluster "chromeiq-smtp-secret" "chromeiq" \
+    "gitops/config/chromeiq/sealed-smtp-secret.yaml"
+else
+  if kubectl get secret alertmanager-credentials -n monitoring &>/dev/null; then
+    info "chromeiq-smtp-secret nicht im Cluster – uebernehme Gmail-App-Passwort aus monitoring:"
+    SMTP_PASS="$(kubectl get secret alertmanager-credentials -n monitoring -o jsonpath='{.data.gmail-password}' | base64 -d)"
+    kubectl create secret generic "chromeiq-smtp-secret" \
+      --namespace="chromeiq" \
+      --from-literal="host=smtp.gmail.com" \
+      --from-literal="port=587" \
+      --from-literal="username=achim.reckeweg@gmail.com" \
+      --from-literal="password=${SMTP_PASS}" \
+      --from-literal="from-address=achim.reckeweg@gmail.com" \
+      --dry-run=client -o json \
+      | kubeseal --cert "$CERT" --format yaml \
+      > "$REPO_ROOT/gitops/config/chromeiq/sealed-smtp-secret.yaml"
+    unset SMTP_PASS
+    success "gitops/config/chromeiq/sealed-smtp-secret.yaml"
+  else
+    warn "weder chromeiq-smtp-secret noch alertmanager-credentials im Cluster – interaktiv eingeben:"
+    seal_new "chromeiq-smtp-secret" "chromeiq" \
+      "gitops/config/chromeiq/sealed-smtp-secret.yaml" \
+      "host" "port" "username" "password" "from-address"
+  fi
+fi
+
 # Reminder: sealed-*.yaml erst in gitops/config/chromeiq/kustomization.yaml
 # aufnehmen, nachdem sie hier echt generiert wurden (s. Kommentare in den
 # Platzhalter-Dateien) - sonst crashloopt Postgres/Typesense mangels Passwort.
