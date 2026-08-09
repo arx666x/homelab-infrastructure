@@ -85,6 +85,13 @@ spec:
                 secretKeyRef:
                   name: chromeiq-lastfm-secret
                   key: api-key
+            # Mood-Suche Freitext-Suche (docs/audio-embeddings-mood-search.md
+            # Phase 4) - in-cluster ClusterIP short DNS, same namespace as
+            # this Deployment. Empty/unreachable degrades cleanly (main.go's
+            # embedSvcURL is nil-safe like lastfmAPIKey - handleMoodSearch's
+            # text-seed path returns an empty result instead of erroring).
+            - name: CIQ_BACKEND_EMBED_SVC_URL
+              value: "http://ciq-embed-svc:8000"
             # Subsonic-compatible REST API (architecture.md 3.7/8, roadmap
             # Phase 4) - opens SonoPhone/SonoPad/Substreamer against
             # ciq-backend directly instead of Navidrome+bonob. HOLD POINT
