@@ -35,7 +35,10 @@
 
 1. **Master zuerst** — alle Master upgraden bevor Workers dran kommen
 2. **Master einzeln (`serial: 1`)** — etcd-Quorum benötigt 2 von 3 Master zu jeder Zeit
-3. **Workers einzeln (`serial: 1`)** — Longhorn-Drain erfordert sequenziellen Ablauf
+3. **Workers zu zweit (`serial: 2`, seit 2026-08-10)** — keine etcd-Quorum-Bindung wie bei
+   Mastern; Longhorn rebuilt ohnehin nur ein Replica pro Volume gleichzeitig, ein
+   zufälliges Zusammentreffen zweier gleichzeitig evakuierter Nodes mit Replicas
+   desselben Volumes serialisiert sich dadurch automatisch wieder
 4. **Cluster-Verify nach den Masters** — nie zu den Workers ohne Gesundheitscheck
 5. **Nur stable Releases** — keine RC/Pre-release Versionen
 6. **Keine Minor-Version überspringen** — jeder Minor-Hop ist eine eigene Runde (Master → Verify → Worker → Verify), auch wenn das Ziel mehrere Minors entfernt liegt

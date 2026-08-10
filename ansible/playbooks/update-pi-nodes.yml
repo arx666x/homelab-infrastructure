@@ -35,7 +35,8 @@
 
 - name: Koordiniertes Update der Raspberry Pi k3s Worker-Nodes
   hosts: worker
-  serial: 1                          # Immer nur einen Node gleichzeitig
+  serial: 2                          # 2 Nodes gleichzeitig (keine etcd-Quorum-Bindung wie bei Mastern;
+                                      # Longhorn rebuilt ohnehin nur ein Replica pro Volume gleichzeitig)
   max_fail_percentage: 0             # Bei Fehler sofort abbrechen
   gather_facts: true
 
