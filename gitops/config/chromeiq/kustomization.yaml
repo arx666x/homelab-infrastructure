@@ -21,3 +21,6 @@ resources:
   - sealed-jwt-secret.yaml
   - sealed-smtp-secret.yaml
   - sealed-bootstrap-admin-secret.yaml
+  # created and added 2026.08.10 AR - MCP server (docs/mcp-server.md,
+  # Phase 6), no secrets of its own
+  - ciq-mcp.yaml

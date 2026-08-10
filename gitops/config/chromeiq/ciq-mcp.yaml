@@ -1,0 +1,125 @@
+# =============================================================================
+# ciq-mcp - MCP-Server für ChromeIQ (docs/mcp-server.md, Phase 6 der Roadmap).
+# Dünner Wrapper um ciq-backends bestehende REST-API + eigene minimale
+# OAuth-2.1-Authorization-Server-Rolle für MCP-Clients (delegiert den
+# eigentlichen Login an ciq-frontends bestehende Login-Seite, s. Doku) -
+# kein eigenes Postgres/Typesense, kein geteiltes Secret mit ciq-backend.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ciq-mcp
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: ciq-mcp
+    app.kubernetes.io/instance: chromeiq
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ciq-mcp
+      app.kubernetes.io/instance: chromeiq
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ciq-mcp
+        app.kubernetes.io/instance: chromeiq
+        app.kubernetes.io/component: mcp
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: [amd64]
+      containers:
+        - name: ciq-mcp
+          image: gitea.reckeweg.io/achim/ciq-mcp:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: CIQ_MCP_PUBLIC_BASE_URL
+              value: "https://ciq-mcp.reckeweg.io"
+            - name: CIQ_MCP_LOGIN_URL
+              value: "https://ciq.reckeweg.io/login"
+            - name: CIQ_MCP_BACKEND_BASE_URL
+              value: "https://ciq-api.reckeweg.io"
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: {memory: 64Mi, cpu: 50m}
+            limits: {memory: 256Mi, cpu: 500m}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ciq-mcp
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: ciq-mcp
+    app.kubernetes.io/instance: chromeiq
+    app.kubernetes.io/component: mcp
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: ciq-mcp
+    app.kubernetes.io/instance: chromeiq
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ciq-mcp-tls
+  namespace: chromeiq
+spec:
+  secretName: ciq-mcp-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - ciq-mcp.reckeweg.io
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ciq-mcp
+  namespace: chromeiq
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [ciq-mcp.reckeweg.io]
+      secretName: ciq-mcp-tls
+  rules:
+    - host: ciq-mcp.reckeweg.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ciq-mcp
+                port:
+                  number: 8080
