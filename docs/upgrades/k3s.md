@@ -18,6 +18,7 @@
 | 2026-05-17/18 | v1.35.4 → v1.36.0 | Major | Manuell | Abgeschlossen | 1 Minor-Hop; zusätzlich RPi-Kernel 6.18 hat `ip_tables`-Modul entfernt → nftables-Umstellung in update-pi-nodes.yml erforderlich | Playbook `update-pi-nodes.yml` im selben Zug gefixt |
 | 2026-05-18 | v1.36.0 → v1.36.1 | Minor | Manuell | Abgeschlossen | Patch-Release, nur Bugfixes, kein Sonderfall | — |
 | 2026-05-29 | v1.36.1 → v1.36.2 | Minor | Manuell | Abgeschlossen | Patch-Release, nur Bugfixes, kein Sonderfall; nftables-Fix aus v1.36.0-Upgrade weiterhin wirksam (RPis liefen bereits auf Kernel 6.18.34) | Dokumentiert in Commit "docs: k3s v1.36.2 upgrade dokumentiert" (2026-06-29) |
+| 2026-08-10 | v1.36.2 → v1.36.3 | Minor | Manuell (Ansible) | Abgeschlossen | Patch-Release, nur Bugfixes, kein Sonderfall; zusätzlich OS-Paket-Update auf allen 9 Nodes | Alle 3 Master + alle 6 Worker aktualisiert. Vier separate Longhorn-Eviction-Timeouts (30 min, `longhorn_wait_timeout`) beim Rebuild des 50 GB `pvc-73e5e5c2` (kube-prometheus-stack-Prometheus-Volume) auf gmkt-01x, gmkt-03x, k3s-01a und k3s-06a — jedes Mal lief der Rebuild tatsächlich weiter/schloss kurz nach dem Ansible-Timeout ab (dreimal reines Timing, einmal auf gmkt-01x echter Stall durch `unexpected EOF` beim Datei-Sync, behoben durch Löschen des hängenden WO-Replicas und Neustart des Rebuilds). Betroffene Node-Läufe danach jeweils mit `--limit <node>` erneut angestoßen, kein Datenverlust, Volume blieb durchgehend `healthy`. **Empfehlung:** `longhorn_wait_timeout` in `update-master-nodes.yml`/`update-pi-nodes.yml` für Volumes >20GB auf 3600s erhöhen, siehe Stolperfalle unten. Nebenbefund (nicht durch k3s-Upgrade verursacht, aber durch Node-Drain ausgelöst): `gitea-actions-runner-0` verlor durch Reschedule während master01-Drain seine Registrierung (`invalid character '/' looking for beginning of value`), behoben durch StatefulSet scale 0→1 (nach Pause von ArgoCD-selfHeal); dadurch blockierter ChromeIQ-CI-Backlog löste sich danach selbst auf |
 
 ### Reklassifizierungen (Minor → Major)
 
@@ -206,6 +207,25 @@ Master → Verify → Worker → Verify):
     -o jsonpath='{.spec.disks}' | python3 -c \
     "import sys,json; d=json.load(sys.stdin); print(list(d.keys())[0])"
   ```
+  **Update 2026-08-10:** Beim v1.36.3-Upgrade trat dieser Timeout viermal auf (gmkt-01x,
+  gmkt-03x, k3s-01a, k3s-06a) — jedes Mal wegen des 50 GB `pvc-73e5e5c2`-Volumes
+  (kube-prometheus-stack-Prometheus). Zwei Fehlerbilder, unterscheidbar über
+  `kubectl -n longhorn-system get engines.longhorn.io -l longhornvolume=<vol> -o jsonpath='{.items[0].status.rebuildStatus}'`:
+  - **Reines Timing** (3×): `progress` steigt kontinuierlich, liegt beim Timeout nur
+    knapp unter 100 % → einfach ein bis zwei Minuten abwarten, Eviction schließt von
+    selbst ab, danach Playbook mit `--limit <node>` erneut anstoßen.
+  - **Echter Stall** (1×, gmkt-01x): `progress` bleibt über mehrere Minuten exakt
+    gleich, `appliedRebuildingMBps: 0`. Ursache im Instance-Manager-Log des
+    Zielnodes (`kubectl -n longhorn-system logs instance-manager-<id>`): Dateitransfer
+    brach mit `unexpected EOF` ab, der Ssync-Server terminierte danach nach 5 Minuten
+    Idle — kein automatischer Retry. Fix: das hängende (noch nicht synchronisierte,
+    Mode `WO`) Replica identifizieren und löschen —
+    `kubectl -n longhorn-system delete replica <name>` — Longhorn startet den Rebuild
+    automatisch neu. Die 2 verbleibenden gesunden Replicas halten das Volume während
+    der gesamten Prozedur `healthy` (nicht `degraded`), kein Datenrisiko.
+  **Empfehlung:** `longhorn_wait_timeout` (Default 1800s) in beiden Playbooks für
+  Volumes >20GB auf mindestens 3600s erhöhen, um die wiederholten Timing-Fehlschläge
+  zu vermeiden — noch nicht umgesetzt.
 - **Install-Script überschreibt Unit-File-Flags** — Das offizielle k3s-Install-Script
   (`get.k3s.io`) überschreibt die systemd-Unit-File und würde dabei alle Flags
   verlieren (`--disable traefik`, `--flannel-iface`, `--node-ip`, `--cluster-init`
