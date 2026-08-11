@@ -39,7 +39,7 @@ spec:
                     values: [amd64]
       containers:
         - name: ciq-mcp
-          image: gitea.reckeweg.io/achim/ciq-mcp:0.4.0
+          image: gitea.reckeweg.io/achim/ciq-mcp:0.4.1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
