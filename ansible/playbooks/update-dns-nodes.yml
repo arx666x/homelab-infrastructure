@@ -1,0 +1,202 @@
+---
+# update-dns-nodes.yml
+#
+# Rolling OS- und Pi-hole-Update für die DNS-Nodes (dns01, dns02).
+#
+# Beide Pi-holes sind unabhängige Resolver OHNE Keepalived/VIP-Failover —
+# Redundanz funktioniert nur, solange mindestens einer durchgängig
+# erreichbar bleibt und DNS beantwortet. Deshalb IMMER seriell (serial: 1),
+# nie beide gleichzeitig, und erst weiter zum nächsten Node wenn der
+# vorherige nachweislich wieder DNS-Anfragen beantwortet.
+#
+# Ablauf pro Node:
+#   1. Pre-Check: offene OS-Updates zählen, Kernel-/Firmware-Update erkennen,
+#      aktuellen Pi-hole-Versionsstand anzeigen
+#   2. apt update + apt upgrade (full)
+#   3. Pi-hole-Update (`pihole -up` — idempotent, meldet "Everything is up
+#      to date!" wenn nichts zu tun ist, daher immer gefahrlos ausführbar)
+#   4. Reboot NUR wenn ein Kernel-/Firmware-Update installiert wurde oder
+#      /var/run/reboot-required gesetzt ist
+#   5. Warten bis Node wieder per SSH erreichbar ist (falls rebootet)
+#   6. pihole-FTL Service-Status prüfen, bei Bedarf starten
+#   7. DNS-Funktionstest: `dig` vom Control-Node direkt gegen den Node
+#   8. Abbruch der GESAMTEN Ausführung, falls ein Node nach dem Update nicht
+#      sauber antwortet (max_fail_percentage: 0) — verhindert, dass beide
+#      DNS-Server gleichzeitig kaputt sind, weil trotzdem zum zweiten Node
+#      weitergegangen würde
+#
+# Voraussetzungen:
+#   - dig lokal auf dem Control-Node installiert (macOS: vorinstalliert)
+#   - SSH-Key-Zugang zu dns01/dns02 (siehe inventory/hosts.ini [dns])
+#
+# Ausführung:
+#   ansible-playbook update-dns-nodes.yml
+#   ansible-playbook update-dns-nodes.yml --limit dns01      # einzelner Node
+#   ansible-playbook update-dns-nodes.yml -e skip_reboot=true # kein Reboot (nur zum Testen)
+#   ansible-playbook update-dns-nodes.yml --check             # Dry-Run (Pre-Checks funktionieren,
+#                                                                 apt/pihole/reboot werden simuliert)
+
+- name: Rolling OS- und Pi-hole-Update der DNS-Nodes
+  hosts: dns
+  serial: 1
+  max_fail_percentage: 0
+  gather_facts: true
+
+  vars:
+    skip_reboot: false        # Reboot überspringen: -e skip_reboot=true
+    node_ready_timeout: 300   # Sekunden warten bis Node nach Reboot wieder erreichbar ist
+    dns_test_domain: "google.com"
+
+  tasks:
+
+    # -------------------------------------------------------------------------
+    # PRE-CHECK
+    # -------------------------------------------------------------------------
+
+    - name: "[ PRE ] apt-Cache aktualisieren"
+      become: true
+      apt:
+        update_cache: true
+        cache_valid_time: 0
+
+    - name: "[ PRE ] Anzahl ausstehender OS-Updates ermitteln"
+      become: true
+      shell: apt list --upgradable 2>/dev/null | grep -v '^Listing' | wc -l
+      register: os_updates_count
+      changed_when: false
+
+    - name: "[ PRE ] Kernel-/Firmware-Update dabei?"
+      become: true
+      shell: apt list --upgradable 2>/dev/null | grep -iE 'linux-image|raspberrypi-kernel|firmware' || true
+      register: kernel_update_check
+      changed_when: false
+
+    - name: "[ PRE ] Pi-hole-Versionsstand prüfen"
+      become: true
+      command: pihole -v
+      register: pihole_version_check
+      changed_when: false
+      failed_when: false
+
+    - name: "[ PRE ] Status anzeigen"
+      debug:
+        msg: >
+          {{ inventory_hostname }}: {{ os_updates_count.stdout }} OS-Updates ausstehend.
+          Kernel/Firmware betroffen: {{ kernel_update_check.stdout_lines | length > 0 }}.
+          Pi-hole: {{ pihole_version_check.stdout_lines | default(['unbekannt']) }}
+
+    # -------------------------------------------------------------------------
+    # OS UPDATE
+    # -------------------------------------------------------------------------
+
+    - name: "[ APT ] Pakete upgraden"
+      become: true
+      apt:
+        upgrade: full
+        autoremove: true
+        autoclean: true
+      register: apt_result
+
+    - name: "[ APT ] Aktualisierte Pakete anzeigen"
+      debug:
+        msg: "{{ apt_result.stdout_lines | select('match', '^(Inst|Remv)') | list }}"
+      when: apt_result.stdout_lines is defined
+
+    # -------------------------------------------------------------------------
+    # PI-HOLE UPDATE
+    # -------------------------------------------------------------------------
+
+    - name: "[ PIHOLE ] Update ausführen (idempotent)"
+      become: true
+      command: pihole -up
+      register: pihole_update_result
+      changed_when: "'Everything is up to date' not in pihole_update_result.stdout"
+
+    - name: "[ PIHOLE ] Update-Ergebnis anzeigen"
+      debug:
+        msg: "{{ pihole_update_result.stdout_lines[-10:] }}"
+
+    # -------------------------------------------------------------------------
+    # REBOOT (nur wenn nötig)
+    # -------------------------------------------------------------------------
+
+    - name: "[ REBOOT ] Prüfen ob Reboot-Flag gesetzt ist"
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required_file
+
+    - name: "[ REBOOT ] Reboot-Entscheidung anzeigen"
+      debug:
+        msg: >
+          Reboot-Flag: {{ reboot_required_file.stat.exists }}.
+          Kernel-/Firmware-Update installiert: {{ kernel_update_check.stdout_lines | length > 0 }}.
+          {% if skip_reboot | bool %}skip_reboot=true gesetzt -> Reboot wird übersprungen.{% endif %}
+
+    - name: "[ REBOOT ] Node neu starten"
+      become: true
+      reboot:
+        reboot_timeout: "{{ node_ready_timeout }}"
+        post_reboot_delay: 15
+        msg: "Reboot durch Ansible update-dns-nodes.yml"
+      when:
+        - not skip_reboot | bool
+        - reboot_required_file.stat.exists or (kernel_update_check.stdout_lines | length > 0)
+
+    - name: "[ REBOOT ] Warten bis SSH wieder verfügbar"
+      wait_for_connection:
+        delay: 10
+        timeout: "{{ node_ready_timeout }}"
+      when:
+        - not skip_reboot | bool
+        - reboot_required_file.stat.exists or (kernel_update_check.stdout_lines | length > 0)
+
+    # -------------------------------------------------------------------------
+    # POST-UPDATE VERIFIKATION
+    # -------------------------------------------------------------------------
+
+    - name: "[ POST ] pihole-FTL Service-Status prüfen"
+      become: true
+      systemd:
+        name: pihole-FTL
+      register: ftl_status
+
+    - name: "[ POST ] pihole-FTL ggf. starten"
+      become: true
+      systemd:
+        name: pihole-FTL
+        state: started
+      when: ftl_status.status.ActiveState != 'active'
+
+    - name: "[ POST ] Warten bis pihole-FTL aktiv ist"
+      become: true
+      systemd:
+        name: pihole-FTL
+      register: ftl_status_final
+      until: ftl_status_final.status.ActiveState == 'active'
+      retries: 12
+      delay: 5
+
+    - name: "[ POST ] DNS-Funktionstest gegen diesen Node (vom Control-Node aus)"
+      command: "dig @{{ ansible_host }} {{ dns_test_domain }} +time=5 +tries=2 +short"
+      register: dns_test
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      failed_when: dns_test.stdout == ""
+
+    - name: "[ POST ] DNS-Testergebnis anzeigen"
+      debug:
+        msg: "{{ inventory_hostname }} beantwortet DNS-Anfragen: {{ dns_test.stdout_lines }}"
+
+    - name: "[ POST ] Kernel-Version anzeigen"
+      command: uname -r
+      register: new_kernel
+      changed_when: false
+
+    - name: "[ DONE ] Node abgeschlossen"
+      debug:
+        msg: >
+          ✓ {{ inventory_hostname }} erfolgreich aktualisiert.
+          Kernel: {{ new_kernel.stdout }}.
+          OS-Updates verarbeitet: {{ os_updates_count.stdout }}.
+          Pi-hole: {{ 'aktualisiert' if 'Everything is up to date' not in pihole_update_result.stdout else 'war bereits aktuell' }}.
