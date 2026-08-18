@@ -43,7 +43,7 @@ spec:
                     values: [amd64]
       containers:
         - name: ciq-backend
-          image: gitea.reckeweg.io/achim/ciq-backend:1.1.70
+          image: gitea.reckeweg.io/achim/ciq-backend:1.1.71
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -87,14 +87,14 @@ spec:
             # cmd/discogsimport's shared logic when triggered from the
             # Profile page instead of the CLI.
             # HOLD POINT (same pattern as the Subsonic/auth blocks below):
-            # migration 0040 (import_runs) is ciq-crawler-owned and only
-            # applied on its *next* startup - until Achim manually bumps
-            # the TrueNAS crawler app to ciq-crawler:1.1.49, both Import
-            # buttons on the Profile page 500 (the rest of the backend
-            # stays up fine, s. main.go's non-fatal bootstrap handling
-            # precedent). Also needs the //musicbox/rsnotes SMB share to
-            # actually exist (Achim's manual TrueNAS step, s. smb-pv.yaml)
-            # before the RS-Notes button specifically becomes usable.
+            # migration 0040 (import_runs) and 0041 (rs_notes_review_queue
+            # dedup) are ciq-crawler-owned and only applied on its *next*
+            # startup - both live 2026-08-18 (0040 alongside 1.1.49, 0041
+            # needs 1.1.50). Until then, both Import buttons on the Profile
+            # page 500 (the rest of the backend stays up fine, s. main.go's
+            # non-fatal bootstrap handling precedent). Share name learned
+            # live (2026-08-18): Achim's actual TrueNAS share is
+            # "rs-notes" (with hyphen), not "rsnotes" - s. smb-pv.yaml.
             - name: CIQ_BACKEND_RS_NOTES_DIR
               value: "/rsnotes"
             - name: CIQ_BACKEND_DISCOGS_TOKEN
