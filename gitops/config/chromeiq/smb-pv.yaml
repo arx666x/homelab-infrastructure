@@ -143,3 +143,65 @@ spec:
     requests:
       storage: 10Gi
   volumeName: chromeiq-musicbox-playlists-pv
+
+---
+# Third share: //musicbox/rsnotes (Achim's request, 2026-08-18) - holds
+# his exported Rolling-Stone rating JSON files (docs/album-track-
+# ratings.md §2/§9.5). These used to live committed in the repo under
+# planung/RS-Notes/ - moved out (personal raw data doesn't belong in
+# git, s. .gitignore) in favor of the same "dedicated small RW SMB
+# share" pattern already used for playlists. Read-write because the
+# UI-triggered RS-Notes import (ciq-backend, cmd/rsnotesimport's shared
+# logic) only ever reads it, but Achim's local export script
+# (scripts/export-rs-notes-monthly.sh) needs the same share writable
+# from his Mac too - same "same SMB user already has RW" assumption as
+# the playlists share, needs Achim to confirm/create the share itself
+# (TrueNAS-side, same as every other Musicbox share in this project).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: chromeiq-musicbox-rsnotes-pv
+  labels:
+    app.kubernetes.io/name: musicbox-rsnotes
+    app.kubernetes.io/instance: chromeiq
+spec:
+  capacity:
+    storage: 1Gi # nominal only - the SMB driver doesn't enforce a quota, tiny JSON files
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain # never let k8s delete/reformat an external share's contents
+  storageClassName: smb-static
+  mountOptions:
+    - dir_mode=0777
+    - file_mode=0777
+    - vers=3.0
+    - cache=none # same reasoning as the playlists share - externally-written files (Achim's local export) must be seen promptly, not served from a stale CIFS attribute cache
+  csi:
+    driver: smb.csi.k8s.io
+    volumeHandle: chromeiq-musicbox-rsnotes # unique cluster-wide, arbitrary string, no dynamic provisioner involved
+    volumeAttributes:
+      source: "//musicbox/rs-notes" # Achim's actual share name (2026-08-18 correction - the k8s object names above stay "rsnotes" without the hyphen, purely internal identifiers, no need to match)
+    nodeStageSecretRef:
+      name: chromeiq-smb-secret # same SMB user as music/playlists
+      namespace: chromeiq
+  claimRef:
+    namespace: chromeiq
+    name: chromeiq-musicbox-rsnotes
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chromeiq-musicbox-rsnotes
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: musicbox-rsnotes
+    app.kubernetes.io/instance: chromeiq
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: smb-static
+  resources:
+    requests:
+      storage: 1Gi
+  volumeName: chromeiq-musicbox-rsnotes-pv
