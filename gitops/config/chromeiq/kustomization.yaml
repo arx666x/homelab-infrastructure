@@ -24,3 +24,6 @@ resources:
   # created and added 2026.08.10 AR - MCP server (docs/mcp-server.md,
   # Phase 6), no secrets of its own
   - ciq-mcp.yaml
+  # created and added 2026.08.18 AR - UI-triggered imports
+  # (docs/album-track-ratings.md §9.6): Discogs personal access token
+  - sealed-discogs-secret.yaml
