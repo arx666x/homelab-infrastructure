@@ -43,7 +43,7 @@ spec:
                     values: [amd64]
       containers:
         - name: ciq-backend
-          image: gitea.reckeweg.io/achim/ciq-backend:1.1.69
+          image: gitea.reckeweg.io/achim/ciq-backend:1.1.70
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -80,6 +80,28 @@ spec:
               value: "/music"
             - name: CIQ_BACKEND_PLAYLISTS_ROOT
               value: "/playlists"
+            # UI-triggered imports (docs/album-track-ratings.md §9.5/§9.6,
+            # Achim's request 2026-08-18) - RS-Notes export JSONs live on
+            # their own small RW SMB share (smb-pv.yaml), not in git
+            # (personal raw data); the Discogs token authenticates
+            # cmd/discogsimport's shared logic when triggered from the
+            # Profile page instead of the CLI.
+            # HOLD POINT (same pattern as the Subsonic/auth blocks below):
+            # migration 0040 (import_runs) is ciq-crawler-owned and only
+            # applied on its *next* startup - until Achim manually bumps
+            # the TrueNAS crawler app to ciq-crawler:1.1.49, both Import
+            # buttons on the Profile page 500 (the rest of the backend
+            # stays up fine, s. main.go's non-fatal bootstrap handling
+            # precedent). Also needs the //musicbox/rsnotes SMB share to
+            # actually exist (Achim's manual TrueNAS step, s. smb-pv.yaml)
+            # before the RS-Notes button specifically becomes usable.
+            - name: CIQ_BACKEND_RS_NOTES_DIR
+              value: "/rsnotes"
+            - name: CIQ_BACKEND_DISCOGS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-discogs-secret
+                  key: token
             - name: CIQ_BACKEND_LASTFM_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -188,6 +210,8 @@ spec:
               readOnly: true
             - name: playlists
               mountPath: /playlists
+            - name: rsnotes
+              mountPath: /rsnotes
           readinessProbe:
             httpGet: {path: /healthz, port: http}
             initialDelaySeconds: 5
@@ -207,6 +231,9 @@ spec:
         - name: playlists
           persistentVolumeClaim:
             claimName: chromeiq-musicbox-playlists
+        - name: rsnotes
+          persistentVolumeClaim:
+            claimName: chromeiq-musicbox-rsnotes
 
 ---
 apiVersion: v1
