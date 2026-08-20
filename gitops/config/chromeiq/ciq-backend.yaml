@@ -43,7 +43,7 @@ spec:
                     values: [amd64]
       containers:
         - name: ciq-backend
-          image: gitea.reckeweg.io/achim/ciq-backend:1.1.76
+          image: gitea.reckeweg.io/achim/ciq-backend:1.1.77
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
