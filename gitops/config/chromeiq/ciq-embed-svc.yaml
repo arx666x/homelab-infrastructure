@@ -46,16 +46,23 @@ spec:
     spec:
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 50
-              preference:
-                matchExpressions:
+          # Required, not just preferred: the image is amd64-only as of
+          # 0.2.3 (.gitea/workflows/ciq-embed-build-and-push.yml - arm64
+          # dropped from the build matrix, QEMU emulation made
+          # torch/torchvision installation impractically slow there). A
+          # soft preference would still let the scheduler place this pod
+          # on an arm64 node under pressure, where it would crash-loop on
+          # an exec-format error instead of just running on a "less
+          # preferred" node - this needs to be a hard constraint now.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
                   - key: kubernetes.io/arch
                     operator: In
                     values: [amd64]
       containers:
         - name: ciq-embed-svc
-          image: gitea.reckeweg.io/achim/ciq-embed:0.2.0
+          image: gitea.reckeweg.io/achim/ciq-embed:0.2.3
           imagePullPolicy: IfNotPresent
           args: ["embed-serve", "--host", "0.0.0.0", "--port", "8000"]
           ports:
