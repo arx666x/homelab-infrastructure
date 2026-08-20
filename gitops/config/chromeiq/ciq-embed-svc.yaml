@@ -1,20 +1,25 @@
 # =============================================================================
 # ciq-embed-svc - always-on text-embedding service for Mood-Suche's
-# Freitext seed type (ChromeIQ docs/audio-embeddings-mood-search.md Phase
-# 4). Runs ciq-embed's "embed-serve" mode (same image as the Musicbox-
-# adjacent "embed-batch" backfill job, different command) - loads only the
-# CLAP text encoder, no music mount, no Postgres connection, just
-# POST /embed-text called internally by ciq-backend (internal/embedsvc).
-# ClusterIP only, never exposed via Ingress - not meant to be reachable
-# from outside the cluster.
+# Freitext seed type (ChromeIQ docs/tag-based-similarity-search.md §9).
+# Runs ciq-embed's "embed-serve" mode (same image as the Musicbox-
+# adjacent "embed-batch"/"embed-tags" one-shot jobs, different command) -
+# no music mount, no Postgres connection, just POST /embed-tag-query
+# (multilingual-e5-small, always loaded) called internally by
+# ciq-backend (internal/embedsvc). ClusterIP only, never exposed via
+# Ingress - not meant to be reachable from outside the cluster.
 #
-# Known gap (not blocking first rollout, flagged for a follow-up): the
-# ~1.9GB CLAP checkpoint is downloaded fresh from Hugging Face on every
-# pod start (laion_clap's own on-disk cache lives in the container's
-# ephemeral filesystem, no PVC mounted for it here) - a restart costs
-# several minutes before the pod becomes ready again, not just a quick
-# reload. The startupProbe below is deliberately generous (up to ~10min)
-# to tolerate this rather than crash-loop on a slow first boot.
+# CLAP (POST /embed-text) is NOT loaded by default as of image 0.2.0 -
+# gated behind CIQ_EMBED_CLAP_ENABLED (unset here = off), since the CLAP
+# text axis was found defective and stopped (docs §1/§12: "gestoppt
+# bleibt gestoppt, bis die Tag-Achse messbar ist"). Set that env var
+# explicitly here if the CLAP axis is ever revived.
+#
+# Known gap (not blocking, flagged for a follow-up): the tag-query
+# model (~470MB, smaller than CLAP's former ~1.9GB) is still downloaded
+# fresh from Hugging Face on every pod start - no PVC mounted for
+# Hugging Face's on-disk cache. The startupProbe below is deliberately
+# generous (up to ~10min) to tolerate a slow first boot rather than
+# crash-loop on it.
 # =============================================================================
 
 apiVersion: apps/v1
@@ -50,7 +55,7 @@ spec:
                     values: [amd64]
       containers:
         - name: ciq-embed-svc
-          image: gitea.reckeweg.io/achim/ciq-embed:0.1.0
+          image: gitea.reckeweg.io/achim/ciq-embed:0.2.0
           imagePullPolicy: IfNotPresent
           args: ["embed-serve", "--host", "0.0.0.0", "--port", "8000"]
           ports:
