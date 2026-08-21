@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `traefik`
-- **Aktuelle Version:** Chart v41.2.0 (Traefik Proxy v3.7.10)
+- **Aktuelle Version:** Chart v41.3.0 (Traefik Proxy v3.7.11)
 - **Quelle:** Helm-Chart-Repo `https://traefik.github.io/charts` (Chart `traefik`)
 - **ArgoCD App-Name:** `traefik`
 - **Versions-Check-Quelle:** Helm-Repo-Index von `https://traefik.github.io/charts` (Chart-Version, nicht direkt die Proxy-Version)
@@ -24,6 +24,7 @@
 | 2026-08-03 | 41.0.2 → 41.1.0 | Minor | Manuell | Abgeschlossen | Proxy-Sprung v3.7.6→v3.7.9, Hub v3.20.6→v3.20.7; neue/aktualisierte CRDs ausschließlich `hub.traefik.io` (Hub in unseren Values nicht konfiguriert, daher inert); RBAC-Erweiterung (configmaps write für Hub) betrifft uns nicht | `upgrade-agent` hatte den Sprung bereits als PR-Branch vorbereitet (`chore/upgrade-traefik-41.1.0`), Branch war aber auf veraltetem Basisstand (vor den übrigen Fixes des Tages) — nicht gemergt, nur die `targetRevision`-Zeile manuell übernommen. Smoke-Tests (gitea/argocd/grafana) und Log-Check ohne neue Fehler |
 | 2026-08-03 | 41.1.0 → 41.1.1 | Patch | Manuell | Abgeschlossen | Reiner Bugfix-Release (Hardened-Image-Registry-Pfad korrigiert, von uns nicht genutzt); Proxy bleibt unverändert bei v3.7.9, keine CRD-Schema-Änderungen | Direkt im Anschluss an den 41.1.0-Hop übersehen und nachgeholt; CRDs trotzdem vorsorglich neu applied (Standardprozedur), Smoke-Tests grün |
 | 2026-08-10 | 41.1.1 → 41.2.0 | Minor | Manuell | Abgeschlossen | CRD-Update (neues `ErrorRequestHeaders`-Feld im Middleware-CRD, additiv); Proxy-Sprung v3.7.9→v3.7.10, Hub v3.19.3→v3.20.8 | CRDs vorab applied, danach `targetRevision`-Commit + Push (Gitea+GitHub). Kurzer Connection-Refused-Blip auf der LB-VIP während des Pod-Rollouts (nur 1 Replica, kein HA) — normal, <1min. Alte "middleware existiert nicht"-Warnungen (authentik-forward-auth, mcp-basic-auth, guacamole-redirect-root) aus Vor-Upgrade-Logs verschwanden nach dem Neustart von selbst. Smoke-Tests (gitea/argocd/grafana) grün |
+| 2026-08-21 | 41.2.0 → 41.3.0 | Minor | Manuell | Abgeschlossen | Proxy-Sprung v3.7.10→v3.7.11, Hub v3.19.3→v3.20.11; CRDs (traefik.io + hub.traefik.io, 24 Stück) vorab per `helm show crds \| kubectl apply --server-side --force-conflicts` angewendet, keine Breaking Changes laut Release Notes | Teil der Sammel-Update-Runde 2026-08-21; CRD-Apply vom Nutzer lokal ausgeführt (kein Cluster-Zugriff aus der Remote-Session), danach `targetRevision`-Commit + Push |
 
 ### Reklassifizierungen (Minor → Major)
 
