@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `kube-system`
-- **Aktuelle Version:** Chart v3.13.1
+- **Aktuelle Version:** Chart v3.14.0
 - **Quelle:** Helm-Chart-Repo `https://kubernetes-sigs.github.io/metrics-server/` (Chart `metrics-server`)
 - **ArgoCD App-Name:** `metrics-server`
 - **Versions-Check-Quelle:** Helm-Repo-Index von `https://kubernetes-sigs.github.io/metrics-server/`
@@ -14,6 +14,7 @@
 |---|---|---|---|---|---|---|
 | unbekannt | ... | ... | ... | ... | Historie vor Einführung des strukturierten Runbooks nicht vollständig rekonstruierbar | — |
 | 2026-06-15 | 3.13.0 → 3.13.1 | Minor | Manuell | Abgeschlossen | Patch-Release, keine Breaking Changes, keine API-Änderungen | Commit `87d7d8c` ("chore: upgrade metrics-server 3.13.0 → 3.13.1 + Upgrade-Runbook") |
+| 2026-08-21 | 3.13.1 → 3.14.0 | Minor | Manuell | Abgeschlossen | Chart-Bump auf App v0.9.0 — Security-Fix (CVE-2025-47907, CVE-2025-47906 via Go 1.26.4-Bump), sonst nur Dependency-Updates (Kubernetes-Libs auf v1.36.2), keine Änderungen an metrics.k8s.io-API oder HPA-Verhalten | Teil der Sammel-Update-Runde 2026-08-21 |
 
 ### Reklassifizierungen (Minor → Major)
 

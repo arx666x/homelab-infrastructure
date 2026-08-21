@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `kube-system`
-- **Aktuelle Version:** 2.19.1 (Helm Chart)
+- **Aktuelle Version:** 2.19.3 (Helm Chart)
 - **Quelle:** Helm-Chart-Repo `https://bitnami.github.io/sealed-secrets` (Chart: `sealed-secrets`); GitHub Releases: `https://github.com/bitnami/sealed-secrets/releases`
 - **ArgoCD App-Name:** `sealed-secrets`
 - **Versions-Check-Quelle:** homelab-version-checker vergleicht `targetRevision` in `gitops/apps/sealed-secrets.yaml` gegen die neueste Chart-Version im Helm-Repo-Index von `bitnami.github.io/sealed-secrets`
@@ -16,6 +16,7 @@
 | 2026-05-26 | 2.18.5 → 2.18.6 | Minor (Patch) | Manuell | Abgeschlossen | Patch-Release, keine CRD-Änderungen, kein Breaking Change | Erstes strukturiertes Runbook für diesen Dienst |
 | 2026-06-18 | 2.18.6 → 2.19.0 | Minor | Manuell | Abgeschlossen | Repo-Migration `bitnami-labs` → `bitnami` GitHub-Org (alte Helm-Repo-URL lieferte 404); Chart-Upgrade ohne Breaking Change im gleichen Zug miterledigt | `repoURL` in `gitops/apps/sealed-secrets.yaml` von `https://bitnami-labs.github.io/sealed-secrets` auf `https://bitnami.github.io/sealed-secrets` geändert |
 | 2026-07-06 | 2.19.0 → 2.19.1 | Minor | Automatisch | Abgeschlossen | Automatisches Minor-Update durch homelab-version-checker, kein Breaking-Change laut Release Notes | Teil von Commit `a7d6250` (gemeinsam mit kube-prometheus-stack 87.3.0→87.10.1); ursprünglich fälschlich als PR (#3/#4) erzeugt, dann manuell direkt auf `main` committet, da Auto-Upgrades laut Policy direkt committen sollen |
+| 2026-08-21 | 2.19.1 → 2.19.3 | Minor (Patch) | Manuell | Abgeschlossen | Patch-Release (App v0.39.0/v0.39.1), keine CRD-Änderungen, kein Breaking Change; v0.39.0 enthält Security-Fix ("stop /v1/verify from acting as a decryption oracle", PR #2019) | Teil der Sammel-Update-Runde 2026-08-21 (zusammen mit metrics-server, ArgoCD, traefik, kube-prometheus-stack) |
 
 ### Reklassifizierungen (Minor → Major)
 
