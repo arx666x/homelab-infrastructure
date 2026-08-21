@@ -19,6 +19,14 @@ spec:
         app: homeassistant
     spec:
       terminationGracePeriodSeconds: 60
+      # Gepinnt auf gmkt-03x: die HomeMatic-CCU (192.168.11.60) lebt nur auf dem
+      # mgmt-Netz 192.168.11.0/24 und hat keine Route ins k3s-Pod-Netz (10.42.0.0/16).
+      # BidCos-RF braucht aber einen CCU->HA-Callback (siehe hostPort unten,
+      # gebunden an gmkt-03x' mgmt_ip 192.168.11.33) - der muss auf einem festen,
+      # von der CCU erreichbaren Node liegen. Bei Node-Wechsel muss hostIP/
+      # callback_host in der homematicip_local-Integration mit angepasst werden.
+      nodeSelector:
+        kubernetes.io/hostname: gmkt-03x
       containers:
         - name: homeassistant
           image: ghcr.io/home-assistant/home-assistant:2026.8.2
@@ -26,6 +34,11 @@ spec:
           ports:
             - containerPort: 8123
               name: http
+              protocol: TCP
+            - containerPort: 51200
+              hostPort: 51200
+              hostIP: 192.168.11.33
+              name: hmip-callback
               protocol: TCP
           env:
             - name: TZ
