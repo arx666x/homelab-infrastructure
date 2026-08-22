@@ -3,8 +3,6 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
-  - postgresql.yaml
-  - typesense.yaml
   - sealed-postgresql-secret.yaml
   - sealed-typesense-secret.yaml
   - smb-pv.yaml
