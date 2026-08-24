@@ -29,7 +29,7 @@ spec:
         kubernetes.io/hostname: gmkt-03x
       containers:
         - name: homeassistant
-          image: ghcr.io/home-assistant/home-assistant:2026.8.2
+          image: ghcr.io/home-assistant/home-assistant:2026.8.3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8123
