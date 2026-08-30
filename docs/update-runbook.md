@@ -115,7 +115,7 @@ uncordon` → warten bis Longhorn-Replicas wieder aufgebaut sind.
 
 ## 3. DNS-Nodes
 
-`update-dns.yml` (dns01, später dns02) hat kein k3s und keinen
+`update-dns.yml` (dns01, dns02) hat kein k3s und keinen
 Versionsparameter - reines OS-Update + optionales EEPROM. Besonderheit:
 DNS-Nodes haben **keine Anwendungs-HA**, solange nur dns01 existiert.
 keepalived spielt die VIP (192.168.11.56) zwischen DNS-Nodes hin und her,
@@ -157,8 +157,35 @@ Ablauf pro Node: VRRP-Status + Failover prüfen, ggf. Bestätigung einholen
 keepalived, node_exporter, keepalived_exporter sicherstellen → VRRP-Status
 danach anzeigen.
 
-Sobald dns02 provisioniert ist, greift der Failover-Check automatisch:
-ist der jeweils andere Node erreichbar, entfällt die Pause.
+Der Failover-Check greift automatisch, seit dns02 in der Inventory aktiv
+ist: ist der jeweils andere Node erreichbar, entfällt die Pause.
+
+### Voraussetzung: Exporter müssen vorher installiert sein
+
+Der Post-Check `[ POST ] Kern-Services sicherstellen` erwartet, dass
+`node_exporter` und `keepalived_exporter` bereits als systemd-Units
+existieren - `update-dns.yml` installiert sie nicht, sondern prüft nur,
+ob sie laufen. Installiert werden sie separat über
+[`dns-exporters.yml`](../ansible/playbooks/dns-exporters.yml):
+
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/dns-exporters.yml --limit <neuer-node>
+```
+
+**Bekannter Fehler**, wenn das für einen neu zur `[dns]`-Gruppe
+hinzugefügten Node vergessen wurde (passiert bei dns02, 2026-08-26 -
+dns-exporters.yml war nur gegen dns01 gelaufen, bevor dns02 in
+`hosts.ini` aktiviert wurde):
+
+```
+[ERROR]: Task failed: Module failed: Could not find the requested service node_exporter: host
+```
+
+Fix: `dns-exporters.yml` einmalig gegen den betroffenen Node laufen
+lassen, danach liefert `update-dns.yml` den Post-Check sauber.
+`keepalived_exporter` wird darin nur für `aarch64` installiert (arm64
+`.deb`, kein amd64-Downloadpfad) - bei x86_64-DNS-Nodes müsste das
+Playbook zuerst um einen amd64-Pfad ergänzt werden.
 
 ---
 
