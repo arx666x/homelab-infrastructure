@@ -6,7 +6,14 @@ metadata:
   labels:
     app: homeassistant
 spec:
-  replicas: 1
+  # 2026-09-01: Auf 0 gesetzt fuer den Umzug auf die diskstation.
+  # Home Assistant laeuft dort als Container mit network_mode: host
+  # (/volume2/docker/homeassistant). Der Cluster-Betrieb bleibt als
+  # Rueckfallebene bestehen - die PVC steht auf Retain.
+  # WICHTIG: Nicht wieder auf 1 setzen, solange der Container auf dem NAS
+  # laeuft. Beide Instanzen wuerden gegen dieselbe PostgreSQL schreiben.
+  # Details: Wiki-Seite Energie_HA-Umzug-Diskstation
+  replicas: 0
   # Recreate: HA verträgt keinen parallelen Betrieb (SQLite-Lock auf /config)
   strategy:
     type: Recreate
