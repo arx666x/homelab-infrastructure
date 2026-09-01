@@ -73,6 +73,15 @@ gitea:
       DISABLE_REGISTRATION: false
       REQUIRE_SIGNIN_VIEW: false
 
+    # Git-Prozesse laufen in der Gitea-cgroup mit. `pack-objects` sieht per
+    # nproc alle Node-CPUs und startet ohne Deckel entsprechend viele Threads
+    # mit unbegrenztem Delta-Window -> RAM-Spitze beim Ausliefern grosser
+    # Repos. Deckel siehe resources: unten.
+    git.config:
+      pack.threads: 2
+      pack.windowMemory: 64m
+      pack.deltaCacheSize: 128m
+
     actions:
       # Actions aktivieren - act-runner wird via separatem helm-actions Chart deployed
       ENABLED: true
@@ -170,12 +179,19 @@ service:
 # -----------------------------------------------------------------------------
 replicaCount: 1
 
+# Baseline im Betrieb: ~150Mi. Der Bedarf entsteht in kurzen Spitzen, wenn
+# `git upload-pack`/`pack-objects` grosse Repos ausliefert (susann/redesign
+# ~935Mi, achim/seri.2026 ~713Mi) - z.B. beim `git clone --mirror` des
+# mirror-to-github-Workflows nach jedem Push. Mit 1Gi Limit lief Gitea am
+# 2026-08-31 mehrfach in OOMKilled (128Mi -> 1006Mi innerhalb einer Minute).
+# Siehe [git.config] oben: pack.threads/windowMemory deckeln die Spitze,
+# 2Gi Limit gibt zusaetzlich Luft.
 resources:
   requests:
-    memory: 256Mi
+    memory: 512Mi
     cpu: 100m
   limits:
-    memory: 1Gi
+    memory: 2Gi
     cpu: 1000m
 
 affinity:
