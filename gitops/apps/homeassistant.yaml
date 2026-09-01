@@ -13,9 +13,14 @@ spec:
     server: https://kubernetes.default.svc
     namespace: homeassistant
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+    # 2026-09-01: Automatik abgeschaltet fuer den Umzug auf die diskstation.
+    # selfHeal wuerde das Deployment wieder hochziehen und damit eine zweite
+    # Home-Assistant-Instanz gegen dieselbe PostgreSQL laufen lassen.
+    # Zum Reaktivieren (Rueckweg in den Cluster): Block einkommentieren und
+    # replicas in gitops/config/homeassistant/deployment.yaml auf 1 setzen.
+    # automated:
+    #   prune: true
+    #   selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
