@@ -222,6 +222,64 @@ kubectl get pods -n gitea -l app.kubernetes.io/name=act-runner
   Downtime-Fenstern hintereinander statt einem (insgesamt ca. 130s statt der üblichen 60–120s).
   Falls das reproduzierbar öfter auftritt, ggf. `argocd app get gitea --hard-refresh` vor dem
   manuellen Beobachten erwägen.
+- **`[git.config]` mit Punkten im Key bricht `init-app-ini`** (Vorfall 2026-09-01). Der Chart
+  rendert jede `gitea.config`-Sektion zu Env-Vars. Der Sektionsname wird dabei escaped
+  (`git.config` → `GIT_0X2E_CONFIG`), der **Key aber nicht**: aus `pack.threads` wird
+  `GITEA__GIT_0X2E_CONFIG__PACK.THREADS`, und `config_environment.sh` bricht ab mit
+  `export: ... not a valid identifier` → `Init:CrashLoopBackOff`, Gitea nicht erreichbar.
+  `helm template` zeigt das **nicht** — die Sektion rendert sauber, der Fehler entsteht erst
+  zur Laufzeit im Init-Container. Wer `[git.config]` braucht, muss die Punkte im Key selbst
+  escapen (`pack_0X2E_threads`) und das vorher am Image verifizieren, nicht nur am Template.
+- **Der ArgoCD-Catch-22 ist beim Vorfall 2026-09-01 real eingetreten.** Weil Gitea down war,
+  konnte ArgoCD den Korrektur-Commit nicht von `git.reckeweg.io` holen — und der Fix lag genau
+  in diesem Repo. Auflösung nur per direktem Cluster-Eingriff (Secret-Patch, siehe nächster
+  Punkt). Lehre: Bei jeder Änderung an `values.yaml`, die den Pod-Start betreffen kann, vorher
+  den GitHub-Values-Fallback vorbereiten — nicht erst, wenn es brennt.
+- **ArgoCD entfernt einen aus den Values gelöschten Key nicht aus dem Live-Secret.**
+  `gitea-inline-config` hatte keine `managedFields`, ArgoCD sah den Key deshalb nicht als
+  eigenes Feld, prunete ihn beim Sync des Revert-Commits nicht und meldete die Application
+  trotzdem `Synced/Healthy`. Die Deployment-Checksum änderte sich aber → neuer Pod → gleicher
+  Crash. Ein Git-Revert allein reicht bei Key-**Entfernung** also nicht; der Live-Stand muss
+  geprüft und der Key manuell gepatcht werden:
+  ```bash
+  kubectl -n gitea get secret gitea-inline-config -o json | jq -r '.data|keys'
+  kubectl -n gitea patch secret gitea-inline-config --type=json \
+    -p '[{"op":"remove","path":"/data/<key>"}]'
+  kubectl -n gitea delete pod -l app=gitea
+  ```
+  Wichtig: erst patchen, wenn ArgoCDs Soll-Stand bereits der korrigierte Commit ist — sonst
+  schreibt selfHeal den Key sofort zurück (genau das passierte beim ersten Versuch).
+
+## Offene Punkte (beim nächsten Upgrade mit erledigen)
+
+- **`pack`-Tuning gegen RAM-Spitzen beim Klonen großer Repos.** Am 2026-08-31 wurde Gitea
+  mehrfach OOMKilled (`exitCode 137`, 4 Restarts): kein Leak — die Baseline liegt konstant bei
+  ~150Mi, der Verbrauch springt in unter einer Minute von 128Mi auf ~1006Mi und fällt sofort
+  zurück. Auslöser ist der `mirror-to-github`-Workflow, der bei **jedem** Push ein
+  `git clone --mirror` macht; Gitea bedient das mit `git upload-pack`/`pack-objects` im eigenen
+  Container-cgroup. `pack-objects` liest `nproc`, sieht alle 16 Node-CPUs und startet
+  entsprechend viele Threads mit unbegrenztem Delta-Window. Größte Repos:
+  `susann/redesign.git` ~935Mi, `achim/seri.2026.git` ~713Mi.
+
+  **Sofortmaßnahme (erledigt, Commit `d42d803`):** Limit 1Gi → 2Gi, Request 256Mi → 512Mi.
+  Nachgemessen mit der echten Last (`git clone --mirror` von `seri.2026`): Peak 828Mi, keine
+  Restarts. Reicht damit für den Ist-Zustand.
+
+  **Offen:** die Spitze an der Wurzel deckeln statt nur Kopfraum zu geben —
+  `pack.threads=2`, `pack.windowMemory=64m`, `pack.deltaCacheSize=128m`. Der direkte Weg über
+  eine `[git.config]`-Sektion in `values.yaml` hat am 2026-09-01 Gitea zweimal lahmgelegt
+  (siehe Stolperfallen); die Escape-Variante `pack_0X2E_threads` ist plausibel, **aber
+  ungetestet**. Deshalb bewusst zurückgestellt: nicht isoliert deployen, sondern **beim
+  nächsten ohnehin anstehenden Gitea-Upgrade** mit anhängen — da ist das Wartungsfenster,
+  das DB-Backup und der GitHub-Values-Fallback sowieso vorbereitet. Vorher am Image
+  verifizieren, dass `environment-to-ini` das `_0X2E_` auch im Key dekodiert, z.B.:
+  ```bash
+  kubectl -n gitea exec deploy/gitea -c gitea -- env \
+    GITEA__GIT_0X2E_CONFIG__PACK_0X2E_THREADS=2 gitea help >/dev/null
+  # bzw. Testcontainer mit dem Chart-Init-Script, NICHT direkt in main mergen
+  ```
+  Wird das Tuning wirksam, kann das Limit bei 2Gi bleiben (Sicherheitspuffer) oder später
+  wieder gesenkt werden.
 
 ## Rollback-Plan
 
