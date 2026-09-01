@@ -73,15 +73,6 @@ gitea:
       DISABLE_REGISTRATION: false
       REQUIRE_SIGNIN_VIEW: false
 
-    # Git-Prozesse laufen in der Gitea-cgroup mit. `pack-objects` sieht per
-    # nproc alle Node-CPUs und startet ohne Deckel entsprechend viele Threads
-    # mit unbegrenztem Delta-Window -> RAM-Spitze beim Ausliefern grosser
-    # Repos. Deckel siehe resources: unten.
-    git.config:
-      pack.threads: 2
-      pack.windowMemory: 64m
-      pack.deltaCacheSize: 128m
-
     actions:
       # Actions aktivieren - act-runner wird via separatem helm-actions Chart deployed
       ENABLED: true
@@ -184,8 +175,11 @@ replicaCount: 1
 # ~935Mi, achim/seri.2026 ~713Mi) - z.B. beim `git clone --mirror` des
 # mirror-to-github-Workflows nach jedem Push. Mit 1Gi Limit lief Gitea am
 # 2026-08-31 mehrfach in OOMKilled (128Mi -> 1006Mi innerhalb einer Minute).
-# Siehe [git.config] oben: pack.threads/windowMemory deckeln die Spitze,
-# 2Gi Limit gibt zusaetzlich Luft.
+# ACHTUNG: eine [git.config]-Sektion mit pack.*-Keys geht hier NICHT - der
+# Chart baut daraus Env-Vars (GITEA__GIT_0X2E_CONFIG__PACK.THREADS) und der
+# Punkt im Key ist kein gueltiger Bash-Identifier -> init-app-ini
+# CrashLoopBackOff (am 2026-09-01 einmal so passiert). Falls pack-Tuning
+# noetig wird: Keys als pack_0X2E_threads escapen und vorher testen.
 resources:
   requests:
     memory: 512Mi
