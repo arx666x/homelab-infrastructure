@@ -25,6 +25,10 @@
     watchdog_dstate_threshold: 5        # processes in D-state to count as a "pile-up"
     watchdog_script_path: /usr/local/bin/ssh-watchdog.sh
     watchdog_state_dir: /var/lib/ssh-watchdog
+    hw_watchdog_reboot_sec: "5min"       # RebootWatchdogSec - unter dem
+                                          # auskommentierten systemd-Default
+                                          # (10min), kann also nicht schlechter
+                                          # werden als vorher
 
   tasks:
 
@@ -83,6 +87,28 @@
       when: watchdog_service_file.stat.exists
       ignore_errors: true
       tags: [install, watchdog]
+
+    # -------------------------------------------------------------------------
+    # Fix: RebootWatchdogSec explizit setzen (k3s-06a-Hard-Hang 2026-09-13,
+    # siehe docs/upgrades/k3s.md Stolperfalle) - RuntimeWatchdogSec war bereits
+    # gesetzt (systemd fuettert /dev/watchdog), aber ohne explizites
+    # RebootWatchdogSec war die eigentliche Reset-Deadline nie scharf gestellt.
+    # Dieser Watchdog braucht keinen fork() im gehangenen Userspace - er wirkt
+    # also auch dann, wenn der SSH-Watchdog (und sogar systemd selbst) keinen
+    # neuen Prozess mehr starten kann. Bewusst NICHT live getestet (ein Test
+    # wuerde bedeuten, den Node absichtlich haengen zu lassen) - der gesetzte
+    # Wert liegt unter dem auskommentierten systemd-Default (10min), kann den
+    # bisherigen (unklaren) Zustand also nicht verschlechtern.
+    # -------------------------------------------------------------------------
+
+    - name: RebootWatchdogSec in /etc/systemd/system.conf explizit setzen
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/system.conf
+        regexp: '^#?RebootWatchdogSec='
+        line: "RebootWatchdogSec={{ hw_watchdog_reboot_sec }}"
+        insertafter: '^#?RuntimeWatchdogSec='
+      tags: [install, watchdog]
+      notify: Reexec systemd
 
     # -------------------------------------------------------------------------
     # SSH Watchdog: Script + Service + Timer
@@ -302,6 +328,15 @@
     - name: Reload systemd
       ansible.builtin.systemd:
         daemon_reload: true
+
+    - name: Reexec systemd
+      # /etc/systemd/system.conf ist PID1s eigene Konfiguration - ein normales
+      # daemon-reload liest nur Unit-Files neu ein, nicht system.conf. Ein
+      # daemon-reexec startet PID1 im laufenden Betrieb neu (kein Reboot,
+      # keine Unterbrechung laufender Services), damit RebootWatchdogSec
+      # sofort greift statt erst beim naechsten Boot.
+      ansible.builtin.command: systemctl daemon-reexec
+      changed_when: true
 
     - name: Restart journald
       ansible.builtin.systemd:

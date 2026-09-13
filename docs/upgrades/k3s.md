@@ -268,21 +268,32 @@ Master → Verify → Worker → Verify):
   Watchdog-Check-Skript. Ein Software-Watchdog, der selbst `fork()`/`exec()`
   braucht, kann diese Klasse von Hang strukturell nicht erkennen.
 
-  **Hardware-Watchdog ebenfalls nicht ausgelöst, obwohl konfiguriert:**
-  `/etc/systemd/system.conf` hat `RuntimeWatchdogSec=15` gesetzt (systemd füttert
-  `/dev/watchdog`, vorhanden auf dem Pi 5), aber `RebootWatchdogSec` steht nur
-  auskommentiert da (`#RebootWatchdogSec=10min`) — die Reset-Deadline war also nie
-  explizit scharf gestellt und hat sich offenbar nicht auf einen wirksamen
-  Compile-Time-Default verlassen. `watchdog.service` ist korrekt deaktiviert
-  (bewusst, wegen Konflikt mit `RuntimeWatchdogSec` — siehe `ssh-watchdog.yml`
-  Kommentarkopf).
+  **Hardware-Watchdog lief durch, hat aber trotzdem nicht ausgelöst — Korrektur
+  einer ersten Fehleinschätzung:** `journalctl --list-boots` zeigt für die
+  komplette Hang-Phase **keinen einzigen Zwischen-Boot** — der Hardware-Watchdog
+  (`bcm2835-wdt`, per Kernel-Log bestätigt mit 1 Minute Hardware-Timeout aktiv,
+  `RuntimeWatchdogSec=15` in `/etc/systemd/system.conf`) hat nie ausgelöst, obwohl
+  der Node über eine Stunde tot war. **Das liegt NICHT an einem fehlenden/nicht
+  scharf gestellten `RebootWatchdogSec`** (das wurde zunächst vermutet und cluster-
+  weit auf 5min gesetzt — schadet nicht, behebt aber nicht dieses Problem, da
+  `RebootWatchdogSec` nur einen bereits laufenden Reboot-*Vorgang* vor dem
+  Hängenbleiben schützt, hier aber nie ein Reboot ausgelöst wurde). Die tatsächliche
+  Erklärung stand bereits im Incident vom 2026-07-28: systemds
+  Watchdog-Fütterungs-Schleife in PID1 ist ein interner Timer-Callback **ohne**
+  Festplatten-I/O — sie läuft weiter, auch wenn ein D-State-Storage-Pile-up (hängender
+  iSCSI-/Longhorn-Mount) alles blockiert, was forken oder auf Storage zugreifen muss
+  (SSH-Sessions, containerd, auch das SSH-Watchdog-Skript selbst). Ein
+  "Lebt-PID1-noch"-Watchdog ist für diese Hang-Klasse strukturell blind.
+  `watchdog.service` ist korrekt deaktiviert (bewusst, wegen Konflikt mit
+  `RuntimeWatchdogSec` — siehe `ssh-watchdog.yml` Kommentarkopf).
 
-  **Offener Punkt / Empfehlung:** `RebootWatchdogSec` in `/etc/systemd/system.conf`
-  explizit setzen (z.B. 5min) auf allen Pi-Nodes, als zweites, vom Fork-fähigen
-  Userspace unabhängiges Sicherheitsnetz — noch nicht umgesetzt, da ein Test einen
-  erneuten absichtlichen Hang erfordern würde. Nach Umsetzung idealerweise mit
-  einem kontrollierten Test verifizieren, dass der Pi tatsächlich hart resettet
-  (nicht nur der Watchdog-Timer als "aktiv" angezeigt wird).
+  **Weiterhin ungelöst — kein Software-/Config-Fix bekannt.** Denkbare Ansätze,
+  noch nicht umgesetzt: einen Watchdog-Pet-Zyklus an einen echten
+  Storage-I/O-Health-Check koppeln (z.B. kleine Disk-Read/Write pro Zyklus
+  erzwingen, damit ein D-State-Hang die Fütterung direkt stoppt); oder ein
+  externer, netzwerkbasierter Watchdog (unabhängige Power-Cycling-Hardware), da
+  alles was auf dem hängenden Node selbst läuft dieselbe blinde Stelle wie PID1
+  erbt.
 
   **Recovery war folgenlos:** Nach dem manuellen Power-Cycle wurde der Node
   automatisch wieder Ready, die 2 dadurch `degraded` gewordenen Longhorn-Volumes
