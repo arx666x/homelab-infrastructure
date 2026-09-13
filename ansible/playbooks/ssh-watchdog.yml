@@ -89,19 +89,28 @@
       tags: [install, watchdog]
 
     # -------------------------------------------------------------------------
-    # Fix: RebootWatchdogSec explizit setzen (k3s-06a-Hard-Hang 2026-09-13,
-    # siehe docs/upgrades/k3s.md Stolperfalle) - RuntimeWatchdogSec war bereits
-    # gesetzt (systemd fuettert /dev/watchdog), aber ohne explizites
-    # RebootWatchdogSec war die eigentliche Reset-Deadline nie scharf gestellt.
-    # Dieser Watchdog braucht keinen fork() im gehangenen Userspace - er wirkt
-    # also auch dann, wenn der SSH-Watchdog (und sogar systemd selbst) keinen
-    # neuen Prozess mehr starten kann. Bewusst NICHT live getestet (ein Test
-    # wuerde bedeuten, den Node absichtlich haengen zu lassen) - der gesetzte
-    # Wert liegt unter dem auskommentierten systemd-Default (10min), kann den
-    # bisherigen (unklaren) Zustand also nicht verschlechtern.
+    # RebootWatchdogSec explizit setzen - nur noch als Grundhygiene fuer die
+    # Master (GMKTec), NICHT die eigentliche Antwort auf den k3s-06a-Hang.
+    #
+    # Historie (siehe docs/upgrades/k3s.md fuer die volle Aufarbeitung):
+    # zunaechst vermutet, RebootWatchdogSec sei die fehlende Absicherung -
+    # war falsch, RebootWatchdogSec schuetzt nur einen bereits laufenden
+    # Reboot-*Vorgang* vor dem Haengenbleiben, hier wurde aber nie einer
+    # ausgeloest. Der eigentliche Fix fuer den D-State-Storage-Hang ist
+    # io-watchdog.yml (Disk-I/O-gekoppelter Watchdog, ersetzt PID1s
+    # fork()-unabhaengige und daher fuer diese Hang-Klasse blinde
+    # RuntimeWatchdogSec-Petting-Schleife) - der ist Pi-spezifisch (`hosts:
+    # worker`) und gewinnt dort ohnehin ueber sein eigenes, spaeter
+    # sortiertes Drop-in gegen diese Zeile hier.
+    #
+    # Dieser Task bleibt fuer die Master bestehen (dort kein bekannter
+    # Vendor-Drop-in-Konflikt, aber auch ungeklaert ob die GMKTec-Hardware
+    # ueberhaupt einen funktionierenden Hardware-Watchdog hat - RuntimeWatchdogUSec
+    # zeigte dort zuletzt 0/deaktiviert). Bewusst nicht live getestet (ein
+    # Test wuerde bedeuten, einen Master absichtlich haengen zu lassen).
     # -------------------------------------------------------------------------
 
-    - name: RebootWatchdogSec in /etc/systemd/system.conf explizit setzen
+    - name: RebootWatchdogSec in /etc/systemd/system.conf explizit setzen (Master-Grundhygiene)
       ansible.builtin.lineinfile:
         path: /etc/systemd/system.conf
         regexp: '^#?RebootWatchdogSec='

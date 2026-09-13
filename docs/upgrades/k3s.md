@@ -287,13 +287,56 @@ Master → Verify → Worker → Verify):
   `watchdog.service` ist korrekt deaktiviert (bewusst, wegen Konflikt mit
   `RuntimeWatchdogSec` — siehe `ssh-watchdog.yml` Kommentarkopf).
 
-  **Weiterhin ungelöst — kein Software-/Config-Fix bekannt.** Denkbare Ansätze,
-  noch nicht umgesetzt: einen Watchdog-Pet-Zyklus an einen echten
-  Storage-I/O-Health-Check koppeln (z.B. kleine Disk-Read/Write pro Zyklus
-  erzwingen, damit ein D-State-Hang die Fütterung direkt stoppt); oder ein
-  externer, netzwerkbasierter Watchdog (unabhängige Power-Cycling-Hardware), da
-  alles was auf dem hängenden Node selbst läuft dieselbe blinde Stelle wie PID1
-  erbt.
+  **Update 2026-09-13, echter Fix umgesetzt (`io-watchdog.yml`):** Ein neuer
+  Daemon (`ansible/files/io-watchdog.py`) übernimmt `/dev/watchdog` komplett von
+  systemd. Ein einmalig beim Start erzeugter Hintergrund-Thread macht alle 5s
+  einen echten Disk-I/O-Roundtrip (Datei schreiben+fsync+lesen+verifizieren) auf
+  der lokalen NVMe-Partition; der Haupt-Thread füttert den Hardware-Watchdog nur,
+  wenn dieser I/O-Heartbeat jünger als 30s ist (Pythons GIL wird bei blockierenden
+  Syscalls freigegeben, der Haupt-Thread läuft also weiter, auch wenn der
+  I/O-Thread in D-State hängt). Entscheidend: der I/O-Thread wird **einmalig**
+  erzeugt, nicht wie beim SSH-Watchdog-Skript bei jedem Check neu geforkt — ein
+  D-State-Hang blockiert also nur diesen einen bereits laufenden Thread, es muss
+  während des Hangs nichts Neues gestartet werden, damit die Fütterung aufhört
+  und der Hardware-Timeout greift.
+
+  **Stolperfalle beim Rollout — Vendor-Drop-in überschreibt System.conf:**
+  Raspberry Pi OS liefert `/usr/lib/systemd/system.conf.d/40-rpi-enable-
+  watchdog.conf` (`RuntimeWatchdogSec=1m`, `RebootWatchdogSec=2m`) mit aus. Da
+  Drop-ins in `conf.d/`-Verzeichnissen **nach** der Haupt-`system.conf` geladen
+  werden und gewinnen, wurde sowohl der ursprüngliche `RebootWatchdogSec`-Fix
+  (s.o.) als auch der erste `RuntimeWatchdogSec=off`-Versuch für `io-watchdog.yml`
+  von diesem Vendor-Drop-in **kommentarlos überschrieben** — `systemctl show -p
+  RuntimeWatchdogUSec` zeigte weiterhin `1min`, `/dev/watchdog` blieb für
+  `io-watchdog.service` mit `Errno 16 Device or resource busy` unerreichbar.
+  Fix: eigenes Drop-in `/etc/systemd/system.conf.d/50-io-watchdog-override.conf`
+  (Dateiname sortiert nach `40-`, gewinnt also) statt direktem Edit von
+  `/etc/systemd/system.conf`.
+
+  **Reboot-Verhalten uneinheitlich:** Auf k3s-06a (frisch gehangen + manuell
+  power-gecycelt + einmal per Ansible neu gestartet) musste der Node nach dem
+  Deploy des Drop-ins **noch einmal** neu gestartet werden, bevor `io-watchdog`
+  `/dev/watchdog` öffnen konnte — ein `daemon-reexec` reicht nicht, PID1 hält ein
+  bereits geöffnetes Watchdog-Fd über den Reexec hinweg (vermutlich bewusst, wegen
+  `nowayout`). Auf den anderen 5 Workern (letzter reine Reboot vom selben Morgen,
+  vor Deploy des Drop-ins) hat derselbe Ansible-Lauf dagegen **ohne** weiteren
+  Reboot sofort funktioniert — Ursache nicht abschließend geklärt, evtl. Timing
+  zwischen den beiden `ssh-watchdog.yml`/`io-watchdog.yml`-Läufen desselben
+  Vormittags. Praktische Konsequenz: `io-watchdog.yml` einfach laufen lassen und
+  das Playbook selbst (`Check service is active`) melden lassen, ob ein Node
+  einen zusätzlichen Reboot braucht, statt das vorab anzunehmen.
+
+  Verifiziert 2026-09-13: alle 6 Worker `io-watchdog.service active`, 0 Restarts,
+  `RuntimeWatchdogUSec=0` (systemd-eigenes Petting bestätigt deaktiviert), unser
+  Daemon-Prozess hält laut `/proc/<pid>/fd`-Scan exklusiv das Watchdog-Fd. Bewusst
+  **nicht** per echtem Hang getestet — nur Normalbetrieb über mehrere Minuten
+  beobachtet (stabil, keine Stale-I/O-Warnungen).
+
+  Nicht umgesetzt/außerhalb des Scopes: Master (GMKTec) laufen weiterhin nur mit
+  dem einfachen `RebootWatchdogSec`-Grundhygiene-Fix aus `ssh-watchdog.yml`, kein
+  `io-watchdog`-Rollout dort — das Problem ist Pi/NVMe-spezifisch, und
+  `RuntimeWatchdogUSec` zeigte auf den Mastern zuletzt ohnehin `0`
+  (kein aktiver Hardware-Watchdog bekannt/bestätigt).
 
   **Recovery war folgenlos:** Nach dem manuellen Power-Cycle wurde der Node
   automatisch wieder Ready, die 2 dadurch `degraded` gewordenen Longhorn-Volumes

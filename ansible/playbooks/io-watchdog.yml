@@ -1,0 +1,185 @@
+---
+# io-watchdog.yml
+#
+# Deploys a disk-I/O-aware hardware watchdog daemon to the Raspberry Pi
+# worker nodes (NVMe-backed, not SD card).
+#
+# Why this exists: systemd's own RuntimeWatchdogSec pets /dev/watchdog from
+# PID1's internal event loop, which never touches disk - so it keeps the
+# hardware watchdog satisfied even during a D-state storage pile-up (hung
+# Longhorn/iSCSI mount) that leaves everything needing fork()/disk I/O stuck,
+# including the periodically-forked ssh-watchdog check script. See
+# docs/upgrades/k3s.md ("k3s-06a Hard-Hang trotz aktivem SSH-Watchdog") and
+# the k3s-06a incidents 2026-07-28 / 2026-09-13.
+#
+# io-watchdog.py (ansible/files/) replaces RuntimeWatchdogSec-based petting
+# with a single long-lived process: one background thread, created once at
+# startup (not re-forked per check), does a small write+fsync+read+verify
+# against a heartbeat file every few seconds. The main thread only pets
+# /dev/watchdog if that thread's last success is recent. A hung disk just
+# blocks that one thread - nothing new needs to be spawned during the hang
+# for the watchdog to stop being fed and the hardware to reset the box.
+#
+# IMPORTANT: /dev/watchdog is a sharp tool. On many Pi kernels the driver
+# has nowayout compiled in, so once a process opens it, the watchdog can
+# only be silenced by that process staying open (Restart=always keeps it
+# fed across a brief service restart) or by a reboot - there's no clean
+# "turn it off" via this playbook. A bug that never pets will cause a real
+# reset. Roll out to one node first and watch it run for a few minutes
+# under normal conditions before going wider - do NOT deliberately hang
+# storage to test the reset path.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini playbooks/io-watchdog.yml --limit worker06   # k3s-06a first
+#   ansible-playbook -i inventory/hosts.ini playbooks/io-watchdog.yml                    # all Pi workers, once confirmed healthy
+
+- name: Deploy disk-I/O-aware hardware watchdog to Pi workers
+  hosts: worker
+  become: true
+  gather_facts: false
+
+  vars:
+    io_watchdog_script_path: /usr/local/bin/io-watchdog.py
+    io_watchdog_heartbeat_dir: /var/lib/io-watchdog
+
+  tasks:
+
+    - name: Deploy io-watchdog.py
+      ansible.builtin.copy:
+        src: ../files/io-watchdog.py
+        dest: "{{ io_watchdog_script_path }}"
+        owner: root
+        group: root
+        mode: "0755"
+      tags: [install]
+
+    - name: Ensure heartbeat directory exists
+      ansible.builtin.file:
+        path: "{{ io_watchdog_heartbeat_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      tags: [install]
+
+    # -------------------------------------------------------------------------
+    # Disable systemd's own RuntimeWatchdogSec petting - it would otherwise
+    # race our daemon for /dev/watchdog ("Device or resource busy"), and its
+    # unconditional PID1-internal petting is exactly the blind spot this
+    # playbook exists to close.
+    #
+    # MUST be a drop-in, not a direct edit of /etc/systemd/system.conf:
+    # Raspberry Pi OS ships /usr/lib/systemd/system.conf.d/40-rpi-enable-
+    # watchdog.conf (RuntimeWatchdogSec=1m, RebootWatchdogSec=2m), and
+    # conf.d drop-ins are applied AFTER the base system.conf file, so a
+    # plain system.conf edit gets silently overridden by it (found
+    # 2026-09-13 - the manually-applied "RebootWatchdogSec=5min" in
+    # ssh-watchdog.yml never actually took effect on the Pis for exactly
+    # this reason; kept there for masters, but workers are authoritatively
+    # overridden here). Our drop-in's filename must sort after "40-" to win.
+    # -------------------------------------------------------------------------
+
+    - name: Ensure /etc/systemd/system.conf.d exists
+      ansible.builtin.file:
+        path: /etc/systemd/system.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags: [install]
+
+    - name: Override vendor RuntimeWatchdogSec/RebootWatchdogSec via higher-priority drop-in
+      ansible.builtin.copy:
+        dest: /etc/systemd/system.conf.d/50-io-watchdog-override.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Overrides /usr/lib/systemd/system.conf.d/40-rpi-enable-watchdog.conf.
+          # RuntimeWatchdogSec=off: io-watchdog.service owns /dev/watchdog instead
+          # of PID1's own fork()-independent (and therefore D-state-storage-hang-
+          # blind) petting loop - see docs/upgrades/k3s.md.
+          # RebootWatchdogSec: kept explicit and short regardless, as a second,
+          # independent safety net for a reboot sequence that itself hangs.
+          [Manager]
+          RuntimeWatchdogSec=off
+          RebootWatchdogSec=5min
+      tags: [install]
+      notify: Reexec systemd
+
+    - name: Deploy io-watchdog systemd service unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/io-watchdog.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Disk-I/O-aware hardware watchdog feeder
+          Documentation=file:{{ io_watchdog_script_path }}
+          After=local-fs.target
+          Requires=local-fs.target
+
+          [Service]
+          Type=simple
+          ExecStart={{ io_watchdog_script_path }}
+          Restart=always
+          RestartSec=2
+          # Deliberately no Type=notify/WatchdogSec here - this service IS
+          # the watchdog integration, it doesn't need systemd to supervise
+          # it via the same mechanism.
+          OOMScoreAdjust=-900
+          Nice=-5
+
+          [Install]
+          WantedBy=multi-user.target
+      tags: [install]
+      notify: Reload systemd
+
+    - name: Flush handlers before (re)starting the service
+      ansible.builtin.meta: flush_handlers
+
+    - name: Enable and start io-watchdog.service
+      ansible.builtin.systemd:
+        name: io-watchdog.service
+        enabled: true
+        state: restarted
+        daemon_reload: true
+      tags: [install]
+
+    - name: Wait a few seconds for the first pet cycle
+      ansible.builtin.pause:
+        seconds: 12
+
+    - name: Check service is active
+      ansible.builtin.command: systemctl is-active io-watchdog.service
+      register: io_watchdog_active
+      changed_when: false
+      failed_when: io_watchdog_active.stdout != "active"
+
+    - name: Show recent io-watchdog log output
+      ansible.builtin.command: journalctl -u io-watchdog.service --no-pager -n 20
+      register: io_watchdog_log
+      changed_when: false
+
+    - name: Display log
+      ansible.builtin.debug:
+        msg: "{{ io_watchdog_log.stdout_lines }}"
+
+    - name: Fail loudly if a stale-I/O warning already appeared (unexpected on a healthy node)
+      ansible.builtin.fail:
+        msg: >
+          io-watchdog logged a stale-I/O warning immediately after deploy on
+          {{ inventory_hostname }} - investigate before rolling out further,
+          this node's storage may already be degraded.
+      when: io_watchdog_log.stdout is search("NOT petting watchdog")
+
+  handlers:
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Reexec systemd
+      ansible.builtin.command: systemctl daemon-reexec
+      changed_when: true
