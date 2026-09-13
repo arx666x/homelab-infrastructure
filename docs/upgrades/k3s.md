@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** n/a (Cluster-weite Komponente)
-- **Aktuelle Version:** v1.36.2+k3s1
+- **Aktuelle Version:** v1.36.4+k3s1
 - **Quelle:** GitHub Releases (k3s-io/k3s) — https://github.com/k3s-io/k3s/releases
 - **ArgoCD App-Name:** — (nicht ArgoCD-verwaltet, Ansible-Playbooks: update-master-nodes.yml / update-pi-nodes.yml)
 - **Versions-Check-Quelle:** Manuell gegen GitHub Releases geprüft (kein automatisierter Checker; Cluster ist nicht GitOps/ArgoCD-verwaltet)
@@ -19,6 +19,7 @@
 | 2026-05-18 | v1.36.0 → v1.36.1 | Minor | Manuell | Abgeschlossen | Patch-Release, nur Bugfixes, kein Sonderfall | — |
 | 2026-05-29 | v1.36.1 → v1.36.2 | Minor | Manuell | Abgeschlossen | Patch-Release, nur Bugfixes, kein Sonderfall; nftables-Fix aus v1.36.0-Upgrade weiterhin wirksam (RPis liefen bereits auf Kernel 6.18.34) | Dokumentiert in Commit "docs: k3s v1.36.2 upgrade dokumentiert" (2026-06-29) |
 | 2026-08-10 | v1.36.2 → v1.36.3 | Minor | Manuell (Ansible) | Abgeschlossen | Patch-Release, nur Bugfixes, kein Sonderfall; zusätzlich OS-Paket-Update auf allen 9 Nodes | Alle 3 Master + alle 6 Worker aktualisiert. Vier separate Longhorn-Eviction-Timeouts (30 min, `longhorn_wait_timeout`) beim Rebuild des 50 GB `pvc-73e5e5c2` (kube-prometheus-stack-Prometheus-Volume) auf gmkt-01x, gmkt-03x, k3s-01a und k3s-06a — jedes Mal lief der Rebuild tatsächlich weiter/schloss kurz nach dem Ansible-Timeout ab (dreimal reines Timing, einmal auf gmkt-01x echter Stall durch `unexpected EOF` beim Datei-Sync, behoben durch Löschen des hängenden WO-Replicas und Neustart des Rebuilds). Betroffene Node-Läufe danach jeweils mit `--limit <node>` erneut angestoßen, kein Datenverlust, Volume blieb durchgehend `healthy`. **Empfehlung:** `longhorn_wait_timeout` in `update-master-nodes.yml`/`update-pi-nodes.yml` für Volumes >20GB auf 3600s erhöhen, siehe Stolperfalle unten. Nebenbefund (nicht durch k3s-Upgrade verursacht, aber durch Node-Drain ausgelöst): `gitea-actions-runner-0` verlor durch Reschedule während master01-Drain seine Registrierung (`invalid character '/' looking for beginning of value`), behoben durch StatefulSet scale 0→1 (nach Pause von ArgoCD-selfHeal); dadurch blockierter ChromeIQ-CI-Backlog löste sich danach selbst auf |
+| 2026-09-12/13 | v1.36.4 (unverändert) | OS-Paket-Update, kein k3s-Bump | Manuell (Ansible) | Abgeschlossen | Größere Anzahl ausstehender OS-Pakete auf allen Nodes; k3s_version=v1.36.4+k3s1 (=Ist-Stand) an update-master-nodes.yml übergeben, damit nur OS-Update+Reboot läuft, kein Binary-Swap. Reihenfolge: DNS (dns01/dns02) → Master → Worker | DNS-Nodes über `update-dns-nodes.yml` (neueres, kanonisches Playbook für den aktuellen Zwei-Resolver-Aufbau ohne Keepalived/VIP; `update-dns.yml` ist die veraltete Vorgängerversion für den alten Single-Node-VIP-Aufbau). Master01 traf erneut den bekannten Longhorn-Eviction-Timeout beim `pvc-73e5e5c2`-Rebuild (reines Timing, s.o.) — daraufhin **`full_eviction`-Fix eingeführt** (siehe Stolperfalle unten): Master02+03 liefen danach in ~20 Min. statt vorher 30+ Min. **pro Node** durch, Longhorn blieb durchgehend `healthy`. Worker liefen mit `serial: 2` (seit 2026-08-21) komplett fehlerfrei durch (0× `FAILED - RETRYING`). **k3s-06a-Incident** (unabhängig vom Update, ~9h nach Abschluss des Worker-Laufs): Node hing hart (SSH-Handshake sofort vom Remote-Host gekappt, `containerd` down, Ping ging weiterhin) — Root Cause und Watchdog-Befund siehe eigene Stolperfalle unten. Nebenbei erledigt: verwaiste `homeassistant-config`-PVC (HA lief seit 2026-09-01 stabil auf der Diskstation, Cluster-Deployment `replicas: 0`) inkl. blockierendem `ha-export`-Leftover-Pod entfernt |
 
 ### Reklassifizierungen (Minor → Major)
 
@@ -110,11 +111,13 @@
   ```bash
   ansible-playbook playbooks/update-pi-nodes.yml -e k3s_version=<VERSION>+k3s1 --limit worker01
   ```
-  Playbook-Ablauf pro Node: Longhorn-Disk-Eviction aktivieren → `kubectl drain` →
-  warten bis Replicas migriert → `apt upgrade` → optional EEPROM-Update → k3s-Agent-
-  Binary-Update (Unit-File-Backup/Restore analog Master) → nftables-Fix einspielen →
-  Reboot → warten bis Ready → `kubectl uncordon` → Longhorn-Scheduling reaktivieren →
-  warten bis Replicas wieder aufgebaut.
+  Playbook-Ablauf pro Node: Longhorn-Scheduling deaktivieren (seit 2026-09-12 ohne
+  volle Replica-Migration, siehe `full_eviction`-Stolperfalle unten) → `kubectl drain`
+  → warten bis Volumes sauber detached → `apt upgrade` → optional EEPROM-Update →
+  k3s-Agent-Binary-Update (Unit-File-Backup/Restore analog Master) → nftables-Fix
+  einspielen → Reboot → warten bis Ready → `kubectl uncordon` → Longhorn-Scheduling
+  reaktivieren → warten bis Replicas resynced sind (nur Delta, kein Full-Rebuild
+  mehr im Normalfall).
 - [ ] worker01 Ready? Longhorn Healthy?
   ```bash
   kubectl get node k3s-01a
@@ -226,9 +229,66 @@ Master → Verify → Worker → Verify):
     `kubectl -n longhorn-system delete replica <name>` — Longhorn startet den Rebuild
     automatisch neu. Die 2 verbleibenden gesunden Replicas halten das Volume während
     der gesamten Prozedur `healthy` (nicht `degraded`), kein Datenrisiko.
-  **Empfehlung:** `longhorn_wait_timeout` (Default 1800s) in beiden Playbooks für
-  Volumes >20GB auf mindestens 3600s erhöhen, um die wiederholten Timing-Fehlschläge
-  zu vermeiden — noch nicht umgesetzt.
+  **Update 2026-09-12, endgültig behoben (`full_eviction`-Fix):** Statt den Timeout
+  nur zu erhöhen, wurde die Ursache selbst entschärft — beide Playbooks haben jetzt
+  eine neue Variable `full_eviction` (Default `false`). Bei `false` (normaler
+  Reboot) wird nur `allowScheduling:false` gesetzt, **kein** `evictionRequested:true`
+  mehr — das Replica bleibt auf dem Node liegen statt komplett auf einen anderen
+  Node migriert zu werden, und der "Warten bis alle Replicas evakuiert sind"-Schritt
+  entfällt komplett. Beim Wiederkommen synct Longhorn nur das Delta seit dem
+  kurzen Offline-Fenster, kein Full-Rebuild mehr nötig. `kubectl drain` +
+  "Warten bis keine Volumes mehr attached sind" bleiben unverändert als
+  Sicherheitsnetz gegen unclean Shutdowns (siehe Incident 2026-08-03 oben) — nur
+  die zusätzliche Longhorn-Replica-Migration, die dafür nie nötig war, fällt weg.
+  `full_eviction=true` bleibt für den seltenen Fall einer **dauerhaften**
+  Node-Entfernung verfügbar (`-e full_eviction=true`), dort ist die volle Migration
+  weiterhin richtig. Praxistest 2026-09-12: master02+master03 liefen mit dem Fix in
+  ~20 Min. **zusammen** durch (vorher 30+ Min. **pro Node** allein für die
+  Eviction-Wartezeit), Longhorn blieb durchgehend `healthy` — kein Kompromiss bei
+  der Datensicherheit, siehe auch Incident 2026-08-03 (dort war fehlendes `drain`
+  die Ursache der Korruption, nicht fehlende Longhorn-Migration).
+- **k3s-06a Hard-Hang trotz aktivem SSH-Watchdog (2026-09-13)** — ~9h nach einem
+  regulären, erfolgreichen OS-Update-Lauf fiel k3s-06a in einen Hard-Hang:
+  `containerd` down, SSH-Handshake wird sofort vom Remote-Host gekappt
+  (`kex_exchange_identification: Connection closed by remote host` — nicht Timeout,
+  der TCP-Handshake klappt, sshd kommt aber nicht mehr zum Session-Aufbau), Ping
+  funktioniert weiterhin (Kernel-Netzwerkstack lebt, Userspace nicht). Node-Condition:
+  `Ready=False, Reason: KubeletNotReady, Message: container runtime is down`.
+  Deckt sich mit dem iSCSI-Hang-Incident vom Juli (docs/upgrades — siehe
+  `ssh-watchdog.yml`).
+
+  **Watchdog-Befund (via `journalctl -u ssh-watchdog.service`):** Der SSH-Watchdog
+  (`ssh-watchdog.timer`, alle 120s, Reboot nach 3 Fehlschlägen) lief bis kurz vor
+  dem Hang sauber durch — und dann **komplett gar nicht mehr**, über eine Stunde
+  lang keine einzige Log-Zeile, bis der Nutzer den Pi manuell power-gecycelt hat.
+  `journalctl -k` zeigt für den ganzen Tag nur **ein** `Booting Linux`-Ereignis
+  (Zeitstempel vor NTP-Sync unzuverlässig auf Raspberry Pi ohne Hardware-RTC,
+  daher nicht wörtlich zu nehmen) — der Hang war so tief, dass systemd selbst
+  keinen neuen Prozess mehr forken konnte, nicht mal das simple
+  Watchdog-Check-Skript. Ein Software-Watchdog, der selbst `fork()`/`exec()`
+  braucht, kann diese Klasse von Hang strukturell nicht erkennen.
+
+  **Hardware-Watchdog ebenfalls nicht ausgelöst, obwohl konfiguriert:**
+  `/etc/systemd/system.conf` hat `RuntimeWatchdogSec=15` gesetzt (systemd füttert
+  `/dev/watchdog`, vorhanden auf dem Pi 5), aber `RebootWatchdogSec` steht nur
+  auskommentiert da (`#RebootWatchdogSec=10min`) — die Reset-Deadline war also nie
+  explizit scharf gestellt und hat sich offenbar nicht auf einen wirksamen
+  Compile-Time-Default verlassen. `watchdog.service` ist korrekt deaktiviert
+  (bewusst, wegen Konflikt mit `RuntimeWatchdogSec` — siehe `ssh-watchdog.yml`
+  Kommentarkopf).
+
+  **Offener Punkt / Empfehlung:** `RebootWatchdogSec` in `/etc/systemd/system.conf`
+  explizit setzen (z.B. 5min) auf allen Pi-Nodes, als zweites, vom Fork-fähigen
+  Userspace unabhängiges Sicherheitsnetz — noch nicht umgesetzt, da ein Test einen
+  erneuten absichtlichen Hang erfordern würde. Nach Umsetzung idealerweise mit
+  einem kontrollierten Test verifizieren, dass der Pi tatsächlich hart resettet
+  (nicht nur der Watchdog-Timer als "aktiv" angezeigt wird).
+
+  **Recovery war folgenlos:** Nach dem manuellen Power-Cycle wurde der Node
+  automatisch wieder Ready, die 2 dadurch `degraded` gewordenen Longhorn-Volumes
+  (`pvc-8131dc95`, `pvc-fc6489fd` — je ein Replica auf k3s-06a) haben sich
+  innerhalb von ~2 Minuten selbstständig wieder auf `healthy` resynced, kein
+  manueller Eingriff nötig, kein Datenverlust.
 - **Install-Script überschreibt Unit-File-Flags** — Das offizielle k3s-Install-Script
   (`get.k3s.io`) überschreibt die systemd-Unit-File und würde dabei alle Flags
   verlieren (`--disable traefik`, `--flannel-iface`, `--node-ip`, `--cluster-init`

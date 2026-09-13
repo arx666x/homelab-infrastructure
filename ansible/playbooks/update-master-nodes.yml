@@ -48,7 +48,11 @@
     k3s_version: ""                  # PFLICHT: -e k3s_version=v1.29.15+k3s1
     skip_os_update: false            # OS-Update überspringen: -e skip_os_update=true
     etcd_snapshot: true              # etcd-Snapshot vor erstem Master: -e etcd_snapshot=false
-    skip_longhorn: false             # Longhorn-Eviction überspringen: -e skip_longhorn=true
+    skip_longhorn: false             # Longhorn-Schritte komplett überspringen: -e skip_longhorn=true
+    full_eviction: false             # Volle Replica-Migration erzwingen: -e full_eviction=true
+                                      # (nur bei dauerhafter Node-Entfernung nötig; bei normalen
+                                      # Reboots bleibt das Replica auf dem Node liegen und synct nach
+                                      # dem Reboot nur das Delta - siehe Stolperfalle in k3s.md)
     k8s_delegate: master01          # Kubernetes-Calls über diesen Master
     kubectl_bin: /usr/local/bin/kubectl
     k3s_bin: /usr/local/bin/k3s
@@ -190,16 +194,22 @@
         msg: "Longhorn Disk ID auf {{ inventory_hostname }}: {{ longhorn_disk_id }}"
       when: not skip_longhorn | bool
 
-    - name: "[ LONGHORN ] Eviction aktivieren + Scheduling deaktivieren"
+    # full_eviction=false (Default, normaler Reboot): nur Scheduling deaktivieren,
+    # KEIN evictionRequested - das Replica bleibt auf dem Node liegen und wird
+    # beim Wiederkommen nur per Delta resynced statt komplett neu auf einen
+    # anderen Node kopiert zu werden. Spart bei grossen Volumes (z.B. das
+    # Prometheus-Volume) typischerweise 10-30+ Minuten pro Node.
+    # full_eviction=true (dauerhafte Node-Entfernung): wie bisher volle Migration.
+    - name: "[ LONGHORN ] Scheduling deaktivieren (+ Eviction falls full_eviction=true)"
       delegate_to: "{{ k8s_delegate }}"
       shell: |
         {{ kubectl_bin }} -n {{ longhorn_namespace }} patch node.longhorn.io/{{ k8s_node_name }} \
           --type=merge \
-          -p '{"spec":{"allowScheduling":false,"disks":{"{{ longhorn_disk_id }}":{"allowScheduling":false,"evictionRequested":true}}}}'
+          -p '{"spec":{"allowScheduling":false,"disks":{"{{ longhorn_disk_id }}":{"allowScheduling":false,"evictionRequested":{{ full_eviction | bool | lower }}}}}}'
       when: not skip_longhorn | bool
       changed_when: true
 
-    - name: "[ LONGHORN ] Warten bis alle Replicas evakuiert sind"
+    - name: "[ LONGHORN ] Warten bis alle Replicas evakuiert sind (nur full_eviction=true)"
       delegate_to: "{{ k8s_delegate }}"
       shell: |
         {{ kubectl_bin }} -n {{ longhorn_namespace }} get replicas.longhorn.io \
@@ -209,13 +219,17 @@
       until: replica_count.stdout | int == 0
       retries: "{{ (longhorn_wait_timeout / 10) | int }}"
       delay: 10
-      when: not skip_longhorn | bool
+      when:
+        - not skip_longhorn | bool
+        - full_eviction | bool
       changed_when: false
 
     - name: "[ LONGHORN ] Replica-Anzahl nach Eviction anzeigen"
       debug:
         msg: "Replicas auf {{ inventory_hostname }}: {{ replica_count.stdout }}"
-      when: not skip_longhorn | bool
+      when:
+        - not skip_longhorn | bool
+        - full_eviction | bool
 
     # -------------------------------------------------------------------------
     # KUBERNETES DRAIN
