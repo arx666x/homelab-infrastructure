@@ -332,11 +332,17 @@ Master → Verify → Worker → Verify):
   **nicht** per echtem Hang getestet — nur Normalbetrieb über mehrere Minuten
   beobachtet (stabil, keine Stale-I/O-Warnungen).
 
-  Nicht umgesetzt/außerhalb des Scopes: Master (GMKTec) laufen weiterhin nur mit
-  dem einfachen `RebootWatchdogSec`-Grundhygiene-Fix aus `ssh-watchdog.yml`, kein
-  `io-watchdog`-Rollout dort — das Problem ist Pi/NVMe-spezifisch, und
-  `RuntimeWatchdogUSec` zeigte auf den Mastern zuletzt ohnehin `0`
-  (kein aktiver Hardware-Watchdog bekannt/bestätigt).
+  **Update 2026-09-13, auf Master ausgeweitet:** Auf Nutzerwunsch ("Knoten
+  möglichst identisch halten") auch auf die 3 Master (GMKTec) ausgerollt —
+  `/dev/watchdog` ist dort vorhanden (vorher nur ungenutzt, `RuntimeWatchdogUSec`
+  zeigte `0`, weil nie ein `RuntimeWatchdogSec` gesetzt war). `io-watchdog.yml`
+  läuft jetzt identisch auf allen 9 Nodes (`hosts: k3s_cluster`); der separate
+  Master-only-`RebootWatchdogSec`-Task in `ssh-watchdog.yml` wurde entfernt, da
+  redundant. Interessanter Unterschied zu k3s-06a: alle 3 Master **und** die 5
+  bereits vorher migrierten Worker öffneten `/dev/watchdog` beim ersten Versuch
+  ohne zusätzlichen Reboot — nur k3s-06a brauchte einen (siehe "Reboot-Verhalten
+  uneinheitlich" oben). Verifiziert: alle 9 Nodes `io-watchdog.service active`,
+  0 Restarts, `RuntimeWatchdogUSec=0`.
 
   **Recovery war folgenlos:** Nach dem manuellen Power-Cycle wurde der Node
   automatisch wieder Ready, die 2 dadurch `degraded` gewordenen Longhorn-Volumes

@@ -1,8 +1,12 @@
 ---
 # io-watchdog.yml
 #
-# Deploys a disk-I/O-aware hardware watchdog daemon to the Raspberry Pi
-# worker nodes (NVMe-backed, not SD card).
+# Deploys a disk-I/O-aware hardware watchdog daemon cluster-wide (masters +
+# Pi workers) - kept identical across all 9 nodes deliberately, even though
+# the incident that motivated this (D-state storage pile-ups) has so far
+# only been observed on the Pi workers' NVMe. /dev/watchdog is present on
+# the GMKTec masters too (confirmed 2026-09-13), so there's no reason for
+# them to run a different watchdog story.
 #
 # Why this exists: systemd's own RuntimeWatchdogSec pets /dev/watchdog from
 # PID1's internal event loop, which never touches disk - so it keeps the
@@ -20,21 +24,30 @@
 # blocks that one thread - nothing new needs to be spawned during the hang
 # for the watchdog to stop being fed and the hardware to reset the box.
 #
-# IMPORTANT: /dev/watchdog is a sharp tool. On many Pi kernels the driver
-# has nowayout compiled in, so once a process opens it, the watchdog can
-# only be silenced by that process staying open (Restart=always keeps it
-# fed across a brief service restart) or by a reboot - there's no clean
-# "turn it off" via this playbook. A bug that never pets will cause a real
-# reset. Roll out to one node first and watch it run for a few minutes
-# under normal conditions before going wider - do NOT deliberately hang
-# storage to test the reset path.
+# IMPORTANT: /dev/watchdog is a sharp tool. On many kernels the driver has
+# nowayout compiled in, so once a process opens it, the watchdog can only
+# be silenced by that process staying open (Restart=always keeps it fed
+# across a brief service restart) or by a reboot - there's no clean "turn
+# it off" via this playbook. A bug that never pets will cause a real reset.
+# Roll out to one node first and watch it run for a few minutes under
+# normal conditions before going wider - do NOT deliberately hang storage
+# to test the reset path.
+#
+# Rollout note (2026-09-13): a node whose current boot already has
+# /dev/watchdog open under the old regime (systemd's own RuntimeWatchdogSec,
+# or on the Pis the vendor's 40-rpi-enable-watchdog.conf drop-in) will fail
+# to start io-watchdog.service with "Device or resource busy" until that
+# node is rebooted - daemon-reexec is not enough, PID1 keeps an already-open
+# watchdog fd across it. Just re-run this playbook after any reboot; the
+# "Check service is active" task tells you plainly whether a given node
+# still needs one.
 #
 # Usage:
-#   ansible-playbook -i inventory/hosts.ini playbooks/io-watchdog.yml --limit worker06   # k3s-06a first
-#   ansible-playbook -i inventory/hosts.ini playbooks/io-watchdog.yml                    # all Pi workers, once confirmed healthy
+#   ansible-playbook -i inventory/hosts.ini playbooks/io-watchdog.yml --limit master01   # one node first
+#   ansible-playbook -i inventory/hosts.ini playbooks/io-watchdog.yml                    # whole cluster, once confirmed healthy
 
-- name: Deploy disk-I/O-aware hardware watchdog to Pi workers
-  hosts: worker
+- name: Deploy disk-I/O-aware hardware watchdog cluster-wide
+  hosts: k3s_cluster
   become: true
   gather_facts: false
 

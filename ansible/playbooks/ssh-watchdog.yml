@@ -25,10 +25,6 @@
     watchdog_dstate_threshold: 5        # processes in D-state to count as a "pile-up"
     watchdog_script_path: /usr/local/bin/ssh-watchdog.sh
     watchdog_state_dir: /var/lib/ssh-watchdog
-    hw_watchdog_reboot_sec: "5min"       # RebootWatchdogSec - unter dem
-                                          # auskommentierten systemd-Default
-                                          # (10min), kann also nicht schlechter
-                                          # werden als vorher
 
   tasks:
 
@@ -89,35 +85,20 @@
       tags: [install, watchdog]
 
     # -------------------------------------------------------------------------
-    # RebootWatchdogSec explizit setzen - nur noch als Grundhygiene fuer die
-    # Master (GMKTec), NICHT die eigentliche Antwort auf den k3s-06a-Hang.
+    # RuntimeWatchdogSec/RebootWatchdogSec werden NICHT mehr hier gesetzt.
     #
-    # Historie (siehe docs/upgrades/k3s.md fuer die volle Aufarbeitung):
-    # zunaechst vermutet, RebootWatchdogSec sei die fehlende Absicherung -
-    # war falsch, RebootWatchdogSec schuetzt nur einen bereits laufenden
-    # Reboot-*Vorgang* vor dem Haengenbleiben, hier wurde aber nie einer
-    # ausgeloest. Der eigentliche Fix fuer den D-State-Storage-Hang ist
-    # io-watchdog.yml (Disk-I/O-gekoppelter Watchdog, ersetzt PID1s
-    # fork()-unabhaengige und daher fuer diese Hang-Klasse blinde
-    # RuntimeWatchdogSec-Petting-Schleife) - der ist Pi-spezifisch (`hosts:
-    # worker`) und gewinnt dort ohnehin ueber sein eigenes, spaeter
-    # sortiertes Drop-in gegen diese Zeile hier.
+    # Historie (siehe docs/upgrades/k3s.md fuer die volle Aufarbeitung): ein
+    # frueherer Versuch, hier direkt RebootWatchdogSec in /etc/systemd/
+    # system.conf zu setzen, war sowohl konzeptionell falsch (schuetzt nur
+    # einen bereits laufenden Reboot-*Vorgang*, kein D-State-Hang loest aber
+    # je einen Reboot aus) als auch praktisch wirkungslos (auf den Pis
+    # ueberschreibt ein Vendor-Drop-in jeden direkten system.conf-Edit).
     #
-    # Dieser Task bleibt fuer die Master bestehen (dort kein bekannter
-    # Vendor-Drop-in-Konflikt, aber auch ungeklaert ob die GMKTec-Hardware
-    # ueberhaupt einen funktionierenden Hardware-Watchdog hat - RuntimeWatchdogUSec
-    # zeigte dort zuletzt 0/deaktiviert). Bewusst nicht live getestet (ein
-    # Test wuerde bedeuten, einen Master absichtlich haengen zu lassen).
+    # Seit 2026-09-13 uebernimmt io-watchdog.yml (cluster-weit, alle 9 Nodes,
+    # bewusst identisch fuer Master+Worker) beide Werte ueber ein eigenes,
+    # korrekt sortiertes Drop-in - siehe dort fuer Details. Nicht hier
+    # duplizieren.
     # -------------------------------------------------------------------------
-
-    - name: RebootWatchdogSec in /etc/systemd/system.conf explizit setzen (Master-Grundhygiene)
-      ansible.builtin.lineinfile:
-        path: /etc/systemd/system.conf
-        regexp: '^#?RebootWatchdogSec='
-        line: "RebootWatchdogSec={{ hw_watchdog_reboot_sec }}"
-        insertafter: '^#?RuntimeWatchdogSec='
-      tags: [install, watchdog]
-      notify: Reexec systemd
 
     # -------------------------------------------------------------------------
     # SSH Watchdog: Script + Service + Timer
@@ -337,15 +318,6 @@
     - name: Reload systemd
       ansible.builtin.systemd:
         daemon_reload: true
-
-    - name: Reexec systemd
-      # /etc/systemd/system.conf ist PID1s eigene Konfiguration - ein normales
-      # daemon-reload liest nur Unit-Files neu ein, nicht system.conf. Ein
-      # daemon-reexec startet PID1 im laufenden Betrieb neu (kein Reboot,
-      # keine Unterbrechung laufender Services), damit RebootWatchdogSec
-      # sofort greift statt erst beim naechsten Boot.
-      ansible.builtin.command: systemctl daemon-reexec
-      changed_when: true
 
     - name: Restart journald
       ansible.builtin.systemd:
