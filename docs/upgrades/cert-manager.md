@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `cert-manager`
-- **Aktuelle Version:** v1.21.0
+- **Aktuelle Version:** v1.21.2
 - **Quelle:** Helm-Chart `cert-manager` aus `https://charts.jetstack.io`
 - **ArgoCD App-Name:** `cert-manager`
 - **Versions-Check-Quelle:** `targetRevision` in `gitops/apps/cert-manager.yaml` (Helm-Chart-Source `charts.jetstack.io`); Release Notes unter https://cert-manager.io/docs/releases/
@@ -22,6 +22,8 @@
 | 2026-06-29 | v1.20.2 → v1.20.3 | Minor (Patch) | Manuell | Abgeschlossen | Patch-Release mit Bugfixes und Dependency-Updates, keine Breaking Changes | |
 | 2026-07-13 | v1.20.3 → v1.21.0 | Minor | Manuell | Zurückgestellt | Regel "nie direkt auf .0-Minor-Version" greift (Präzedenzfall v1.19.0-Bug) — v1.21.0 hat noch keinen Patch-Release. Breaking Changes geprüft: entfernte `tokenrequest`-RBAC betrifft uns nicht (kein `serviceAccountRef` in unseren Issuers), restriktivere `cert-manager-edit`-RBAC/Metrics-Values ebenfalls nicht (keine Anpassungen in unseren Helm-Values) | PR [#6](https://gitea.reckeweg.io/achim/homelab-infrastructure/pulls/6) zunächst offen gelassen |
 | 2026-07-27 | v1.20.3 → v1.21.0 | Minor | Manuell | Abgeschlossen | Re-Check: weiterhin kein v1.21.1-Patch, aber Upstream-Issues geprüft und für uns nicht relevant befunden — #9031 (nil-Panic bei `Certificate.spec.renewal.policy: Disabled`, in #9032 bereits gefixt, nur unreleased) betrifft uns nicht, da wir `renewal.policy` nirgends setzen; #9036 (ACME-Solver-Secret-Änderung triggert keine Reconciliation, offen) betrifft uns nicht im Normalbetrieb, da `cloudflare-api-token` bereits existiert und stabil läuft — als Stolperfalle für künftige Secret-Rotation vermerkt. Daher: v1.21.0 als stabil genug eingestuft, direkt (ohne PR #6, dessen Branch inzwischen veraltet war) auf `main` durchgeführt | Rollout sauber: ArgoCD Synced/Healthy, alle ClusterIssuers `True`, keine fehlerhaften CertificateRequests, `scripts/deploy-direct.sh` (war noch auf v1.19.4) mit aktualisiert. Bekanntes kosmetisches Log-Spam-Issue (`OnAdd missing Object`, #8994) live bestätigt, außerdem kurzer Error-Burst "ACME client for issuer not initialised/available" für ~2s direkt beim Controller-Neustart (danach `verified existing registration with ACME server`) — beides keine echten Fehler, aber erzeugt False Positives im Log-Grep der Post-Upgrade-Validierung |
+| unbekannt | v1.21.0 → v1.21.1 | Minor (Patch) | Automatisch | Abgeschlossen | Commit `1e7f621` "chore: auto-upgrade cert-manager v1.21.0 → v1.21.1" vom upgrade-agent, bislang nicht in diesem Changelog erfasst, jetzt nachgetragen | — |
+| 2026-09-13 | v1.21.1 → v1.21.2 | Minor (Patch) | Manuell | Abgeschlossen | Patch-Release, nur Bugfixes: ACME-/Vault-Issuer-Response-Bodies werden nicht mehr ungefiltert in Status/Events reflektiert (max. 16 MiB, DoS-Schutz), Webhook-Panic bei fehlenden optionalen AdmissionReview-Feldern behoben, HTTP-01-Solver-Cleanup-Fix bei bereits gelöschten Ressourcen, Fix für Renewal-Cron-Edge-Case bei 29. Februar über Nicht-Schaltjahrhunderte. Kein Breaking Change | Teil der Sammel-Update-Runde 2026-09-13 (zusammen mit kube-prometheus-stack, sealed-secrets, traefik, CDI); `scripts/deploy-direct.sh` war noch auf v1.21.0, mit aktualisiert |
 
 ### Reklassifizierungen (Minor → Major)
 
