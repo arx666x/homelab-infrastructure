@@ -164,14 +164,6 @@ HELM_SERVICES = [
 
 IMAGE_SERVICES = [
     {
-        "name": "homeassistant",
-        "image_files": ["gitops/config/homeassistant/deployment.yaml"],
-        "image_pattern": r"ghcr\.io/home-assistant/home-assistant:([^\s\"']+)",
-        "version_type": "ghcr",
-        "github_repo": "home-assistant/core",
-        "runbook": "docs/upgrades/homeassistant.md",
-    },
-    {
         "name": "guacamole",
         "image_files": ["gitops/config/guacamole/guacamole.yaml"],
         "image_pattern": r"guacamole/guacamole:([^\s\"']+)",
