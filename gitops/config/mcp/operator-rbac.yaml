@@ -1,0 +1,80 @@
+# =============================================================================
+# mcp-operator - Scoped Write-ServiceAccount fuer lokalen kubectl-Zugriff
+# (Claude Code Bash-Tool), Ersatz fuer die bisherige system:admin-Kubeconfig.
+# Rechte: wie ClusterRole "view" (kein Secret-Zugriff) + delete auf pods/jobs,
+# um Cleanup (haengende Pods, veraltete Failed-Jobs) zu erlauben, ohne
+# Cluster-Admin zu benoetigen.
+# Absichtlich OHNE: create/update/patch, exec, Secrets, RBAC, Namespaces,
+# PV/PVC, Node-Objekte.
+# =============================================================================
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-operator
+  namespace: mcp
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-operator-view
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: mcp-operator
+    namespace: mcp
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-operator-cleanup
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-operator-cleanup
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mcp-operator-cleanup
+subjects:
+  - kind: ServiceAccount
+    name: mcp-operator
+    namespace: mcp
+
+---
+# Long-lived Token (kein 1h-TokenRequest-Token, sonst muesste die lokale
+# kubeconfig staendig erneuert werden). Der Token-Wert selbst steht NICHT in
+# diesem Manifest - K8s befuellt das Secret automatisch -> unbedenklich zu committen.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mcp-operator-token
+  namespace: mcp
+  annotations:
+    kubernetes.io/service-account.name: mcp-operator
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+type: kubernetes.io/service-account-token
