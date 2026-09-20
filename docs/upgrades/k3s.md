@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** n/a (Cluster-weite Komponente)
-- **Aktuelle Version:** v1.36.4+k3s1
+- **Aktuelle Version:** v1.37.0+k3s1
 - **Quelle:** GitHub Releases (k3s-io/k3s) — https://github.com/k3s-io/k3s/releases
 - **ArgoCD App-Name:** — (nicht ArgoCD-verwaltet, Ansible-Playbooks: update-master-nodes.yml / update-pi-nodes.yml)
 - **Versions-Check-Quelle:** Manuell gegen GitHub Releases geprüft (kein automatisierter Checker; Cluster ist nicht GitOps/ArgoCD-verwaltet)
@@ -20,6 +20,7 @@
 | 2026-05-29 | v1.36.1 → v1.36.2 | Minor | Manuell | Abgeschlossen | Patch-Release, nur Bugfixes, kein Sonderfall; nftables-Fix aus v1.36.0-Upgrade weiterhin wirksam (RPis liefen bereits auf Kernel 6.18.34) | Dokumentiert in Commit "docs: k3s v1.36.2 upgrade dokumentiert" (2026-06-29) |
 | 2026-08-10 | v1.36.2 → v1.36.3 | Minor | Manuell (Ansible) | Abgeschlossen | Patch-Release, nur Bugfixes, kein Sonderfall; zusätzlich OS-Paket-Update auf allen 9 Nodes | Alle 3 Master + alle 6 Worker aktualisiert. Vier separate Longhorn-Eviction-Timeouts (30 min, `longhorn_wait_timeout`) beim Rebuild des 50 GB `pvc-73e5e5c2` (kube-prometheus-stack-Prometheus-Volume) auf gmkt-01x, gmkt-03x, k3s-01a und k3s-06a — jedes Mal lief der Rebuild tatsächlich weiter/schloss kurz nach dem Ansible-Timeout ab (dreimal reines Timing, einmal auf gmkt-01x echter Stall durch `unexpected EOF` beim Datei-Sync, behoben durch Löschen des hängenden WO-Replicas und Neustart des Rebuilds). Betroffene Node-Läufe danach jeweils mit `--limit <node>` erneut angestoßen, kein Datenverlust, Volume blieb durchgehend `healthy`. **Empfehlung:** `longhorn_wait_timeout` in `update-master-nodes.yml`/`update-pi-nodes.yml` für Volumes >20GB auf 3600s erhöhen, siehe Stolperfalle unten. Nebenbefund (nicht durch k3s-Upgrade verursacht, aber durch Node-Drain ausgelöst): `gitea-actions-runner-0` verlor durch Reschedule während master01-Drain seine Registrierung (`invalid character '/' looking for beginning of value`), behoben durch StatefulSet scale 0→1 (nach Pause von ArgoCD-selfHeal); dadurch blockierter ChromeIQ-CI-Backlog löste sich danach selbst auf |
 | 2026-09-12/13 | v1.36.4 (unverändert) | OS-Paket-Update, kein k3s-Bump | Manuell (Ansible) | Abgeschlossen | Größere Anzahl ausstehender OS-Pakete auf allen Nodes; k3s_version=v1.36.4+k3s1 (=Ist-Stand) an update-master-nodes.yml übergeben, damit nur OS-Update+Reboot läuft, kein Binary-Swap. Reihenfolge: DNS (dns01/dns02) → Master → Worker | DNS-Nodes über `update-dns-nodes.yml` (neueres, kanonisches Playbook für den aktuellen Zwei-Resolver-Aufbau ohne Keepalived/VIP; `update-dns.yml` ist die veraltete Vorgängerversion für den alten Single-Node-VIP-Aufbau). Master01 traf erneut den bekannten Longhorn-Eviction-Timeout beim `pvc-73e5e5c2`-Rebuild (reines Timing, s.o.) — daraufhin **`full_eviction`-Fix eingeführt** (siehe Stolperfalle unten): Master02+03 liefen danach in ~20 Min. statt vorher 30+ Min. **pro Node** durch, Longhorn blieb durchgehend `healthy`. Worker liefen mit `serial: 2` (seit 2026-08-21) komplett fehlerfrei durch (0× `FAILED - RETRYING`). **k3s-06a-Incident** (unabhängig vom Update, ~9h nach Abschluss des Worker-Laufs): Node hing hart (SSH-Handshake sofort vom Remote-Host gekappt, `containerd` down, Ping ging weiterhin) — Root Cause und Watchdog-Befund siehe eigene Stolperfalle unten. Nebenbei erledigt: verwaiste `homeassistant-config`-PVC (HA lief seit 2026-09-01 stabil auf der Diskstation, Cluster-Deployment `replicas: 0`) inkl. blockierendem `ha-export`-Leftover-Pod entfernt |
+| 2026-09-19/20 | v1.36.4 → v1.37.0 | Major (1 Minor-Hop) | Manuell (Ansible) | Abgeschlossen | 1 Minor-Hop, laut Regel als Major behandelt. Etcd-Sprung v3.6.14→v3.7.1 vorab geprüft: etcd verlangt mindestens v3.6.11 für den Rolling-Upgrade nach 3.7 (Ist-Stand 3.6.14, also unkritisch, kein Pflicht-Zwischenschritt nötig — anders als beim 3.5→3.6-Sprung 2026-05). K8s-1.37-Release-Notes geprüft: einziges "ACTION REQUIRED"-Item war `SELinuxMount`-Feature-Gate GA (kann SELinux-Workloads brechen) — betrifft uns nicht, kein Node hat SELinux aktiviert (Debian ohne SELinux-Tooling/-Filesystem bestätigt auf Master+Worker). Übrige Deprecations (kube-proxy-Mode-Warnung, `scheduling.k8s.io` v1alpha2-Drop für DRA) ohne Auswirkung, da wir bereits nftables nutzen bzw. kein DRA einsetzen | etcd-Snapshot vor Mastern (`pre-upgrade-masters-20260919`) und nach Abschluss (`post-upgrade-k3s137-20260920`) auf gmkt-01x. Reihenfolge: Master (serial 1, ~15 Min) → Worker (serial 2, ~20 Min, inkl. worker01-Einzeltest vorab) → ArgoCD-Self-Upgrade im selben Zug (siehe `argocd.md`). Alle 9 Nodes fehlerfrei durch, 0× `FAILED - RETRYING` bei den Mastern, kein k3s-06a-Rückfall diesmal. Post-Upgrade: alle Nodes Ready auf v1.37.0+k3s1, keine degraded Pods, Longhorn durchgehend healthy, alle 29 ArgoCD-Apps Synced/Healthy, Gitea/Grafana per curl erreichbar. **Vorlauf-Besonderheit:** kubectl/MCP-K8s-Zugriff läuft seit 2026-09-15 standardmäßig über ein stark eingeschränktes Service-Account (`mcp-operator`/`mcp-viewer`, `KUBECONFIG=~/.kube/claude-agent.config`) ohne Schreibrechte auf Nodes/Deployments/Secrets/ArgoCD-Namespace — für Cordon/Drain/Longhorn-Patches musste in dieser Session explizit auf den vollen Admin-Kubeconfig (`~/.kube/config`) gewechselt werden (Nutzer-Freigabe eingeholt, siehe Stolperfalle unten) |
 
 ### Reklassifizierungen (Minor → Major)
 
@@ -176,6 +177,24 @@ Master → Verify → Worker → Verify):
   ```
 
 ## Bekannte Stolperfallen / Lessons Learned
+
+- **Eingeschränkter kubectl/MCP-Zugriff seit 2026-09-15** (entdeckt 2026-09-19) —
+  Der Standard-`KUBECONFIG` in dieser Umgebung (`~/.kube/claude-agent.config`,
+  Service-Accounts `mcp-operator`/`mcp-viewer`) hat seit 2026-09-15 nur noch
+  eingeschränkte Rechte: `get/list/watch` auf den meisten Core-Resources,
+  `delete/get/list/watch` auf Pods/Jobs — aber **kein** Schreibzugriff auf Nodes
+  (kein cordon/drain/uncordon), keine Pod-Eviction, kein Zugriff auf Secrets oder
+  den `argocd`-Namespace (auch nicht lesend), kein `applications.argoproj.io`
+  überhaupt (weder kubectl noch der `k8s-homelab`-MCP-Server). Wirkt wie eine
+  bewusste, dauerhafte Absicherung gegen versehentliche destruktive Aktionen aus
+  Claude-Sessions heraus. Für node-verändernde Ansible-Läufe (Cordon/Drain,
+  Longhorn-Patches) und das ArgoCD-Self-Upgrade-Script reicht das nicht — dafür
+  `export KUBECONFIG=~/.kube/config` (voller Admin-Kontext, `system:masters`)
+  nötig. **Nicht eigenmächtig wechseln** — das ist eine Rechte-Eskalation und
+  wurde in dieser Session explizit beim Nutzer erfragt und freigegeben, bevor
+  k3s/ArgoCD-Upgrade fortgesetzt wurden. Lesende Cluster-Abfragen (Pods,
+  Deployments, Longhorn-Volumes über `mcp__k8s-homelab__resources_list/get`)
+  funktionieren weiterhin ohne Rechte-Wechsel und sollten dafür bevorzugt werden.
 
 - **RPi-Kernel 6.18+: `ip_tables`-Modul entfernt** (entdeckt 2026-05-17) — Der
   Raspberry-Pi-Kernel 6.18.x (rpt-rpi-2712) enthält kein `ip_tables`-Kernelmodul
