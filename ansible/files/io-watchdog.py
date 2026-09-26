@@ -72,8 +72,12 @@ def io_check_loop() -> None:
     os.makedirs(os.path.dirname(HEARTBEAT_FILE), exist_ok=True)
     while True:
         try:
+            # O_TRUNC matters: str(time.time()) varies in length (shortest
+            # round-trip float repr), so without truncating, a shorter write
+            # leaves stale trailing bytes from the previous write and the
+            # readback below spuriously mismatches on a perfectly healthy disk.
             payload = f"{time.time()}\n".encode()
-            fd = os.open(HEARTBEAT_FILE, os.O_WRONLY | os.O_CREAT | os.O_SYNC, 0o600)
+            fd = os.open(HEARTBEAT_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_SYNC, 0o600)
             try:
                 os.write(fd, payload)
                 os.fsync(fd)

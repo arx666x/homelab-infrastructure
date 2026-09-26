@@ -21,6 +21,7 @@
 | 2026-08-10 | v1.36.2 → v1.36.3 | Minor | Manuell (Ansible) | Abgeschlossen | Patch-Release, nur Bugfixes, kein Sonderfall; zusätzlich OS-Paket-Update auf allen 9 Nodes | Alle 3 Master + alle 6 Worker aktualisiert. Vier separate Longhorn-Eviction-Timeouts (30 min, `longhorn_wait_timeout`) beim Rebuild des 50 GB `pvc-73e5e5c2` (kube-prometheus-stack-Prometheus-Volume) auf gmkt-01x, gmkt-03x, k3s-01a und k3s-06a — jedes Mal lief der Rebuild tatsächlich weiter/schloss kurz nach dem Ansible-Timeout ab (dreimal reines Timing, einmal auf gmkt-01x echter Stall durch `unexpected EOF` beim Datei-Sync, behoben durch Löschen des hängenden WO-Replicas und Neustart des Rebuilds). Betroffene Node-Läufe danach jeweils mit `--limit <node>` erneut angestoßen, kein Datenverlust, Volume blieb durchgehend `healthy`. **Empfehlung:** `longhorn_wait_timeout` in `update-master-nodes.yml`/`update-pi-nodes.yml` für Volumes >20GB auf 3600s erhöhen, siehe Stolperfalle unten. Nebenbefund (nicht durch k3s-Upgrade verursacht, aber durch Node-Drain ausgelöst): `gitea-actions-runner-0` verlor durch Reschedule während master01-Drain seine Registrierung (`invalid character '/' looking for beginning of value`), behoben durch StatefulSet scale 0→1 (nach Pause von ArgoCD-selfHeal); dadurch blockierter ChromeIQ-CI-Backlog löste sich danach selbst auf |
 | 2026-09-12/13 | v1.36.4 (unverändert) | OS-Paket-Update, kein k3s-Bump | Manuell (Ansible) | Abgeschlossen | Größere Anzahl ausstehender OS-Pakete auf allen Nodes; k3s_version=v1.36.4+k3s1 (=Ist-Stand) an update-master-nodes.yml übergeben, damit nur OS-Update+Reboot läuft, kein Binary-Swap. Reihenfolge: DNS (dns01/dns02) → Master → Worker | DNS-Nodes über `update-dns-nodes.yml` (neueres, kanonisches Playbook für den aktuellen Zwei-Resolver-Aufbau ohne Keepalived/VIP; `update-dns.yml` ist die veraltete Vorgängerversion für den alten Single-Node-VIP-Aufbau). Master01 traf erneut den bekannten Longhorn-Eviction-Timeout beim `pvc-73e5e5c2`-Rebuild (reines Timing, s.o.) — daraufhin **`full_eviction`-Fix eingeführt** (siehe Stolperfalle unten): Master02+03 liefen danach in ~20 Min. statt vorher 30+ Min. **pro Node** durch, Longhorn blieb durchgehend `healthy`. Worker liefen mit `serial: 2` (seit 2026-08-21) komplett fehlerfrei durch (0× `FAILED - RETRYING`). **k3s-06a-Incident** (unabhängig vom Update, ~9h nach Abschluss des Worker-Laufs): Node hing hart (SSH-Handshake sofort vom Remote-Host gekappt, `containerd` down, Ping ging weiterhin) — Root Cause und Watchdog-Befund siehe eigene Stolperfalle unten. Nebenbei erledigt: verwaiste `homeassistant-config`-PVC (HA lief seit 2026-09-01 stabil auf der Diskstation, Cluster-Deployment `replicas: 0`) inkl. blockierendem `ha-export`-Leftover-Pod entfernt |
 | 2026-09-19/20 | v1.36.4 → v1.37.0 | Major (1 Minor-Hop) | Manuell (Ansible) | Abgeschlossen | 1 Minor-Hop, laut Regel als Major behandelt. Etcd-Sprung v3.6.14→v3.7.1 vorab geprüft: etcd verlangt mindestens v3.6.11 für den Rolling-Upgrade nach 3.7 (Ist-Stand 3.6.14, also unkritisch, kein Pflicht-Zwischenschritt nötig — anders als beim 3.5→3.6-Sprung 2026-05). K8s-1.37-Release-Notes geprüft: einziges "ACTION REQUIRED"-Item war `SELinuxMount`-Feature-Gate GA (kann SELinux-Workloads brechen) — betrifft uns nicht, kein Node hat SELinux aktiviert (Debian ohne SELinux-Tooling/-Filesystem bestätigt auf Master+Worker). Übrige Deprecations (kube-proxy-Mode-Warnung, `scheduling.k8s.io` v1alpha2-Drop für DRA) ohne Auswirkung, da wir bereits nftables nutzen bzw. kein DRA einsetzen | etcd-Snapshot vor Mastern (`pre-upgrade-masters-20260919`) und nach Abschluss (`post-upgrade-k3s137-20260920`) auf gmkt-01x. Reihenfolge: Master (serial 1, ~15 Min) → Worker (serial 2, ~20 Min, inkl. worker01-Einzeltest vorab) → ArgoCD-Self-Upgrade im selben Zug (siehe `argocd.md`). Alle 9 Nodes fehlerfrei durch, 0× `FAILED - RETRYING` bei den Mastern, kein k3s-06a-Rückfall diesmal. Post-Upgrade: alle Nodes Ready auf v1.37.0+k3s1, keine degraded Pods, Longhorn durchgehend healthy, alle 29 ArgoCD-Apps Synced/Healthy, Gitea/Grafana per curl erreichbar. **Vorlauf-Besonderheit:** kubectl/MCP-K8s-Zugriff läuft seit 2026-09-15 standardmäßig über ein stark eingeschränktes Service-Account (`mcp-operator`/`mcp-viewer`, `KUBECONFIG=~/.kube/claude-agent.config`) ohne Schreibrechte auf Nodes/Deployments/Secrets/ArgoCD-Namespace — für Cordon/Drain/Longhorn-Patches musste in dieser Session explizit auf den vollen Admin-Kubeconfig (`~/.kube/config`) gewechselt werden (Nutzer-Freigabe eingeholt, siehe Stolperfalle unten) |
+| 2026-09-26 | v1.37.0 (unverändert) | OS-Paket-Update, kein k3s-Bump | Manuell (Ansible) | Abgeschlossen | Reihenfolge DNS (dns01/dns02) → Master → Worker, `k3s_version` jeweils auf Ist-Stand gesetzt. Alle 9 Nodes fehlerfrei durch | Im Zuge der Master/Worker-Reboots kurzzeitig 3 bzw. 2 Longhorn-Volumes `degraded` (aktive Replica-Rebuilds nach dem `full_eviction`-Fix, kein Full-Rebuild, self-healed jeweils binnen 1-3 Min.) und `metallb-speaker` auf einem Node kurz in `CrashLoopBackOff` (`storage is (re)initializing` — API-Server-Watch-Cache kurz nach Reboot noch nicht bereit; durch Pod-Delete sofort behoben, DaemonSet hat ihn neu geschedult). Im Zuge dieses Updates auch der `io-watchdog`-`O_TRUNC`-Bug entdeckt und gefixt (siehe eigene Stolperfalle) — Auslöser war eine Nutzer-Meldung über vermeintliche "Prometheus-Crashloops" |
 
 ### Reklassifizierungen (Minor → Major)
 
@@ -177,6 +178,33 @@ Master → Verify → Worker → Verify):
   ```
 
 ## Bekannte Stolperfallen / Lessons Learned
+
+- **io-watchdog.py: fehlendes `O_TRUNC` erzeugte massenhafte Fehlalarme + mind.
+  einen echten Fehl-Reboot** (entdeckt 2026-09-26, Fix noch am selben Tag
+  ausgerollt) — Der Heartbeat-Write in `io-watchdog.py` (`ansible/files/`)
+  öffnete die Datei mit `O_WRONLY | O_CREAT | O_SYNC`, **ohne** `O_TRUNC`.
+  `str(time.time())` variiert in der Länge (kürzeste round-trip-fähige
+  Float-Darstellung) — ist der neue Payload kürzer als der vorherige, bleiben
+  alte Bytes am Dateiende stehen, und das Readback (`f.read() != payload`)
+  schlägt fehl, **obwohl die Disk völlig gesund ist**. Ergebnis: alle 9 Nodes
+  loggten ~4000 "heartbeat readback mismatch"-Warnungen pro Tag im
+  Normalbetrieb (roughly jeder 2.-4. Check), rein durch Zufall in der
+  Zeichenketten-Länge, nicht durch echte I/O-Probleme. Auf `k3s-04a` liefen
+  durch Pech mehrfach genug aufeinanderfolgende "Mismatch"-Checks zusammen,
+  um die `STALE_THRESHOLD_SEC=30` zu überschreiten → der Node wurde **6× in 6
+  Tagen (20.-25.09.) grundlos per Hardware-Watchdog neu gestartet**, was
+  wiederum die Longhorn-Replica des großen Prometheus-Volumes
+  (`pvc-73e5e5c2`, eine Replica sitzt auf k3s-04a) wiederholt in
+  R/W-Timeout/ERR schickte und die `PrometheusOutOfOrderTimestamps`-Alerts
+  auslöste — vom Nutzer fälschlich als "Prometheus crashed" gedeutet, siehe
+  `kube-prometheus-stack.md`. SMART/Kernel-Logs auf k3s-04a zeigten dabei
+  **keine** echten Hardware-Fehler (0 media_errors, kein `blk_update_request`)
+  — der Alarm war durchgängig ein reiner Software-Bug, kein Storage-Problem.
+  **Fix:** `os.O_TRUNC` zu den `os.open()`-Flags ergänzt, cluster-weit über
+  `io-watchdog.yml` ausgerollt, danach 0 Mismatches auf allen 9 Nodes bestätigt.
+  **Lesson:** Bei Readback-Verifikation mit variabler Payload-Länge immer
+  `O_TRUNC` setzen (oder fixe Breite/`ftruncate`) — sonst verifiziert man
+  gegen Datei-Reste, nicht gegen den eigenen Write.
 
 - **Eingeschränkter kubectl/MCP-Zugriff seit 2026-09-15** (entdeckt 2026-09-19) —
   Der Standard-`KUBECONFIG` in dieser Umgebung (`~/.kube/claude-agent.config`,
