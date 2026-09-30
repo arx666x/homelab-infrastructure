@@ -19,6 +19,10 @@ metadata:
     app.kubernetes.io/name: argocd-rbac-cm
     app.kubernetes.io/part-of: argocd
 data:
+  # ArgoCD matches g-lines only against the "groups" claim by default; with
+  # the email claim as subject (see header) it must be listed explicitly,
+  # otherwise the login stays role:readonly (sync denied, 2026-09-30).
+  scopes: '[email]'
   policy.default: role:readonly
   policy.csv: |
     g, achim.reckeweg@gmail.com, role:admin
