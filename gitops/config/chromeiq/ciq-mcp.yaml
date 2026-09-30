@@ -48,6 +48,9 @@ spec:
   # for the new one to become ready) - seen on the 0.4.3 rollout.
   strategy:
     type: Recreate
+    # Server-side apply keeps the defaulted rollingUpdate block otherwise and
+    # the API server rejects it together with type Recreate.
+    rollingUpdate: null
   selector:
     matchLabels:
       app.kubernetes.io/name: ciq-mcp
