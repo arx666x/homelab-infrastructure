@@ -43,6 +43,11 @@ metadata:
     app.kubernetes.io/component: mcp
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: the clients.json volume is ReadWriteOnce, so
+  # a rolling update deadlocks (new pod waits for the volume, old pod waits
+  # for the new one to become ready) - seen on the 0.4.3 rollout.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: ciq-mcp
