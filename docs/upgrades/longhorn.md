@@ -21,6 +21,7 @@
 | 2026-05-03 | 1.10.2 → 1.11.1 | Minor | Manuell | Abgeschlossen | Hop 6; v1.11.0 übersprungen wegen Memory-Leak im instance-manager und Node-Validator-Regression; CRD-Timing-Bug (fehlendes Node-Status-Feld `healthDataLastCollectedAt`) sowie ArgoCD-CRD-Webhook-Konflikt manuell behoben | ~120 min inkl. Node-Status-Bug + ~5 min ArgoCD-CRD-Fix |
 | 2026-05-05 | 1.11.1 → 1.11.2 | Minor | Manuell | Abgeschlossen | Patch-artiger Minor-Schritt, keine bekannten Breaking Changes | — |
 | 2026-06-14 | 1.11.2 → 1.12.0 | Minor | Manuell | Abgeschlossen | Hop 7; direkter Minor-Hop ohne Breaking Changes für V1-only-Setup; kein CRD-Timing-Bug, kein Webhook-Umbau nötig; CSI-Storage-Capacity-Bug (Zero-Capacity-Knoten) war bereits gefixt | Problemlos, kein Workaround nötig |
+| 2026-08-17 | 1.12.0 → 1.12.1 | Minor (Patch) | Automatisch (upgrade-agent, Commit `a0ef2fd`) | Abgeschlossen | Nachträglich dokumentiert am 2026-10-03. Patch-Release innerhalb 1.12; ab 1.12.1 legt Longhorn standardmäßig interne Ingress-`NetworkPolicy`-Ressourcen an (6 Stück in `longhorn-system`: backing-image-data-source, backing-image-manager, instance-manager, longhorn-manager, longhorn-recovery-backend, longhorn-webhook) — bei uns aktiv, da k3s kube-router-NetworkPolicy-Enforcement mitbringt; kein Funktionsproblem beobachtet (Prometheus scrapt Longhorn nicht, kein ServiceMonitor) | Vom Upgrade-Agent direkt auf `main` committet, Auto-Sync hat ausgerollt; Engine-Image-Upgrade der Volumes nicht separat protokolliert |
 
 ### Reklassifizierungen (Minor → Major)
 
