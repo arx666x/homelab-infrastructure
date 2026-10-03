@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** longhorn-system
-- **Aktuelle Version:** 1.12.0
+- **Aktuelle Version:** 1.13.0
 - **Quelle:** Helm-Chart `longhorn` von `https://charts.longhorn.io`
 - **ArgoCD App-Name:** longhorn (Haupt-Chart), longhorn-backup (Companion-App für Backup-CronJobs, Pfad `gitops/config/longhorn`)
 - **Versions-Check-Quelle:** `targetRevision` in `gitops/apps/longhorn.yaml`; Longhorn erlaubt nur Upgrades von der jeweils vorherigen Minor-Version (kein Überspringen von Minors)
@@ -22,6 +22,7 @@
 | 2026-05-05 | 1.11.1 → 1.11.2 | Minor | Manuell | Abgeschlossen | Patch-artiger Minor-Schritt, keine bekannten Breaking Changes | — |
 | 2026-06-14 | 1.11.2 → 1.12.0 | Minor | Manuell | Abgeschlossen | Hop 7; direkter Minor-Hop ohne Breaking Changes für V1-only-Setup; kein CRD-Timing-Bug, kein Webhook-Umbau nötig; CSI-Storage-Capacity-Bug (Zero-Capacity-Knoten) war bereits gefixt | Problemlos, kein Workaround nötig |
 | 2026-08-17 | 1.12.0 → 1.12.1 | Minor (Patch) | Automatisch (upgrade-agent, Commit `a0ef2fd`) | Abgeschlossen | Nachträglich dokumentiert am 2026-10-03. Patch-Release innerhalb 1.12; ab 1.12.1 legt Longhorn standardmäßig interne Ingress-`NetworkPolicy`-Ressourcen an (6 Stück in `longhorn-system`: backing-image-data-source, backing-image-manager, instance-manager, longhorn-manager, longhorn-recovery-backend, longhorn-webhook) — bei uns aktiv, da k3s kube-router-NetworkPolicy-Enforcement mitbringt; kein Funktionsproblem beobachtet (Prometheus scrapt Longhorn nicht, kein ServiceMonitor) | Vom Upgrade-Agent direkt auf `main` committet, Auto-Sync hat ausgerollt; Engine-Image-Upgrade der Volumes nicht separat protokolliert |
+| 2026-10-03 | 1.12.1 → 1.13.0 | Minor | Manuell (Git-Bump, ArgoCD-Auto-Sync) + Engine-Upgrade per `kubectl patch` | Abgeschlossen | Hop 8. Breaking Change laut Release Notes: Kubernetes ≥ 1.34 nötig (Cluster v1.37.1, erfüllt). V2-Data-Engine-Neuerungen (Live-Upgrade, Interrupt-Mode, CPU-Isolation, bekannte ARM64-NVMe/UBLK-Probleme) irrelevant, Cluster nutzt nur V1. Neu: `longhorn-global-manager`-Deployment (3 Replicas, übernimmt cluster-weite Pod-/PV-Controller vom DaemonSet), dedizierter `longhorn-csi-service-account`, neue Helm-Werte für NetworkPolicies. Geprüft und unkritisch: keine StorageClass-Secret-Parameter, kein Longhorn-ServiceMonitor (Prometheus-Scraping von NetworkPolicy daher nicht betroffen), NetworkPolicies existieren bereits seit 1.12.1 | Preflight sauber (keine faulted Volumes, keine BackingImages, alle Engines `-e-0`, keine v1beta1-CRD-Versionen), Settings-Backup + SystemBackup `pre-upgrade-1130-20261003` (STATE=Ready). Rollout ~10 Min.: Manager-DaemonSet und `longhorn-global-manager` (3/3) schnell oben, danach neue Instance-Manager und CSI-Plugins (Image-Pull auf den Pis); die CSI-Sidecars (`csi-provisioner/-resizer/-snapshotter`) standen in dieser Phase kurz auf `Error`, bis ihre Manager erreichbar waren — selbstheilend. Kein CRD-Timing-Bug, kein Webhook-Umbau. **Engine-Upgrade** ohne UI: erst am kleinsten Volume getestet, dann die übrigen 9 sequenziell per `kubectl patch volumes.longhorn.io <vol> --type=merge -p '{"spec":{"image":"docker.io/longhornio/longhorn-engine:v1.13.0"}}'`, nach jedem Volume auf Engine-`currentImage` = neu und `robustness=healthy` gewartet (je <10 s, ohne Unterbrechung). Danach alle 10 Volumes healthy, neues Engine-Image RefCount 50, altes 0, alle 9 Longhorn-Nodes schedulbar, Longhorn-UI/Gitea/Grafana erreichbar |
 
 ### Reklassifizierungen (Minor → Major)
 
@@ -145,7 +146,7 @@ kubectl patch application longhorn -n argocd \
    # Ziel: alte Version REFCOUNT=0, neue Version REFCOUNT=60, alle Volumes healthy
    ```
 
-### Hop-spezifische Besonderheiten (aus der 1.5.3 → 1.12.0-Kette)
+### Hop-spezifische Besonderheiten (aus der 1.5.3 → 1.13.0-Kette)
 
 **Hop 1 (1.5.3 → 1.6.2):** Zusätzlich `preUpgradeChecker.jobEnabled: false` aus der Config entfernen:
 
@@ -216,6 +217,8 @@ sed -i '' '/preUpgradeChecker:/,/jobEnabled: false/d' gitops/apps/longhorn.yaml
 
 Nach dem Node-Delete-Workaround können Volumes kurzzeitig `degraded`/`detached` erscheinen — normal, Longhorn rebuildet Replicas automatisch (10–30 Minuten).
 
+**Hop 8 (1.12.1 → 1.13.0):** Voraussetzung Kubernetes ≥ 1.34. Vor dem Hop prüfen: mindestens ein Node muss für `longhorn-global-manager` (3 Replicas) schedulbar sein, keine StorageClass-`provisioner-secret-*`-Parameter (sonst vor dem Abschalten von `csi.allowControllerSecretAccess` migrieren), und ob ein Prometheus-ServiceMonitor auf Longhorn zeigt (NetworkPolicy für Port 9500, Helm `networkPolicies.metricsScrapeSources`) — bei uns jeweils nicht der Fall. Engine-Upgrade geht ohne UI per `kubectl patch` auf `spec.image` des Volumes (kleinstes Volume zuerst, dann sequenziell mit Health-Wait); die UI überspringt erfahrungsgemäß Postgres-/Prometheus-Volumes, der Patch-Weg nicht.
+
 ### Abschluss (nach dem letzten Hop)
 
 ```bash
@@ -252,6 +255,7 @@ kubectl get engines.longhorn.io -n longhorn-system -o json | kubectl apply -f -
 
 ## Bekannte Stolperfallen / Lessons Learned
 
+- **Pre-Flight-Schritt 8 (ArgoCD-Auto-Sync deaktivieren) ist wirkungslos:** `longhorn` ist eine Application aus `gitops/apps/`, die `root-infrastructure` (App-of-Apps, `selfHeal: true`) verwaltet — ein per `kubectl patch` entferntes `syncPolicy.automated` würde sofort wieder hergestellt. Ab Hop 8 deshalb Auto-Sync angelassen und den Hop per Git-Bump (`targetRevision`) + `argocd.argoproj.io/refresh=hard` auf `root-infrastructure` ausgelöst (die `targetRevision` steckt im Application-Manifest; ein Refresh der Longhorn-App allein ändert nichts). Verlief ohne Probleme.
 - Longhorn erlaubt nur Upgrades von der jeweils vorherigen Minor-Version — kein Überspringen von Minor-Versionen, daher immer Hop-für-Hop.
 - Mehrere Minor-Versionen (1.9.0/1.9.1, 1.10.0, 1.11.0) hatten bekannte Bugs — jeweils direkt auf das nächste Patch-Release innerhalb der Minor-Version gezielt.
 - Wiederkehrendes Muster: neue CRD-Felder werden vom Manager vor dem eigentlichen CRD-Rollout erwartet ("CRD-Timing-Bug") → CrashLoop direkt nach dem Sync. Immer zuerst prüfen, ob es sich um dieses Muster handelt, bevor tiefer debuggt wird.
