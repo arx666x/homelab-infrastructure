@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `traefik`
-- **Aktuelle Version:** Chart v41.6.0 (Traefik Proxy v3.7.13)
+- **Aktuelle Version:** Chart v41.6.1 (Traefik Proxy v3.7.13)
 - **Quelle:** Helm-Chart-Repo `https://traefik.github.io/charts` (Chart `traefik`)
 - **ArgoCD App-Name:** `traefik`
 - **Versions-Check-Quelle:** Helm-Repo-Index von `https://traefik.github.io/charts` (Chart-Version, nicht direkt die Proxy-Version)
@@ -28,6 +28,7 @@
 | 2026-08-30 | 41.3.0 → 41.4.0 | Minor | Manuell | Abgeschlossen | Commit `fd4e3f5`, bislang nicht in diesem Changelog erfasst, jetzt nachgetragen | — |
 | 2026-09-13 | 41.4.0 → 41.5.0 | Minor | Manuell | Abgeschlossen | CRD-Update (Standardprozedur, vorab per `helm show crds \| kubectl apply --server-side --force-conflicts` angewendet); Proxy v3.7.12→v3.7.13, Hub v1.34.0; neue RBAC-Erweiterung (ConfigMap-write-Verben für namespaced Role, Hub-bezogen, betrifft uns nicht) | Teil der Sammel-Update-Runde 2026-09-13 (zusammen mit cert-manager, kube-prometheus-stack, sealed-secrets, CDI). Log zeigt nur die immer noch offenen, bekannten Altlasten (`DefaultRuleSyntax`-Deprecation-Warnung, "middleware existiert nicht" für authentik-forward-auth/guacamole-redirect-root/mcp-basic-auth) — keine neuen Fehler |
 | 2026-09-20 | 41.5.0 → 41.6.0 | Minor | Manuell | Abgeschlossen | Proxy-Version unverändert (v3.7.13) — reiner Chart-Fix: PDB-apiVersion-Ermittlung vereinfacht (immer `policy/v1`, betrifft uns nicht da `podDisruptionBudget` bei uns nicht aktiviert) + neues Traefik-Hub-Feature `transparencyLogs` (nicht genutzt). Kein CRD-Update nötig | Teil der Update-Runde 2026-09-19/20 (zusammen mit kube-prometheus-stack, k3s v1.37.0, ArgoCD v3.5.3). Log-Check nach Rollout ohne neue Fehler |
+| 2026-10-03 | 41.6.0 → 41.6.1 | Patch | Manuell | Abgeschlossen | Proxy unverändert (v3.7.13). Chart-Diff enthält nur das Hub-Feature „support traefik hub v3.21.0“ (nicht genutzt); Templates identisch, kein CRD-Update nötig | Teil der Update-Runde 2026-10-03. Rollout via ArgoCD: die `targetRevision` steckt im Application-Manifest, daher musste erst `root-infrastructure` (App-of-Apps) per hard-refresh die neue Revision übernehmen — ein Refresh der Traefik-App allein reicht nicht. Log-Check nach Rollout ohne Fehler, Gitea erreichbar |
 
 ### Reklassifizierungen (Minor → Major)
 
