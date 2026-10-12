@@ -25,3 +25,5 @@ resources:
   # created and added 2026.08.18 AR - UI-triggered imports
   # (docs/album-track-ratings.md §9.6): Discogs personal access token
   - sealed-discogs-secret.yaml
+  # created and added 2026.10.12 AR - crawler daemon API token (backend proxy)
+  - sealed-crawler-secret.yaml

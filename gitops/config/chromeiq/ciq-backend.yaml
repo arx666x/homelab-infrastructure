@@ -97,6 +97,15 @@ spec:
             # "rs-notes" (with hyphen), not "rsnotes" - s. smb-pv.yaml.
             - name: CIQ_BACKEND_RS_NOTES_DIR
               value: "/rsnotes"
+            # Crawler daemon on the Musicbox (ciq-crawler -serve), admin-only
+            # proxy /api/crawler/* - token must equal the daemon's CRAWLER_API_TOKEN.
+            - name: CIQ_BACKEND_CRAWLER_URL
+              value: "http://192.168.11.53:8090"
+            - name: CIQ_BACKEND_CRAWLER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: chromeiq-crawler-secret
+                  key: token
             - name: CIQ_BACKEND_DISCOGS_TOKEN
               valueFrom:
                 secretKeyRef:
