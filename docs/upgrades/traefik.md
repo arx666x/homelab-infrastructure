@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `traefik`
-- **Aktuelle Version:** Chart v42.0.0 (Traefik Proxy v3.7.14)
+- **Aktuelle Version:** Chart v42.1.3 (Traefik Proxy v3.7.16)
 - **Quelle:** Helm-Chart-Repo `https://traefik.github.io/charts` (Chart `traefik`)
 - **ArgoCD App-Name:** `traefik`
 - **Versions-Check-Quelle:** Helm-Repo-Index von `https://traefik.github.io/charts` (Chart-Version, nicht direkt die Proxy-Version)
@@ -30,6 +30,7 @@
 | 2026-09-20 | 41.5.0 → 41.6.0 | Minor | Manuell | Abgeschlossen | Proxy-Version unverändert (v3.7.13) — reiner Chart-Fix: PDB-apiVersion-Ermittlung vereinfacht (immer `policy/v1`, betrifft uns nicht da `podDisruptionBudget` bei uns nicht aktiviert) + neues Traefik-Hub-Feature `transparencyLogs` (nicht genutzt). Kein CRD-Update nötig | Teil der Update-Runde 2026-09-19/20 (zusammen mit kube-prometheus-stack, k3s v1.37.0, ArgoCD v3.5.3). Log-Check nach Rollout ohne neue Fehler |
 | 2026-10-03 | 41.6.0 → 41.6.1 | Patch | Manuell | Abgeschlossen | Proxy unverändert (v3.7.13). Chart-Diff enthält nur das Hub-Feature „support traefik hub v3.21.0“ (nicht genutzt); Templates identisch, kein CRD-Update nötig | Teil der Update-Runde 2026-10-03. Rollout via ArgoCD: die `targetRevision` steckt im Application-Manifest, daher musste erst `root-infrastructure` (App-of-Apps) per hard-refresh die neue Revision übernehmen — ein Refresh der Traefik-App allein reicht nicht. Log-Check nach Rollout ohne Fehler, Gitea erreichbar |
 | 2026-10-17 | 41.6.1 → 42.0.0 | Major | Manuell | Abgeschlossen | Chart-Major mit 3 Breaking Changes, keiner betrifft uns: (1) Kubernetes ≥ 1.30 nötig (Cluster v1.37.1), (2) Traefik-Hub-Secret-Schreibrechte nicht mehr cluster-weit sondern per `Role` im Release-Namespace, (3) Transparency-Log-Witnesses-Validierung — (2)/(3) nur mit `hub.token` bzw. `rbac.namespaced`, bei uns beides aus (neue `ValidatingAdmissionPolicy` wird nur mit `hub.token` ausgerollt). Geprüft: CRDs (`helm show crds`, 8683 Zeilen) 41.6.1 vs 42.0.0 **identisch** → kein CRD-Pre-Apply nötig; ClusterRole-Diff entfernt nur einen Hub-only-Block. Proxy v3.7.13 → v3.7.14 (41.7.x brachte u. a. Gateway-Scoping und Hub-Support) | Teil der Update-Runde 2026-10-17 (OS-Updates DNS/Master/Worker, ArgoCD, Traefik, KubeVirt, kube-prometheus-stack). Rollout über `root-infrastructure`-Refresh. Pod neu, gitea/grafana/argocd/longhorn per curl erreichbar, keine Fehler im Traefik-Log |
+| 2026-10-24 | 42.0.0 → 42.1.3 | Minor | Manuell | Abgeschlossen | Proxy v3.7.14 → v3.7.16 mit **4 CVE-Fixes** (v3.7.15: GHSA-p8wx-ph99-xgcr, GHSA-ww7c-q3mv-xx22, GHSA-28hp-c82p-8vqj, u.a. CONNECT-Requests werden vor dem Muxer abgewiesen; v3.7.16: GHSA-hrpp-p4fc-wwf8). Chart-seitig nur imagePullSecrets-Support und Hub-Versionen (nicht genutzt). `helm template` alt/neu mit unseren Values: einzige Änderung ist das Image-Tag, **kein CRD-Diff** (`--include-crds` verglichen), daher kein CRD-Pre-Apply nötig | Teil der Update-Runde 2026-10-24, nach ArgoCD. Commit + Push, `root-infrastructure` und `traefik` hard-refresht, Rollout ok; gitea/argocd 200, grafana 302 (SSO) |
 
 ### Reklassifizierungen (Minor → Major)
 
