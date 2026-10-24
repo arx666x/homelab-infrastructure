@@ -159,7 +159,10 @@
       when:
         - etcd_snapshot | bool
         - inventory_hostname == k8s_delegate   # nur auf master01 = gmkt-01x
-        - k3s_installed_ver != k3s_version
+        # Bewusst NICHT an k3s_installed_ver != k3s_version gekoppelt: auch reine
+        # OS-Update-Runden rebooten alle Master, der Snapshot ist dort genauso
+        # nötig (bis 2026-10-24 wurde er bei OS-only-Läufen still übersprungen,
+        # gleiches Muster wie der Drain-Bug vom 2026-08-03).
       changed_when: true
 
     - name: "[ ETCD ] Snapshot-Ergebnis anzeigen"
