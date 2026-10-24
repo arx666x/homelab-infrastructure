@@ -4,33 +4,19 @@ set -e
 echo "=== SERI Infrastructure Direct Deployment ==="
 
 # 1. MetalLB
-echo "1/5 MetalLB..."
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.12/config/manifests/metallb-native.yaml
-echo "Waiting for MetalLB..."
-sleep 60
-kubectl wait --for=condition=ready pod -l app=metallb -n metallb-system --timeout=300s 2>/dev/null || sleep 30
-
-cat <<EOF | kubectl apply -f -
-apiVersion: metallb.io/v1beta1
-kind: IPAddressPool
-metadata:
-  name: default-pool
-  namespace: metallb-system
-spec:
-  addresses:
-  - 192.168.20.100-192.168.20.120
----
-apiVersion: metallb.io/v1beta1
-kind: L2Advertisement
-metadata:
-  name: default
-  namespace: metallb-system
-spec:
-  ipAddressPools:
-  - default-pool
-EOF
-
-echo "✓ MetalLB deployed"
+# NOTE: MetalLB wird NICHT mehr von diesem Script installiert. Es wird
+#       ausschließlich von ArgoCD als Helm-Release verwaltet
+#       (gitops/apps/metallb.yaml, Pool/L2Advertisement aus gitops/config/metallb).
+#       Früher stand hier `kubectl apply` von metallb-native.yaml v0.13.12. Die
+#       Objekte heißen anders als die Helm-Variante (controller vs.
+#       metallb-controller), ArgoCD übernimmt/prunet sie deshalb NICHT. Ein Lauf am
+#       2026-03-07 hinterließ so einen zweiten Controller, der sich bis 2026-10-24
+#       mit dem Helm-Controller um das caBundle der BGPPeer-CRD stritt und
+#       Speaker-Crashloops verursachte (siehe docs/upgrades/metallb.md).
+echo "1/5 MetalLB... übersprungen (wird von ArgoCD verwaltet, gitops/apps/metallb.yaml)"
+if ! kubectl get deploy metallb-controller -n metallb-system >/dev/null 2>&1; then
+  echo "WARNUNG: metallb-controller nicht gefunden - erst ArgoCD-App 'metallb' syncen."
+fi
 
 # 2. cert-manager
 # NOTE: Dieses Script deployed cert-manager als Bootstrap via Static Manifests.
