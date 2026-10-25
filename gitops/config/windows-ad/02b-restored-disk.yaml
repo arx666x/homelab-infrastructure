@@ -1,0 +1,49 @@
+# Wave 2: Systemplatte des DC seit 2026-10-25 - Restore des Longhorn-Backups
+# vom 2026-07-25 23:03 UTC (system-backup-6fb366394c0a4423).
+#
+# Hintergrund: Das ext4-Filesystem der urspruenglichen Platte (DataVolume
+# windows-ad-disk, Longhorn-Volume pvc-8131dc95-...) wurde um den 2026-07-29
+# beschaedigt; die fsck-Reparatur am 2026-08-03 hat ext4 konsistent gemacht,
+# dabei aber Teile von disk.img genullt (GPT, NTFS-Bootsektor). Windows bootete
+# seitdem nicht mehr (UEFI "No bootable option"), unbemerkt bis 2026-10-24.
+# Die alte DataVolume bleibt als Beweisstueck bestehen (02-datavolume.yaml),
+# wird aber von der VM nicht mehr referenziert. Details: docs/upgrades/windows-ad.md
+#
+# Statisches PV auf das manuell aus dem Backup erzeugte Longhorn-Volume
+# (kein dynamisches Provisioning, daher eigene storageClassName + claimRef).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: windows-ad-disk-restore-0725
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  capacity:
+    storage: 75852Mi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: longhorn-static-restore
+  csi:
+    driver: driver.longhorn.io
+    fsType: ext4
+    volumeHandle: windows-ad-disk-restore-0725
+  claimRef:
+    namespace: windows-ad
+    name: windows-ad-disk-restored
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: windows-ad-disk-restored
+  namespace: windows-ad
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn-static-restore
+  volumeName: windows-ad-disk-restore-0725
+  resources:
+    requests:
+      storage: 75852Mi

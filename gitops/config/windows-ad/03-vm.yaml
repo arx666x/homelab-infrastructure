@@ -85,9 +85,12 @@ spec:
         - name: default
           pod: {}
       volumes:
+        # Seit 2026-10-25 der Restore vom 2026-07-25 (02b-restored-disk.yaml);
+        # die alte DataVolume windows-ad-disk ist beschaedigt und bleibt nur
+        # als Beweisstueck bestehen.
         - name: windows-disk
-          dataVolume:
-            name: windows-ad-disk
+          persistentVolumeClaim:
+            claimName: windows-ad-disk-restored
         - name: ldaps-cert
           secret:
             secretName: ad-ldaps-tls

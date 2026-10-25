@@ -5,6 +5,7 @@ resources:
   - 00-namespace.yaml
   - 01-cert.yaml
   - 02-datavolume.yaml
+  - 02b-restored-disk.yaml
   - 03-vm.yaml
   - 04-services.yaml
   - 05-networkpolicy.yaml
