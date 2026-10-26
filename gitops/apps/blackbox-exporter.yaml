@@ -1,0 +1,96 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: blackbox-exporter
+  namespace: argocd
+  annotations:
+    # Nach kube-prometheus-stack (Wave 4), braucht dessen ServiceMonitor-CRD
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    chart: prometheus-blackbox-exporter
+    repoURL: https://prometheus-community.github.io/helm-charts
+    targetRevision: "11.20.2"
+    helm:
+      releaseName: blackbox-exporter
+      values: |
+        # Aktive Funktions-Probes fuer Dienste, deren Pod-/VMI-Status nichts
+        # ueber den eigentlichen Dienst aussagt. Anlass: der Windows-DC
+        # (KubeVirt-VM windows-ad-dc) war 2026-07-29 bis 2026-10-25 unbemerkt
+        # ausser Betrieb, waehrend die VMI durchgehend Running/ready meldete.
+        # Alerts dazu: Gruppe "windows-ad" in gitops/apps/monitoring.yaml.
+        config:
+          modules:
+            # AD-integriertes DNS liefert die DC-Registrierung -> DNS-Server
+            # und AD-Zone sind da.
+            dns_ad_srv:
+              prober: dns
+              timeout: 5s
+              dns:
+                transport_protocol: udp
+                query_name: _ldap._tcp.dc._msdcs.seri.sailpointdemo.com
+                query_type: SRV
+                valid_rcodes: [NOERROR]
+                validate_answer_rrs:
+                  fail_if_not_matches_regexp:
+                    - '.*ad-resource\.seri\.sailpointdemo\.com\.$'
+            # Reiner TCP-Connect. Ein echter LDAP-Bind ist mit dem TCP-Prober
+            # nicht moeglich: YAML-Escapes wie "\x80" werden zu UTF-8
+            # (0xC2 0x80) statt Rohbytes, und jede LDAP-Anfrage braucht
+            # Tags >= 0x80; ausserdem haengt "send" immer ein "\n" an.
+            tcp_connect:
+              prober: tcp
+              timeout: 5s
+            # Den TLS-Handshake auf 636 fuehrt der LDAP-Dienst des DC (NTDS)
+            # selbst -> staerkster Nachweis ohne LDAP-Protokoll; liefert
+            # zusaetzlich probe_ssl_earliest_cert_expiry. Das Zertifikat ist
+            # von der internen SERI-Root-CA, die hier nicht vorliegt.
+            ldaps_tls:
+              prober: tcp
+              timeout: 5s
+              tcp:
+                tls: true
+                tls_config:
+                  insecure_skip_verify: true
+
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+
+        serviceMonitor:
+          enabled: true
+          defaults:
+            labels:
+              release: kube-prometheus-stack
+            interval: 60s
+            scrapeTimeout: 15s
+          targets:
+            - name: windows-ad-dns
+              url: windows-ad-lb.windows-ad.svc.cluster.local:53
+              module: dns_ad_srv
+              labels:
+                release: kube-prometheus-stack
+                service: windows-ad
+            - name: windows-ad-ldap
+              url: windows-ad-lb.windows-ad.svc.cluster.local:389
+              module: tcp_connect
+              labels:
+                release: kube-prometheus-stack
+                service: windows-ad
+            - name: windows-ad-ldaps
+              url: windows-ad-lb.windows-ad.svc.cluster.local:636
+              module: ldaps_tls
+              labels:
+                release: kube-prometheus-stack
+                service: windows-ad
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

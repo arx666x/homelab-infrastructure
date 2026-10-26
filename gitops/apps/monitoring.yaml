@@ -411,6 +411,41 @@ spec:
                       summary: "Pi-hole Blocking auf {{ $labels.instance }} deaktiviert"
                       description: "Pi-hole blockiert seit 15 Minuten keine Anfragen mehr - falls das nicht absichtlich (Troubleshooting) ist, wieder aktivieren."
 
+              # Windows-DC (KubeVirt-VM windows-ad-dc): VMI-Status sagt nichts
+              # darueber, ob Windows/AD laeuft - der DC war 2026-07-29 bis
+              # 2026-10-25 unbemerkt down, waehrend die VMI Running meldete.
+              # Probes: gitops/apps/blackbox-exporter.yaml (target-Label
+              # windows-ad-dns / windows-ad-ldap / windows-ad-ldaps).
+              - name: windows-ad
+                interval: 1m
+                rules:
+                  - alert: WindowsADProbeFailed
+                    expr: probe_success{target=~"windows-ad-.*"} == 0
+                    for: 5m
+                    labels:
+                      severity: critical
+                    annotations:
+                      summary: "Windows-DC: Probe {{ $labels.target }} schlaegt fehl"
+                      description: "Die Funktions-Probe {{ $labels.target }} ({{ $labels.instance }}) des Domain Controllers schlaegt seit 5 Minuten fehl. VMI-Status ist kein Beleg - Konsole pruefen: virtctl vnc screenshot windows-ad-dc -n windows-ad --file=dc.png (siehe docs/upgrades/windows-ad.md)."
+
+                  - alert: WindowsADProbeMissing
+                    expr: absent(probe_success{target="windows-ad-dns"}) or absent(probe_success{target="windows-ad-ldap"}) or absent(probe_success{target="windows-ad-ldaps"})
+                    for: 15m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Windows-DC: Probe-Metriken fehlen"
+                      description: "Mindestens eine Windows-DC-Probe liefert seit 15 Minuten keine Daten - blackbox-exporter oder dessen ServiceMonitor pruefen, sonst bleibt ein DC-Ausfall unbemerkt."
+
+                  - alert: WindowsADLdapsCertExpiring
+                    expr: (probe_ssl_earliest_cert_expiry{target="windows-ad-ldaps"} - time()) / 86400 < 21
+                    for: 1h
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Windows-DC: LDAPS-Zertifikat laeuft in {{ $value | humanize }} Tagen ab"
+                      description: "Das LDAPS-Zertifikat des DC (AD CS, SERI-Root-CA) laeuft bald ab. Erneuerung im Gast, siehe scripts/setup-ad-dc.ps1 Phase 3."
+
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
