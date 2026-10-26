@@ -43,6 +43,8 @@ $config = @{
     StaticIP         = ""
     PrefixLength     = 24
     DefaultGateway   = ""
+    # Externe Zeitquellen fuer den PDC-Emulator (einziger DC der Domain)
+    NtpPeers         = "ptbtime1.ptb.de,0x8 ptbtime2.ptb.de,0x8 de.pool.ntp.org,0x8"
     ScriptPath       = $MyInvocation.MyCommand.Path
 }
 
@@ -203,11 +205,24 @@ if ($Phase -eq 3) {
     Write-Step "Phase 3: CA, LDAPS, RDP und Service Account konfigurieren"
     Remove-PhaseTask -p 3
 
-    # Uhr synchronisieren bevor Zertifikate ausgestellt werden
-    Write-Step "Systemuhr synchronisieren"
+    # Zeitbasis korrigieren bevor Zertifikate ausgestellt werden.
+    # KubeVirt liefert die Hardware-Uhr in UTC (clock.utc in 03-vm.yaml), Windows
+    # liest sie ohne RealTimeIsUniversal als Ortszeit -> bei Zeitzone Pacific lief
+    # der DC bis 2026-10-26 sieben Stunden vor. Ausserdem hatte der PDC keine
+    # externe Zeitquelle (Source: Local CMOS Clock) und hat das nie korrigiert.
+    Write-Step "Zeitbasis: Hardware-Uhr als UTC, NTP-Quellen fuer den PDC"
+    $tzKey = "HKLM:\SYSTEM\CurrentControlSet\Control\TimeZoneInformation"
+    if ((Get-ItemProperty -Path $tzKey -Name RealTimeIsUniversal -ErrorAction SilentlyContinue).RealTimeIsUniversal -ne 1) {
+        New-ItemProperty -Path $tzKey -Name RealTimeIsUniversal -PropertyType DWord -Value 1 -Force | Out-Null
+        Write-OK "RealTimeIsUniversal=1 gesetzt (wirkt ab dem naechsten Boot)"
+    } else {
+        Write-Skip "RealTimeIsUniversal bereits gesetzt"
+    }
+    w32tm /config "/manualpeerlist:$($config.NtpPeers)" /syncfromflags:manual /reliable:yes /update | Out-Null
+    Write-OK "NTP-Peers gesetzt: $($config.NtpPeers)"
     try {
-        w32tm /resync /force | Out-Null
-        Write-OK "Uhr synchronisiert: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
+        w32tm /resync /rediscover | Out-Null
+        Write-OK "Uhr synchronisiert: $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) UTC"
     } catch {
         Write-Warn "Uhrsync fehlgeschlagen (kein NTP erreichbar?) - Zertifikat notBefore koennte in der Zukunft liegen"
     }
