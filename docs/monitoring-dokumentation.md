@@ -127,6 +127,35 @@ ist (dns02 noch nicht provisioniert) — kein Failover, ein Ausfall betrifft
 sofort das gesamte Netz. `KeepalivedExporterDown` sagt nur etwas über das
 Monitoring selbst aus, nicht über den VRRP-Status (siehe unten).
 
+### Windows-DC-Alerts (seit 2026-10-26)
+
+| Alert | Bedingung | Severity | Wartezeit |
+|-------|-----------|----------|-----------|
+| `WindowsADProbeFailed` | `probe_success{target=~"windows-ad-.*"} == 0` | critical | 5m |
+| `WindowsADProbeMissing` | eine der drei Probe-Serien fehlt (`absent(...)`) | warning | 15m |
+| `WindowsADLdapsCertExpiring` | LDAPS-Zertifikat < 21 Tage gültig | warning | 1h |
+
+Quelle sind aktive Funktions-Probes des **blackbox-exporter** (ArgoCD-App
+`blackbox-exporter`, `gitops/apps/blackbox-exporter.yaml`, Namespace
+`monitoring`, ServiceMonitors mit Label `release: kube-prometheus-stack`):
+
+| `target`-Label | Modul | Prüft |
+|---|---|---|
+| `windows-ad-dns` | `dns_ad_srv` | SRV `_ldap._tcp.dc._msdcs.seri.sailpointdemo.com` liefert `ad-resource…` (AD-DNS + DC-Registrierung) |
+| `windows-ad-ldap` | `tcp_connect` | TCP 389 nimmt Verbindungen an |
+| `windows-ad-ldaps` | `ldaps_tls` | TLS-Handshake auf 636 — führt der LDAP-Dienst (NTDS) selbst; liefert `probe_ssl_earliest_cert_expiry` |
+
+Anlass: Der DC war 2026-07-29 bis 2026-10-25 außer Betrieb, während die VMI
+durchgehend `Running/ready` meldete (siehe `docs/upgrades/windows-ad.md`).
+Die NetworkPolicy `windows-ad-ingress` erlaubt 389/636 gezielt nur Pods mit
+`app.kubernetes.io/name=prometheus-blackbox-exporter` aus `monitoring`.
+Ein echter LDAP-Bind ist mit dem TCP-Prober nicht machbar: YAML-Escapes wie
+`\x80` werden zu UTF-8 (`0xC2 0x80`) statt Rohbytes, jede LDAP-Anfrage braucht
+aber Tags ≥ 0x80, und `send` hängt immer `\n` an (getestet: AD trennt die
+Verbindung). Ad-hoc-Abfrage ohne SSO:
+`kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 19090:9090`
+und dann `probe_success{target=~"windows-ad-.*"}` über `/api/v1/query`.
+
 ---
 
 ## OS-Update-Tracking
