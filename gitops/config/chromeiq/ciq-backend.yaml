@@ -169,6 +169,13 @@ spec:
                   key: secret
             - name: CIQ_BACKEND_PUBLIC_BASE_URL
               value: "https://ciq.reckeweg.io"
+            # Offline catalog (ChromeIQCatalog, ciq-catalog/protocol/README.md):
+            # first-import snapshots (~140 MB per token owner) and thumbnail
+            # packs (~1 GB at 200 px, more at 400 px), rebuilt in the
+            # background - an emptyDir is enough, a restart only costs one
+            # rebuild on the next device request.
+            - name: CIQ_BACKEND_CATALOG_SNAPSHOT_DIR
+              value: "/catalog"
             - name: CIQ_BACKEND_SMTP_HOST
               valueFrom:
                 secretKeyRef:
@@ -221,6 +228,8 @@ spec:
               mountPath: /playlists
             - name: rsnotes
               mountPath: /rsnotes
+            - name: catalog
+              mountPath: /catalog
           readinessProbe:
             httpGet: {path: /healthz, port: http}
             initialDelaySeconds: 5
@@ -231,7 +240,9 @@ spec:
             periodSeconds: 20
           resources:
             requests: {memory: 512Mi, cpu: 500m}
-            limits: {memory: 1Gi, cpu: "1"}
+            # 2Gi since the offline catalog: snapshot and thumbnail-pack
+            # builds peak near 1 GiB on their own.
+            limits: {memory: 2Gi, cpu: "1"}
       volumes:
         - name: music
           persistentVolumeClaim:
@@ -243,6 +254,9 @@ spec:
         - name: rsnotes
           persistentVolumeClaim:
             claimName: chromeiq-musicbox-rsnotes
+        - name: catalog
+          emptyDir:
+            sizeLimit: 8Gi
 
 ---
 apiVersion: v1
