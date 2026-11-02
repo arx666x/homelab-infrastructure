@@ -10,6 +10,27 @@
 # so the music mount's read-only guarantee stays untouched.
 # =============================================================================
 
+# Offline catalog cache (ChromeIQCatalog): snapshots, thumbnail and text
+# packs. On a PVC rather than an emptyDir so a deploy doesn't throw away a
+# thumbnail pack that takes over an hour to rebuild.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ciq-backend-catalog
+  namespace: chromeiq
+  labels:
+    app.kubernetes.io/name: ciq-backend
+    app.kubernetes.io/instance: chromeiq
+    app.kubernetes.io/component: api
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,6 +42,14 @@ metadata:
     app.kubernetes.io/component: api
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: the catalog volume is ReadWriteOnce, a
+  # rolling update would deadlock like on the ciq-mcp 0.4.3 rollout. Costs a
+  # short API gap per deploy.
+  strategy:
+    type: Recreate
+    # Server-side apply keeps the defaulted rollingUpdate block otherwise and
+    # the API server rejects it together with type Recreate.
+    rollingUpdate: null
   selector:
     matchLabels:
       app.kubernetes.io/name: ciq-backend
@@ -172,8 +201,7 @@ spec:
             # Offline catalog (ChromeIQCatalog, ciq-catalog/protocol/README.md):
             # first-import snapshots (~140 MB per token owner) and thumbnail
             # packs (~1 GB at 200 px, more at 400 px), rebuilt in the
-            # background - an emptyDir is enough, a restart only costs one
-            # rebuild on the next device request.
+            # background; on the ciq-backend-catalog PVC (see top).
             - name: CIQ_BACKEND_CATALOG_SNAPSHOT_DIR
               value: "/catalog"
             - name: CIQ_BACKEND_SMTP_HOST
@@ -255,8 +283,8 @@ spec:
           persistentVolumeClaim:
             claimName: chromeiq-musicbox-rsnotes
         - name: catalog
-          emptyDir:
-            sizeLimit: 8Gi
+          persistentVolumeClaim:
+            claimName: ciq-backend-catalog
 
 ---
 apiVersion: v1
