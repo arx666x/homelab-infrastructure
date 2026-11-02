@@ -271,8 +271,10 @@ spec:
           resources:
             requests: {memory: 512Mi, cpu: 500m}
             # 2Gi since the offline catalog: snapshot and thumbnail-pack
-            # builds peak near 1 GiB on their own.
-            limits: {memory: 2Gi, cpu: "1"}
+            # builds peak near 1 GiB on their own. CPU 2: the background
+            # pack builds (text + thumbnail together ~1 core for an hour)
+            # otherwise sit at the limit and trigger CPU-throttling alerts.
+            limits: {memory: 2Gi, cpu: "2"}
       volumes:
         - name: music
           persistentVolumeClaim:
