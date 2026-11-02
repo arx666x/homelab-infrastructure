@@ -42,14 +42,16 @@ metadata:
     app.kubernetes.io/component: api
 spec:
   replicas: 1
-  # Recreate, not RollingUpdate: the catalog volume is ReadWriteOnce, a
-  # rolling update would deadlock like on the ciq-mcp 0.4.3 rollout. Costs a
-  # short API gap per deploy.
+  # Old pod first, then the new one: the catalog volume is ReadWriteOnce, a
+  # surge pod would deadlock like on the ciq-mcp 0.4.3 rollout. Costs a short
+  # API gap per deploy. Not type Recreate: switching an existing Deployment
+  # to it fails under server-side apply (the defaulted rollingUpdate block
+  # stays and is rejected, ArgoCD sync 2026-11-02) - maxSurge 0 does the same.
   strategy:
-    type: Recreate
-    # Server-side apply keeps the defaulted rollingUpdate block otherwise and
-    # the API server rejects it together with type Recreate.
-    rollingUpdate: null
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: ciq-backend
