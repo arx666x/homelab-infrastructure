@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** gitea
-- **Aktuelle Version:** Helm-Chart `actions` 0.1.2, Runner-Image `docker.io/gitea/act_runner:nightly`
+- **Aktuelle Version:** Helm-Chart `actions` 0.1.3, Runner-Image `docker.io/gitea/act_runner:nightly`
 - **Quelle:** Helm-Chart-Repo `https://dl.gitea.com/charts/` (Chart `actions`); Runner-Image von Docker Hub (`gitea/act_runner`)
 - **ArgoCD App-Name:** gitea-actions
 - **Versions-Check-Quelle:** `homelab-version-checker` (CronJob, `gitops/config/monitoring/homelab-version-checker-v2.yaml`) vergleicht per `helm search repo actions --versions` gegen `targetRevision` in `gitops/apps/gitea/gitea-actions.yaml` — generischer Helm-Chart-Versionsvergleich für ArgoCD-Applications, kein Sonder-Mapping wie bei GitHub-Komponenten. Das Runner-Image-Tag (`nightly`) wird davon nicht separat getrackt.
@@ -23,6 +23,7 @@
 | 2026-05-26 | Chart 0.1.0 → 0.1.1 | Minor (Breaking Change) | Manuell | Abgeschlossen | Chart benennt alle `act-runner`-Referenzen in `runner` um (StatefulSet, PVC-Template, values-Key `statefulset.actRunner` → `statefulset.runner`); ArgoCD löscht alten StatefulSet/PVC und legt neue an, altes PVC (nur Docker-Layer-Cache) muss manuell nachträglich gelöscht werden | Vollständiges Vorgehen siehe „Manuelle Vorgehensweise" unten |
 | 2026-06-01 | Runner-Image 0.6.1 → nightly | Minor→Major (faktisch) | Manuell | Abgeschlossen | Umstieg auf `nightly`-Tag nötig, um mehrere aufeinanderfolgende Laufzeit-Bugs zu beheben (siehe Stolperfallen); vier Folge-Fixes am selben Tag (Image-Remap, tmpfs-Workaround, `workdir_parent`, schließlich `host://`-Execution) | Commits `c48822c`, `af9e27b`, `15577df`, `d75876c`, `0ca9b2c` |
 | 2026-07-27 | Chart 0.1.1 → 0.1.2 | Minor | Manuell | Abgeschlossen | Kein Resource-Rename diesmal (StatefulSet/PVC-Namen unverändert) — nur Init-Container-Rename `init-gitea`→`reach-gitea` (im Repo nirgends referenziert) und Patch-Bumps der Default-Images (busybox 1.37.0→1.38.0, DinD 29.5.1→29.5.2-dind, App-Version bleibt 0.261.3) | Vorab-Chart-Diff bestätigte geringes Risiko; trotzdem trat beim ersten Rollout ein transienter Runner-Crash auf (siehe Stolperfallen) — nach Pod-Neuerstellung behoben |
+| 2026-11-06 | Chart 0.1.2 → 0.1.3 | Patch | Manuell | Abgeschlossen | Gerendert: einzige Änderung DinD-Image `docker:29.5.2-dind` → `29.7.1-dind`; Runner-Image bleibt `act_runner:nightly` | Teil der Update-Runde 2026-11-06 (OS-Updates DNS/Master/Worker, k3s v1.37.2, ArgoCD v3.5.7, Traefik, gitea-actions, blackbox-exporter, MetalLB, sealed-secrets, kube-prometheus-stack). StatefulSet neu gerollt, Runner `declare successfully` (Registrierung erhalten, kein Rückfall wie 2026-08-10) |
 
 ### Reklassifizierungen (Minor → Major)
 

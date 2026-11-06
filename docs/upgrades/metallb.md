@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `metallb-system`
-- **Aktuelle Version:** Helm Chart 0.16.1 / MetalLB v0.16.1
+- **Aktuelle Version:** Helm Chart 0.16.2 / MetalLB v0.16.2
 - **Quelle:** Helm-Chart-Repo `https://metallb.github.io/metallb` (Chart `metallb`)
 - **ArgoCD App-Name:** `metallb`
 - **Versions-Check-Quelle:** Helm-Repo-Index über das `helm`-Binary (niemals `index.yaml` direkt mit `yaml.safe_load()` parsen — OOM-Falle, siehe Memory-Notiz zu Helm-Index-Parsing)
@@ -17,6 +17,7 @@
 | 2026-05-26 | 0.15.3 → 0.16.0 | Minor | Manuell | Abgeschlossen | Native TLS ersetzt kube-rbac-proxy, FRR 10.5.3, FRR-K8s wird BGP-Default (L2-Mode nicht betroffen); zusätzlich Fix nötig da `frrk8s.enabled` neuer Default `true` ist | Commits `576b38f` (Upgrade) + `da3b99c` (frrk8s-Fix, selber Tag); siehe Stolperfalle unten |
 | 2026-06-14 | 0.16.0 → 0.16.1 | Patch | Automatisch | Abgeschlossen | Reiner Patch-Release: Helm-Chart-Rendering-Fix, BGPPeer `localASN` int64-Korrektur, Health-Probes auf allen Interfaces, Metriken-TLS-Scheme-Fix | Commit `d60c2e3` |
 | 2026-10-24 | 0.16.1 (unverändert) | Bereinigung | Manuell | Abgeschlossen | Parallel laufende MetalLB-**v0.13.12**-Altinstallation entfernt (Deployment `controller` u.a., per `scripts/deploy-direct.sh` am 2026-03-07 per `kubectl apply` angelegt, von ArgoCD nie verwaltet). Sie verursachte die Speaker-Crashloops nach jedem Node-Reboot, siehe Stolperfalle „Zweiter MetalLB-Controller“ | Erst alten Controller auf 0 skaliert: BGPPeer-CRD danach stabil (resourceVersion unverändert, caBundle == `metallb-webhook-cert`/`ca.crt`). Dann gelöscht: `deploy/controller`, `svc/webhook-service`, `secret/webhook-server-cert` (`secret/memberlist` war per ownerReference schon weg), `sa/controller`, `sa/speaker`, `role`+`rolebinding` `controller`/`pod-lister`, `clusterrole`+`clusterrolebinding` `metallb-system:controller`/`metallb-system:speaker`, CRD `addresspools.metallb.io` (0 Objekte). YAML-Sicherung der gelöschten Objekte vorab gezogen. `metallb-controller` neu gestartet; Speaker-Kaltstart-Test auf k3s-06a und gmkt-03x: Ready nach 11 s, 0 Fehler (vorher 2-Min.-Cache-Timeouts). Validierungs-Webhook geprüft (lehnt ungültigen Pool ab), Traefik `.100:443` und Gitea-SSH `.101:22` erreichbar, App `metallb` Synced/Healthy. `deploy-direct.sh` installiert MetalLB nicht mehr |
+| 2026-11-06 | 0.16.1 → 0.16.2 | Patch | Manuell | Abgeschlossen | `helm template` alt/neu: nur additive CRD-Felder (`BGPAdvertisement.asPathPrepend` — nur frr-k8s, `L2Advertisement.preferredNodeSelectors` für bevorzugte Announce-Nodes), controller-gen v0.22.0, Images 0.16.2, explizites `--health-probe-port=17472`, `revisionHistoryLimit: 10`, Memberlist-Secret-Mount-Mode 0400 → 0444 | Teil der Update-Runde 2026-11-06 (OS-Updates DNS/Master/Worker, k3s v1.37.2, ArgoCD v3.5.7, Traefik, gitea-actions, blackbox-exporter, MetalLB, sealed-secrets, kube-prometheus-stack). Alle 9 Speaker neu gestartet mit **0 Restarts** (Kaltstart-Test nach dem Fix vom 2026-10-24 bestanden), nur noch `metallb-controller` als Deployment, BGPPeer-CRD-resourceVersion stabil, LB-IPs `.100:443`, `.101:22`, `.50:3389` erreichbar |
 
 ### Reklassifizierungen (Minor → Major)
 
