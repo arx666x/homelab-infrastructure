@@ -180,12 +180,16 @@ replicaCount: 1
 # Punkt im Key ist kein gueltiger Bash-Identifier -> init-app-ini
 # CrashLoopBackOff (am 2026-09-01 einmal so passiert). Falls pack-Tuning
 # noetig wird: Keys als pack_0X2E_threads escapen und vorher testen.
+# 2026-11-08: mit 2Gi erneut 2x OOMKilled - RSS-Spitzen wachsen mit dem Repo
+# (28.10. 1353Mi, 29.10. 1538Mi, 08.11. 1595Mi+ in <30s bei Push/Fetch auf
+# susann/redesign). Leerlauf-Working-Set ~1.4Gi ist fast nur Page-Cache
+# (RSS ~120Mi), kein Leck. Daher Limit 3Gi.
 resources:
   requests:
     memory: 512Mi
     cpu: 100m
   limits:
-    memory: 2Gi
+    memory: 3Gi
     cpu: 1000m
 
 affinity:
