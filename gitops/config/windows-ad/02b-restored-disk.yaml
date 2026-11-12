@@ -6,8 +6,8 @@
 # beschaedigt; die fsck-Reparatur am 2026-08-03 hat ext4 konsistent gemacht,
 # dabei aber Teile von disk.img genullt (GPT, NTFS-Bootsektor). Windows bootete
 # seitdem nicht mehr (UEFI "No bootable option"), unbemerkt bis 2026-10-24.
-# Die alte DataVolume bleibt als Beweisstueck bestehen (02-datavolume.yaml),
-# wird aber von der VM nicht mehr referenziert. Details: docs/upgrades/windows-ad.md
+# Die alte DataVolume wurde am 2026-11-12 entfernt (frueher 02-datavolume.yaml).
+# Details: docs/upgrades/windows-ad.md
 #
 # Statisches PV auf das manuell aus dem Backup erzeugte Longhorn-Volume
 # (kein dynamisches Provisioning, daher eigene storageClassName + claimRef).

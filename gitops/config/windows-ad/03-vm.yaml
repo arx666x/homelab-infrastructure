@@ -86,8 +86,8 @@ spec:
           pod: {}
       volumes:
         # Seit 2026-10-25 der Restore vom 2026-07-25 (02b-restored-disk.yaml);
-        # die alte DataVolume windows-ad-disk ist beschaedigt und bleibt nur
-        # als Beweisstueck bestehen.
+        # die alte, beschaedigte DataVolume windows-ad-disk wurde am 2026-11-12
+        # entfernt (aus Git, Cluster und Longhorn).
         - name: windows-disk
           persistentVolumeClaim:
             claimName: windows-ad-disk-restored
