@@ -3,6 +3,9 @@ kind: Application
 metadata:
   name: headlamp
   namespace: argocd
+  annotations:
+    # ArgoCD >= 3.6: Server-Side-Diff meldet das cert-manager-Certificate dauerhaft als OutOfSync
+    argocd.argoproj.io/compare-options: ServerSideDiff=false
   labels:
     app.kubernetes.io/name: headlamp
   finalizers:

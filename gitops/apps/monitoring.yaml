@@ -5,6 +5,8 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "4"
+    # ArgoCD >= 3.6: Server-Side-Diff scheitert an der ValidatingWebhookConfiguration (Dry-Run ohne caBundle/clientConfig)
+    argocd.argoproj.io/compare-options: ServerSideDiff=false
 spec:
   project: default
   source:
