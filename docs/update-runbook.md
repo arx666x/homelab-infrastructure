@@ -12,9 +12,9 @@ laufen über eigene Ansible-Playbooks unter `ansible/playbooks/`.
 |--------|----------|-------|-------------|-----------------|
 | k3s-Master (gmkt-01x/02x/03x) | `update-master-nodes.yml` | `master` | ja (Pflichtparameter) | etcd-Quorum-Check, `serial: 1` |
 | k3s-Worker (k3s-01a…06a) | `update-pi-nodes.yml` | `worker` | optional | Longhorn-Drain, `serial: 1` |
-| DNS-Nodes (dns01, später dns02) | `update-dns.yml` | `dns` | n/a (kein k3s) | VRRP-Failover-Check, `serial: 1` |
+| DNS-Nodes (dns01, dns02) | `update-dns-nodes.yml` | `dns` | n/a (kein k3s) | `dig`-Test pro Node, `serial: 1`, `max_fail_percentage: 0` |
 
-Alle drei Playbooks aktualisieren nur das Betriebssystem (apt) + optional
+Alle drei Playbooks aktualisieren das Betriebssystem (apt; das DNS-Playbook zusätzlich Pi-hole) + optional
 Firmware (EEPROM bei Raspberry Pi) und rebooten kontrolliert einen Node nach
 dem anderen. Kein Playbook läuft parallel über mehrere Nodes einer Gruppe.
 
@@ -115,6 +115,22 @@ uncordon` → warten bis Longhorn-Replicas wieder aufgebaut sind.
 
 ## 3. DNS-Nodes
 
+> **Kanonisches Playbook ist `update-dns-nodes.yml`** (OS-Update per apt **und**
+> `pihole -up`, Reboot nur bei Kernel/Firmware, danach `dig`-Funktionstest vom
+> Control-Node, `serial: 1`, Abbruch bei Fehler). Der ältere, im Folgenden
+> beschriebene `update-dns.yml` (VRRP-/keepalived-Prüfung, EEPROM-Option) aktualisiert
+> **Pi-hole nicht** - wer nur ihn laufen lässt, lässt Pi-hole stillschweigend veraltet
+> (am 2026-11-12 versehentlich zuerst gestartet; Pi-hole Core v6.5 → v6.6 und
+> FTL v6.8 → v6.9 kamen erst durch `update-dns-nodes.yml`).
+>
+> ```bash
+> ansible-playbook -i inventory/hosts.ini playbooks/update-dns-nodes.yml
+> ansible-playbook -i inventory/hosts.ini playbooks/update-dns-nodes.yml --limit dns01
+> ```
+>
+> Die Abschnitte unten beschreiben weiterhin `update-dns.yml` (nur nötig für
+> EEPROM-Updates oder VRRP-Failover-Prüfung).
+
 `update-dns.yml` (dns01, dns02) hat kein k3s und keinen
 Versionsparameter - reines OS-Update + optionales EEPROM. Besonderheit:
 DNS-Nodes haben **keine Anwendungs-HA**, solange nur dns01 existiert.
@@ -200,6 +216,6 @@ ansible-playbook -i inventory/hosts.ini playbooks/update-master-nodes.yml -e k3s
 # 2. Worker (OS-only)
 ansible-playbook -i inventory/hosts.ini playbooks/update-pi-nodes.yml
 
-# 3. DNS-Nodes (unabhängig, eigener Zeitpunkt möglich)
-ansible-playbook -i inventory/hosts.ini playbooks/update-dns.yml
+# 3. DNS-Nodes (unabhängig, eigener Zeitpunkt möglich; inkl. Pi-hole-Update)
+ansible-playbook -i inventory/hosts.ini playbooks/update-dns-nodes.yml
 ```

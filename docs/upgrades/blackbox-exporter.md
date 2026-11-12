@@ -2,7 +2,7 @@
 
 ## Metadaten
 - **Namespace:** `monitoring`
-- **Aktuelle Version:** Chart 11.21.1 (`prometheus-blackbox-exporter`, Exporter v0.29.1)
+- **Aktuelle Version:** Chart 11.21.2 (`prometheus-blackbox-exporter`, Exporter v0.29.1)
 - **Quelle:** Helm-Chart-Repo `https://prometheus-community.github.io/helm-charts` (Chart `prometheus-blackbox-exporter`)
 - **ArgoCD App-Name:** `blackbox-exporter` (`gitops/apps/blackbox-exporter.yaml`, Sync-Wave 5, nach kube-prometheus-stack wegen der ServiceMonitor-CRD)
 - **Versions-Check-Quelle:** Helm-Repo-Index über das `helm`-Binary
@@ -16,6 +16,7 @@
 |---|---|---|---|---|---|---|
 | 2026-10-26 | — → 11.20.2 | Erstinstallation | Manuell | Abgeschlossen | Funktions-Monitoring für den Windows-DC nach dessen unbemerktem Ausfall (2026-07-29 bis 2026-10-25) | Commit `ad9a83b` |
 | 2026-11-06 | 11.20.2 → 11.21.1 | Minor | Manuell | Abgeschlossen | `helm template` alt/neu mit unseren Values: kein Unterschied in den gerenderten Objekten (Exporter bleibt v0.29.1) | Teil der Update-Runde 2026-11-06; danach alle drei Probes = 1 |
+| 2026-11-12 | 11.21.1 → 11.21.2 | Minor (Patch) | Manuell | Abgeschlossen | `helm template` alt/neu mit unseren Values: gerenderte Objekte identisch (nur Chart-Label), Exporter bleibt v0.29.1 | Teil der Update-Runde 2026-11-12; danach alle drei Probes = 1 |
 
 ### Reklassifizierungen (Minor → Major)
 
